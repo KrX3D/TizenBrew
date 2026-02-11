@@ -30,6 +30,7 @@
     <tizen:privilege name="http://tizen.org/privilege/mediacapture"/>
     <tizen:privilege name="http://tizen.org/privilege/unlimitedstorage"/>
     <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
+    <tizen:privilege name="http://developer.samsung.com/privilege/avplay"/>
     <tizen:profile name="tv-samsung"/>
     <tizen:service id="xvvl3S1bvH.StandaloneService">
         <tizen:content src="service-nextgen/service/dist/index.js"/>

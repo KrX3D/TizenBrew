@@ -6,7 +6,9 @@ function loadModules() {
     const modules = config.modules;
 
     const modulePromises = modules.map(module => {
-        return fetch(`https://cdn.jsdelivr.net/${module}/package.json`)
+        // Bypass jsDelivr cache for package.json to detect updates
+        const cacheBuster = `?t=${Date.now()}`;
+        return fetch(`https://cdn.jsdelivr.net/${module}/package.json${cacheBuster}`)
             .then(res => res.json())
             .then(moduleJson => {
                 console
@@ -20,12 +22,14 @@ function loadModules() {
                     type: splitData[0]
                 }
                 if (moduleJson.packageType === 'app') {
+                    // Use versioned URL for assets to bypass jsDelivr caching on the repo path
+                    const versionedModule = moduleJson.version ? `${module}@${moduleJson.version}` : module;
                     moduleData = {
                         fullName: module,
                         appName: moduleJson.appName,
                         version: moduleJson.version,
                         name: moduleMetadata.name,
-                        appPath: `http://127.0.0.1:8081/module/${encodeURIComponent(module)}/${moduleJson.appPath}`,
+                        appPath: `http://127.0.0.1:8081/module/${encodeURIComponent(versionedModule)}/${moduleJson.appPath}`,
                         keys: moduleJson.keys ? moduleJson.keys : [],
                         moduleType: moduleMetadata.type,
                         packageType: moduleJson.packageType,

@@ -29,7 +29,9 @@ module.exports.onStart = function () {
             const splittedUrl = req.url.split('/');
             const encodedModuleName = splittedUrl[2];
             const moduleName = decodeURIComponent(encodedModuleName);
-            fetch(`https://cdn.jsdelivr.net/${moduleName}/${req.url.replace(`/module/${encodedModuleName}/`, '')}`)
+            // Append timestamp to ensure we don't hit any intermediate caches for proxy requests
+            const cacheBuster = `?t=${Date.now()}`;
+            fetch(`https://cdn.jsdelivr.net/${moduleName}/${req.url.replace(`/module/${encodedModuleName}/`, '')}${cacheBuster}`)
                 .then(fetchRes => {
                     return fetchRes.body.pipe(res);
                 })
