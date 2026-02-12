@@ -64,6 +64,8 @@ module.exports.onStart = function () {
 
     const currentModule = {
         name: '',
+        fullName: '',
+        versionedFullName: '',
         appPath: '',
         moduleType: '',
         packageType: '',
@@ -191,6 +193,7 @@ module.exports.onStart = function () {
                 case Events.LaunchModule: {
                     const mdl = payload;
                     currentModule.fullName = mdl.fullName;
+                    currentModule.versionedFullName = mdl.versionedFullName;
                     currentModule.name = mdl.name;
                     currentModule.appPath = mdl.appPath;
                     currentModule.moduleType = mdl.moduleType;

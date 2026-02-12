@@ -66,6 +66,8 @@ module.exports.onStart = function () {
   var modulesCache = null;
   var currentModule = {
     name: '',
+    fullName: '',
+    versionedFullName: '',
     appPath: '',
     moduleType: '',
     packageType: '',
@@ -194,6 +196,7 @@ module.exports.onStart = function () {
           {
             var mdl = payload;
             currentModule.fullName = mdl.fullName;
+            currentModule.versionedFullName = mdl.versionedFullName;
             currentModule.name = mdl.name;
             currentModule.appPath = mdl.appPath;
             currentModule.moduleType = mdl.moduleType;

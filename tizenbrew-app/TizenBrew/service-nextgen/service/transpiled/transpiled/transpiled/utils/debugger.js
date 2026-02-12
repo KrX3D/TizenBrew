@@ -21,15 +21,13 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
       client.Debugger.enable();
       client.on('Runtime.executionContextCreated', function (msg) {
         if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
-          var modUrl = 'https://cdn.jsdelivr.net/' + (mdl.versionedFullName || mdl.fullName) + '/' + mdl.mainFile + '?v=' + Date.now();
-          var expression = 'const script = document.createElement("script"); script.src = "' + modUrl + '"; document.head.appendChild(script);';
+          var expression = "\n                    const script = document.createElement('script');\n                    script.src = 'https://cdn.jsdelivr.net/".concat(mdl.fullName, "/").concat(mdl.mainFile, "?v=").concat(Date.now(), "';\n                    document.head.appendChild(script);\n                    ");
           client.Runtime.evaluate({
             expression: expression,
             contextId: msg.context.id
           });
         } else if (mdl.name !== '' && mdl.evaluateScriptOnDocumentStart) {
-          var cacheKey = mdl.versionedFullName || mdl.fullName;
-          var cache = modulesCache.get(cacheKey);
+          var cache = modulesCache.get(mdl.fullName);
           var clientConnection = clientConn.get('wsConn');
           if (cache) {
             client.Page.addScriptToEvaluateOnNewDocument({
@@ -37,10 +35,10 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             });
             sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
           } else {
-            fetch("https://cdn.jsdelivr.net/".concat(cacheKey, "/").concat(mdl.mainFile)).then(function (res) {
+            fetch("https://cdn.jsdelivr.net/".concat(mdl.fullName, "/").concat(mdl.mainFile)).then(function (res) {
               return res.text();
             }).then(function (modFile) {
-              modulesCache.set(cacheKey, modFile);
+              modulesCache.set(mdl.fullName, modFile);
               sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
               client.Page.addScriptToEvaluateOnNewDocument({
                 expression: modFile

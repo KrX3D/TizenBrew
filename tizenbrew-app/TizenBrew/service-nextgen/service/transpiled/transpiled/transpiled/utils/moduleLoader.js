@@ -9,31 +9,21 @@ function loadModules() {
   var modulePromises = modules.map(function (module) {
     // Bypass jsDelivr cache for package.json to detect updates
     var cacheBuster = "?t=".concat(Date.now());
-    var url = "https://cdn.jsdelivr.net/".concat(module, "/package.json").concat(cacheBuster);
-
-    // If it's a GitHub module, use raw.githubusercontent.com for instant updates
-    if (module.startsWith('gh/')) {
-      var parts = module.split('/');
-      if (parts.length >= 3) {
-        var user = parts[1];
-        var repo = parts[2];
-        url = "https://raw.githubusercontent.com/".concat(user, "/").concat(repo, "/main/package.json").concat(cacheBuster);
-      }
-    }
-    return fetch(url).then(function (res) {
+    return fetch("https://cdn.jsdelivr.net/".concat(module, "/package.json").concat(cacheBuster)).then(function (res) {
       return res.json();
     }).then(function (moduleJson) {
+      console;
       var moduleData;
       var splitData = [module.substring(0, module.indexOf('/')), module.substring(module.indexOf('/') + 1)];
       var moduleMetadata = {
         name: splitData[1],
         type: splitData[0]
       };
-      var versionedModule = moduleJson.version ? "".concat(module, "@").concat(moduleJson.version) : module;
       if (moduleJson.packageType === 'app') {
+        // Use versioned URL for assets to bypass jsDelivr caching on the repo path
+        var versionedModule = moduleJson.version ? "".concat(module, "@").concat(moduleJson.version) : module;
         moduleData = {
           fullName: module,
-          versionedFullName: versionedModule,
           appName: moduleJson.appName,
           version: moduleJson.version,
           name: moduleMetadata.name,
@@ -47,7 +37,6 @@ function loadModules() {
       } else if (moduleJson.packageType === 'mods') {
         moduleData = {
           fullName: module,
-          versionedFullName: versionedModule,
           appName: moduleJson.appName,
           version: moduleJson.version,
           name: moduleMetadata.name,
