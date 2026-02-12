@@ -33,7 +33,15 @@ function loadModules() {
                     name: splitData[1],
                     type: splitData[0]
                 }
-                const versionedModule = moduleJson.version ? `${module}@${moduleJson.version}` : module;
+                let versionedModule = module;
+                if (module.startsWith('gh/')) {
+                    // For GitHub modules, use @main to ensure we hit the latest code on the default branch 
+                    // and let the debugger's cache-buster handle the sync.
+                    versionedModule = `${module}@main`;
+                } else if (moduleJson.version) {
+                    versionedModule = `${module}@${moduleJson.version}`;
+                }
+
                 if (moduleJson.packageType === 'app') {
                     moduleData = {
                         fullName: module,
