@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "babel . --out-dir transpiled --copy-files && npx @vercel/ncc build transpiled/index.js -o ./dist"
+    "build": "babel . --out-dir transpiled --copy-files --ignore \"dist,transpiled\" && npx @vercel/ncc build transpiled/index.js -o ./dist"
   },
   "keywords": [],
   "author": "",

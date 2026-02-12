@@ -10,9 +10,8 @@ function loadModules() {
         const cacheBuster = `?t=${Date.now()}`;
         let url = `https://cdn.jsdelivr.net/${module}/package.json${cacheBuster}`;
 
-        const lowerModule = module.toLowerCase();
         // If it's a GitHub module, use raw.githubusercontent.com for instant updates
-        if (lowerModule.startsWith('gh/') || lowerModule.startsWith('github/')) {
+        if (module.startsWith('gh/')) {
             const parts = module.split('/');
             if (parts.length >= 3) {
                 const user = parts[1];
@@ -34,11 +33,11 @@ function loadModules() {
                     name: splitData[1],
                     type: splitData[0]
                 }
+                const versionedModule = moduleJson.version ? `${module}@${moduleJson.version}` : module;
                 if (moduleJson.packageType === 'app') {
-                    // Use versioned URL for assets to bypass jsDelivr caching on the repo path
-                    const versionedModule = moduleJson.version ? `${module}@${moduleJson.version}` : module;
                     moduleData = {
                         fullName: module,
+                        versionedFullName: versionedModule,
                         appName: moduleJson.appName,
                         version: moduleJson.version,
                         name: moduleMetadata.name,
@@ -52,6 +51,7 @@ function loadModules() {
                 } else if (moduleJson.packageType === 'mods') {
                     moduleData = {
                         fullName: module,
+                        versionedFullName: versionedModule,
                         appName: moduleJson.appName,
                         version: moduleJson.version,
                         name: moduleMetadata.name,

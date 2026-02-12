@@ -30,14 +30,15 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                         });
                     }
                 } else if (mdl.name !== '' && mdl.evaluateScriptOnDocumentStart) {
-                    const cache = modulesCache.get(mdl.fullName);
+                    const cacheKey = mdl.versionedFullName || mdl.fullName;
+                    const cache = modulesCache.get(cacheKey);
                     const clientConnection = clientConn.get('wsConn');
                     if (cache) {
                         client.Page.addScriptToEvaluateOnNewDocument({ expression: cache });
                         sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                     } else {
-                        fetch(`https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.mainFile}`).then(res => res.text()).then(modFile => {
-                            modulesCache.set(mdl.fullName, modFile);
+                        fetch(`https://cdn.jsdelivr.net/${cacheKey}/${mdl.mainFile}`).then(res => res.text()).then(modFile => {
+                            modulesCache.set(cacheKey, modFile);
                             sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                             client.Page.addScriptToEvaluateOnNewDocument({ expression: modFile });
                         }).catch(e => {
