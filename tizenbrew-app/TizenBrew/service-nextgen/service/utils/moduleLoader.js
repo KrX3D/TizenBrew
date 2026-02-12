@@ -10,8 +10,9 @@ function loadModules() {
         const cacheBuster = `?t=${Date.now()}`;
         let url = `https://cdn.jsdelivr.net/${module}/package.json${cacheBuster}`;
 
+        const lowerModule = module.toLowerCase();
         // If it's a GitHub module, use raw.githubusercontent.com for instant updates
-        if (module.startsWith('gh/')) {
+        if (lowerModule.startsWith('gh/') || lowerModule.startsWith('github/')) {
             const parts = module.split('/');
             if (parts.length >= 3) {
                 const user = parts[1];
