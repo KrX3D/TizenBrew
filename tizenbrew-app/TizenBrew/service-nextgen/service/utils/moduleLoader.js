@@ -8,10 +8,22 @@ function loadModules() {
     const modulePromises = modules.map(module => {
         // Bypass jsDelivr cache for package.json to detect updates
         const cacheBuster = `?t=${Date.now()}`;
-        return fetch(`https://cdn.jsdelivr.net/${module}/package.json${cacheBuster}`)
+        let url = `https://cdn.jsdelivr.net/${module}/package.json${cacheBuster}`;
+
+        // If it's a GitHub module, use raw.githubusercontent.com for instant updates
+        if (module.startsWith('gh/')) {
+            const parts = module.split('/');
+            if (parts.length >= 3) {
+                const user = parts[1];
+                const repo = parts[2];
+                url = `https://raw.githubusercontent.com/${user}/${repo}/main/package.json${cacheBuster}`;
+            }
+        }
+
+        return fetch(url)
             .then(res => res.json())
             .then(moduleJson => {
-                console
+
                 let moduleData;
                 const splitData = [
                     module.substring(0, module.indexOf('/')),
