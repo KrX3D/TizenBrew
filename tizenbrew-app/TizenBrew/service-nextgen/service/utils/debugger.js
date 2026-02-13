@@ -31,13 +31,30 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     }
                 } else if (mdl.name !== '' && mdl.evaluateScriptOnDocumentStart) {
                     const cacheKey = mdl.versionedFullName || mdl.fullName;
-                    const cache = modulesCache.get(cacheKey);
                     const clientConnection = clientConn.get('wsConn');
+
+                    // Construct Raw GitHub URL for server-side fetch
+                    let fetchUrl;
+                    if (mdl.fullName.split('/').length === 2 && !mdl.fullName.includes('@')) {
+                        // Likely user/repo, assume main
+                        fetchUrl = `https://raw.githubusercontent.com/${mdl.fullName}/main/${mdl.mainFile}`;
+                    } else if (mdl.versionedFullName && mdl.versionedFullName.includes('@')) {
+                        const [repo, tag] = mdl.versionedFullName.split('@');
+                        fetchUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${mdl.mainFile}`;
+                    } else {
+                        // Fallback to jsDelivr if format is weird
+                        fetchUrl = `https://cdn.jsdelivr.net/${cacheKey}/${mdl.mainFile}`;
+                    }
+                    // Append cache buster
+                    fetchUrl += `?v=${Date.now()}`;
+
+                    const cache = modulesCache.get(cacheKey);
+
                     if (cache) {
                         client.Page.addScriptToEvaluateOnNewDocument({ expression: cache });
                         sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                     } else {
-                        fetch(`https://cdn.jsdelivr.net/${cacheKey}/${mdl.mainFile}`).then(res => res.text()).then(modFile => {
+                        fetch(fetchUrl).then(res => res.text()).then(modFile => {
                             modulesCache.set(cacheKey, modFile);
                             sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                             client.Page.addScriptToEvaluateOnNewDocument({ expression: modFile });

@@ -31,7 +31,21 @@ module.exports.onStart = function () {
             const moduleName = decodeURIComponent(encodedModuleName);
             // Append timestamp to ensure we don't hit any intermediate caches for proxy requests
             const cacheBuster = `?t=${Date.now()}`;
-            fetch(`https://cdn.jsdelivr.net/${moduleName}/${req.url.replace(`/module/${encodedModuleName}/`, '')}${cacheBuster}`)
+
+            let upstreamUrl;
+            // Check if versioned
+            if (encodedModuleName.includes('@')) {
+                const [repo, tag] = moduleName.split('@');
+                // Support scoped packages if needed, but assuming user/repo format for now
+                // Re-encoding parts might be tricky if user/repo has special chars, but usually standard.
+                // Module name comes from config so likely safe.
+                upstreamUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${req.url.replace(`/module/${encodedModuleName}/`, '')}`;
+            } else {
+                // Default to main
+                upstreamUrl = `https://raw.githubusercontent.com/${moduleName}/main/${req.url.replace(`/module/${encodedModuleName}/`, '')}`;
+            }
+
+            fetch(`${upstreamUrl}${cacheBuster}`)
                 .then(fetchRes => {
                     return fetchRes.body.pipe(res);
                 })
