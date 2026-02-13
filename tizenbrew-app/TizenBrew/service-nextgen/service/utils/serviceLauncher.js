@@ -17,17 +17,31 @@ function startService(mdl, services) {
     sandbox['tizen'] = global.tizen;
     sandbox['module'] = { exports: {} };
 
+    // Strip jsDelivr prefixes to get clean GitHub user/repo
+    function getGitHubRepo(name) {
+        if (name.startsWith('gh/')) return name.substring(3);
+        if (name.startsWith('npm/')) return null;
+        return name;
+    }
+
     // Construct Raw GitHub fetch URL
     let fetchUrl;
-    if (mdl.fullName.split('/').length === 2 && !mdl.fullName.includes('@')) {
-        // Likely user/repo, assume main
-        fetchUrl = `https://raw.githubusercontent.com/${mdl.fullName}/main/${mdl.serviceFile}`;
-    } else if (mdl.versionedFullName && mdl.versionedFullName.includes('@')) {
-        const [repo, tag] = mdl.versionedFullName.split('@');
-        fetchUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${mdl.serviceFile}`;
+    const cleanName = mdl.versionedFullName || mdl.fullName;
+    if (cleanName.includes('@')) {
+        const [rawRepo, tag] = cleanName.split('@');
+        const repo = getGitHubRepo(rawRepo);
+        if (repo) {
+            fetchUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${mdl.serviceFile}`;
+        } else {
+            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.serviceFile}`;
+        }
     } else {
-        // Fallback to jsDelivr if format is weird
-        fetchUrl = `https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.serviceFile}`;
+        const repo = getGitHubRepo(cleanName);
+        if (repo) {
+            fetchUrl = `https://raw.githubusercontent.com/${repo}/main/${mdl.serviceFile}`;
+        } else {
+            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.serviceFile}`;
+        }
     }
     // Append cache buster
     fetchUrl += `?v=${Date.now()}`;

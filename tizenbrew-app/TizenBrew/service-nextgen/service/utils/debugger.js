@@ -34,16 +34,30 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     const clientConnection = clientConn.get('wsConn');
 
                     // Construct Raw GitHub URL for server-side fetch
+                    // Strip jsDelivr prefixes (gh/, npm/) to get clean user/repo
+                    function getGitHubRepo(name) {
+                        if (name.startsWith('gh/')) return name.substring(3);
+                        if (name.startsWith('npm/')) return null; // npm packages can't use raw GitHub
+                        return name;
+                    }
+
                     let fetchUrl;
-                    if (mdl.fullName.split('/').length === 2 && !mdl.fullName.includes('@')) {
-                        // Likely user/repo, assume main
-                        fetchUrl = `https://raw.githubusercontent.com/${mdl.fullName}/main/${mdl.mainFile}`;
-                    } else if (mdl.versionedFullName && mdl.versionedFullName.includes('@')) {
-                        const [repo, tag] = mdl.versionedFullName.split('@');
-                        fetchUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${mdl.mainFile}`;
+                    const cleanName = mdl.versionedFullName || mdl.fullName;
+                    if (cleanName.includes('@')) {
+                        const [rawRepo, tag] = cleanName.split('@');
+                        const repo = getGitHubRepo(rawRepo);
+                        if (repo) {
+                            fetchUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${mdl.mainFile}`;
+                        } else {
+                            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.mainFile}`;
+                        }
                     } else {
-                        // Fallback to jsDelivr if format is weird
-                        fetchUrl = `https://cdn.jsdelivr.net/${cacheKey}/${mdl.mainFile}`;
+                        const repo = getGitHubRepo(cleanName);
+                        if (repo) {
+                            fetchUrl = `https://raw.githubusercontent.com/${repo}/main/${mdl.mainFile}`;
+                        } else {
+                            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.mainFile}`;
+                        }
                     }
                     // Append cache buster
                     fetchUrl += `?v=${Date.now()}`;

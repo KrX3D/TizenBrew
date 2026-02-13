@@ -33,16 +33,32 @@ module.exports.onStart = function () {
             const cacheBuster = `?t=${Date.now()}`;
 
             let upstreamUrl;
+            const filePath = req.url.replace(`/module/${encodedModuleName}/`, '');
+
+            // Strip jsDelivr prefixes to get clean GitHub user/repo
+            function getGitHubRepo(name) {
+                if (name.startsWith('gh/')) return name.substring(3);
+                if (name.startsWith('npm/')) return null;
+                return name;
+            }
+
             // Check if versioned
-            if (encodedModuleName.includes('@')) {
-                const [repo, tag] = moduleName.split('@');
-                // Support scoped packages if needed, but assuming user/repo format for now
-                // Re-encoding parts might be tricky if user/repo has special chars, but usually standard.
-                // Module name comes from config so likely safe.
-                upstreamUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${req.url.replace(`/module/${encodedModuleName}/`, '')}`;
+            if (moduleName.includes('@')) {
+                const [rawRepo, tag] = moduleName.split('@');
+                const repo = getGitHubRepo(rawRepo);
+                if (repo) {
+                    upstreamUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${filePath}`;
+                } else {
+                    // npm package, fallback to jsDelivr
+                    upstreamUrl = `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
+                }
             } else {
-                // Default to main
-                upstreamUrl = `https://raw.githubusercontent.com/${moduleName}/main/${req.url.replace(`/module/${encodedModuleName}/`, '')}`;
+                const repo = getGitHubRepo(moduleName);
+                if (repo) {
+                    upstreamUrl = `https://raw.githubusercontent.com/${repo}/main/${filePath}`;
+                } else {
+                    upstreamUrl = `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
+                }
             }
 
             fetch(`${upstreamUrl}${cacheBuster}`)
@@ -51,7 +67,7 @@ module.exports.onStart = function () {
                 })
                 .then(() => {
                     res.setHeader('Access-Control-Allow-Origin', '*');
-                    res.type(path.basename(req.url.replace(`/module/${encodedModuleName}/`, '')).split('.').slice(-1)[0].split('?')[0]);
+                    res.type(path.basename(filePath).split('.').slice(-1)[0].split('?')[0]);
                 });
         } else {
             res.send(deviceIP);

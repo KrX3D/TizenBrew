@@ -1,6 +1,6 @@
 import { Cog6ToothIcon, ArchiveBoxIcon, HomeIcon, QuestionMarkCircleIcon, ArrowPathIcon } from '@heroicons/react/16/solid';
 import { useFocusable } from '@noriginmedia/norigin-spatial-navigation';
-import { useEffect, useContext } from 'preact/hooks';
+import { useEffect, useContext, useState } from 'preact/hooks';
 import { useLocation } from 'preact-iso';
 import { GlobalStateContext } from './ClientContext.jsx';
 import TBLogo from '../assets/tizenbrew.svg';
@@ -30,13 +30,17 @@ function Button({ children, route, focus, focusKey, onClick }) {
 export default function Header() {
     const { state } = useContext(GlobalStateContext);
     const { t } = useTranslation();
+    const [reloading, setReloading] = useState(false);
 
     const handleReload = () => {
-        if (state.client) {
+        if (state.client && !reloading) {
+            setReloading(true);
             state.client.send({
                 type: Events.GetModules,
                 payload: true // Force reload
             });
+            // Visual feedback: stop spinning after 2 seconds
+            setTimeout(() => setReloading(false), 2000);
         }
     };
 
@@ -55,14 +59,14 @@ export default function Header() {
                     <div className="mx-auto max-w-[30vw] h-[2.5vh]">
                         <div className="hidden sm:mb-8 sm:flex sm:justify-center">
                             <div className="relative rounded-full px-3 py-1 text-xl text-gray-200 ring-1 ring-gray-900/10 hover:ring-gray-900/20">
-                                {t(state?.sharedData?.state || '...')}
+                                {reloading ? '⟳ Reloading modules...' : t(state?.sharedData?.state || '...')}
                             </div>
                         </div>
                     </div>
                 </div>
                 <div className="hidden lg:flex lg:flex-1 lg:justify-end lg:gap-x-2">
                     <Button onClick={handleReload} route="#">
-                        <ArrowPathIcon className="h-[4vh] w-[2vw]" />
+                        <ArrowPathIcon className={`h-[4vh] w-[2vw] ${reloading ? 'animate-spin' : ''}`} />
                     </Button>
                     <Button route="/" focus={true} focusKey="sn:focusable-item-1">
                         <HomeIcon className="h-[4vh] w-[2vw]" />
