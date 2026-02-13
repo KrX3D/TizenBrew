@@ -21,24 +21,34 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                 // This bypasses CSP issues with file:// or $WEBAPIS/ URLs.
                 let webapisContent = null;
                 const fs = require('fs');
+                // Extended path list for better compatibility
                 const possiblePaths = [
-                    '/usr/share/nginx/html/webapis/webapis.js', // Common Tizen 2.4+
-                    '/usr/tv/webapis/webapis.js', // Legacy
-                    '/usr/share/webapis/webapis.js' // Another variant
+                    '/usr/share/nginx/html/webapis/webapis.js',
+                    '/usr/tv/webapis/webapis.js',
+                    '/usr/share/webapis/webapis.js',
+                    '/usr/bin/webapis/webapis.js',
+                    '/opt/share/webapp/webapis/webapis.js',
+                    '/usr/lib/wrt-engine/webapis/webapis.js'
                 ];
 
+                let foundPath = null;
                 for (const p of possiblePaths) {
                     try {
                         if (fs.existsSync(p)) {
                             console.log('[Debugger] Found webapis.js at ' + p);
                             webapisContent = fs.readFileSync(p, 'utf8');
+                            foundPath = p;
                             break;
                         }
-                    } catch (e) { }
+                    } catch (e) {
+                        console.warn('[Debugger] Error checking ' + p + ': ' + e.message);
+                    }
                 }
 
                 if (webapisContent) {
-                    // Wrap in idempotent check
+                    // Diagnostic alert (TEMPORARY: Remove after fix confirmed)
+                    const diagScript = `alert("TizenTube DEBUG: Found webapis.js at ${foundPath}. Injecting...");`;
+
                     const webapisLoader = `
                         (function() {
                             if (window.webapis || window.__webapisLoaded) return;
@@ -49,12 +59,23 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     `;
 
                     if (mdl.evaluateScriptOnDocumentStart) {
+                        client.Page.addScriptToEvaluateOnNewDocument({ expression: diagScript });
                         client.Page.addScriptToEvaluateOnNewDocument({ expression: webapisLoader });
                     } else {
+                        client.Runtime.evaluate({ expression: diagScript, contextId: msg.context.id });
                         client.Runtime.evaluate({ expression: webapisLoader, contextId: msg.context.id });
                     }
                 } else {
-                    console.warn('[Debugger] webapis.js not found in system paths. Fallback to script tag injection.');
+                    console.warn('[Debugger] webapis.js not found in system paths.');
+                    const diagScript = `alert("TizenTube DEBUG: FAILED to find webapis.js in system paths! native API will fail.");`;
+
+                    if (mdl.evaluateScriptOnDocumentStart) {
+                        client.Page.addScriptToEvaluateOnNewDocument({ expression: diagScript });
+                    } else {
+                        client.Runtime.evaluate({ expression: diagScript, contextId: msg.context.id });
+                    }
+
+                    // Fallback to script tag injection just in case
                     const webapisLoader = `
                         (function() {
                             if (window.webapis || window.__webapisLoaded) return;
