@@ -17,6 +17,67 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             client.Debugger.enable();
 
             client.on('Runtime.executionContextCreated', (msg) => {
+                // [TizenTube Fix] Inject webapis.js content directly for Tizen TV compatibility
+                // This bypasses CSP issues with file:// or $WEBAPIS/ URLs.
+                let webapisContent = null;
+                const fs = require('fs');
+                const possiblePaths = [
+                    '/usr/share/nginx/html/webapis/webapis.js', // Common Tizen 2.4+
+                    '/usr/tv/webapis/webapis.js', // Legacy
+                    '/usr/share/webapis/webapis.js' // Another variant
+                ];
+
+                for (const p of possiblePaths) {
+                    try {
+                        if (fs.existsSync(p)) {
+                            console.log('[Debugger] Found webapis.js at ' + p);
+                            webapisContent = fs.readFileSync(p, 'utf8');
+                            break;
+                        }
+                    } catch (e) { }
+                }
+
+                if (webapisContent) {
+                    // Wrap in idempotent check
+                    const webapisLoader = `
+                        (function() {
+                            if (window.webapis || window.__webapisLoaded) return;
+                            window.__webapisLoaded = true;
+                            console.log('[TizenBrew] Injecting webapis.js content...');
+                            ${webapisContent}
+                        })();
+                    `;
+
+                    if (mdl.evaluateScriptOnDocumentStart) {
+                        client.Page.addScriptToEvaluateOnNewDocument({ expression: webapisLoader });
+                    } else {
+                        client.Runtime.evaluate({ expression: webapisLoader, contextId: msg.context.id });
+                    }
+                } else {
+                    console.warn('[Debugger] webapis.js not found in system paths. Fallback to script tag injection.');
+                    const webapisLoader = `
+                        (function() {
+                            if (window.webapis || window.__webapisLoaded) return;
+                            window.__webapisLoaded = true;
+                            var s = document.createElement('script');
+                            s.src = '$WEBAPIS/webapis/webapis.js';
+                            document.head.appendChild(s);
+                        })();
+                    `;
+                    if (mdl.evaluateScriptOnDocumentStart) {
+                        client.Page.addScriptToEvaluateOnNewDocument({ expression: webapisLoader });
+                    } else {
+                        client.Runtime.evaluate({ expression: webapisLoader, contextId: msg.context.id });
+                    }
+                }
+
+                // Inject webapis loader appropriately
+                if (mdl.evaluateScriptOnDocumentStart) {
+                    client.Page.addScriptToEvaluateOnNewDocument({ expression: webapisLoader });
+                } else {
+                    client.Runtime.evaluate({ expression: webapisLoader, contextId: msg.context.id });
+                }
+
                 if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
                     const cache = modulesCache.get(mdl.fullName);
                     if (cache) {
