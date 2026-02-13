@@ -14,6 +14,17 @@ var _require2 = require('./configuration.js'),
   readConfig = _require2.readConfig;
 var WebSocket = require('ws');
 var modulesCache = new Map();
+var cachedWebApisPath = null;
+function setWebApisPath(path) {
+  if (!path) return;
+  console.log('[Debugger] Caching webapis.js path:', path);
+  // Remove file:// prefix if present to get filesystem path
+  if (path.startsWith('file://')) {
+    cachedWebApisPath = path.replace('file://', '');
+  } else {
+    cachedWebApisPath = path;
+  }
+}
 function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts) {
   if (!attempts) attempts = 1;
   if (!isAnotherApp) inDebug.tizenDebug = true;
@@ -32,6 +43,11 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
         var fs = require('fs');
         // Extended path list for better compatibility
         var possiblePaths = ['/usr/share/nginx/html/webapis/webapis.js', '/usr/tv/webapis/webapis.js', '/usr/share/webapis/webapis.js', '/usr/bin/webapis/webapis.js', '/opt/share/webapp/webapis/webapis.js', '/usr/lib/wrt-engine/webapis/webapis.js'];
+
+        // Prioritize cached path from browser detection
+        if (cachedWebApisPath) {
+          possiblePaths.unshift(cachedWebApisPath);
+        }
         var foundPath = null;
         for (var _i = 0, _possiblePaths = possiblePaths; _i < _possiblePaths.length; _i++) {
           var p = _possiblePaths[_i];
@@ -47,64 +63,32 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
           }
         }
         if (webapisContent) {
-          // Diagnostic alert (TEMPORARY: Remove after fix confirmed)
-          var diagScript = "alert(\"TizenTube DEBUG: Found webapis.js at ".concat(foundPath, ". Injecting...\");");
-          var _webapisLoader = "\n                        (function() {\n                            if (window.webapis || window.__webapisLoaded) return;\n                            window.__webapisLoaded = true;\n                            console.log('[TizenBrew] Injecting webapis.js content...');\n                            ".concat(webapisContent, "\n                        })();\n                    ");
+          var webapisLoader = '(function() {\n' + 'if (window.webapis || window.__webapisLoaded) return;\n' + 'window.__webapisLoaded = true;\n' + 'console.log("[TizenBrew] Injecting webapis.js content from ' + foundPath + '...");\n' + webapisContent + '\n' + '})();';
           if (mdl.evaluateScriptOnDocumentStart) {
             client.Page.addScriptToEvaluateOnNewDocument({
-              expression: diagScript
-            });
-            client.Page.addScriptToEvaluateOnNewDocument({
-              expression: _webapisLoader
+              expression: webapisLoader
             });
           } else {
             client.Runtime.evaluate({
-              expression: diagScript,
-              contextId: msg.context.id
-            });
-            client.Runtime.evaluate({
-              expression: _webapisLoader,
+              expression: webapisLoader,
               contextId: msg.context.id
             });
           }
         } else {
           console.warn('[Debugger] webapis.js not found in system paths.');
-          var _diagScript = "alert(\"TizenTube DEBUG: FAILED to find webapis.js in system paths! native API will fail.\");";
-          if (mdl.evaluateScriptOnDocumentStart) {
-            client.Page.addScriptToEvaluateOnNewDocument({
-              expression: _diagScript
-            });
-          } else {
-            client.Runtime.evaluate({
-              expression: _diagScript,
-              contextId: msg.context.id
-            });
-          }
 
           // Fallback to script tag injection just in case
-          var _webapisLoader2 = "\n                        (function() {\n                            if (window.webapis || window.__webapisLoaded) return;\n                            window.__webapisLoaded = true;\n                            var s = document.createElement('script');\n                            s.src = '$WEBAPIS/webapis/webapis.js';\n                            document.head.appendChild(s);\n                        })();\n                    ";
+          var _webapisLoader = "\n                        (function() {\n                            if (window.webapis || window.__webapisLoaded) return;\n                            window.__webapisLoaded = true;\n                            var s = document.createElement('script');\n                            s.src = '$WEBAPIS/webapis/webapis.js';\n                            document.head.appendChild(s);\n                        })();\n                    ";
           if (mdl.evaluateScriptOnDocumentStart) {
             client.Page.addScriptToEvaluateOnNewDocument({
-              expression: _webapisLoader2
+              expression: _webapisLoader
             });
           } else {
             client.Runtime.evaluate({
-              expression: _webapisLoader2,
+              expression: _webapisLoader,
               contextId: msg.context.id
             });
           }
-        }
-
-        // Inject webapis loader appropriately
-        if (mdl.evaluateScriptOnDocumentStart) {
-          client.Page.addScriptToEvaluateOnNewDocument({
-            expression: webapisLoader
-          });
-        } else {
-          client.Runtime.evaluate({
-            expression: webapisLoader,
-            contextId: msg.context.id
-          });
         }
         if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
           // Use local proxy to handle upstream fetching and correct MIME types
@@ -249,4 +233,7 @@ function sendClientInformation(clientConn, data) {
     clientConnection.send(data);
   }, 500);
 }
-module.exports = startDebugging;
+module.exports = {
+  startDebugging: startDebugging,
+  setWebApisPath: setWebApisPath
+};

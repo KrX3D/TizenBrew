@@ -29,7 +29,14 @@ function loadModules() {
         name: splitData[1],
         type: splitData[0]
       };
-      var versionedModule = moduleJson.version ? "".concat(module, "@").concat(moduleJson.version) : module;
+      var versionedModule = module;
+      if (module.startsWith('gh/')) {
+        // For GitHub modules, use @main to ensure we hit the latest code on the default branch 
+        // and let the debugger's cache-buster handle the sync.
+        versionedModule = "".concat(module, "@main");
+      } else if (moduleJson.version) {
+        versionedModule = "".concat(module, "@").concat(moduleJson.version);
+      }
       if (moduleJson.packageType === 'app') {
         moduleData = {
           fullName: module,

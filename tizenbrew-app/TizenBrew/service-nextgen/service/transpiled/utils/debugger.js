@@ -62,6 +62,26 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             console.warn('[Debugger] Error checking ' + p + ': ' + e.message);
           }
         }
+        if (foundPath) {
+          try {
+            var path = require('path');
+            var dir = path.dirname(foundPath);
+            var files = fs.readdirSync(dir);
+            var listScript = "alert(\"TizenTube DEBUG: Files in ".concat(dir, ": ").concat(files.join(', '), "\");");
+            if (mdl.evaluateScriptOnDocumentStart) {
+              client.Page.addScriptToEvaluateOnNewDocument({
+                expression: listScript
+              });
+            } else {
+              client.Runtime.evaluate({
+                expression: listScript,
+                contextId: msg.context.id
+              });
+            }
+          } catch (e) {
+            console.warn('[Debugger] Failed to list dir:', e.message);
+          }
+        }
         if (webapisContent) {
           var webapisLoader = '(function() {\n' + 'if (window.webapis || window.__webapisLoaded) return;\n' + 'window.__webapisLoaded = true;\n' + 'console.log("[TizenBrew] Injecting webapis.js content from ' + foundPath + '...");\n' + webapisContent + '\n' + '})();';
           if (mdl.evaluateScriptOnDocumentStart) {

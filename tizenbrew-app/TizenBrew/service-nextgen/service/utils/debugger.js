@@ -63,6 +63,22 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     }
                 }
 
+                if (foundPath) {
+                    try {
+                        const path = require('path');
+                        const dir = path.dirname(foundPath);
+                        const files = fs.readdirSync(dir);
+                        const listScript = `alert("TizenTube DEBUG: Files in ${dir}: ${files.join(', ')}");`;
+                        if (mdl.evaluateScriptOnDocumentStart) {
+                            client.Page.addScriptToEvaluateOnNewDocument({ expression: listScript });
+                        } else {
+                            client.Runtime.evaluate({ expression: listScript, contextId: msg.context.id });
+                        }
+                    } catch (e) {
+                        console.warn('[Debugger] Failed to list dir:', e.message);
+                    }
+                }
+
                 if (webapisContent) {
                     const webapisLoader = '(function() {\n' +
                         'if (window.webapis || window.__webapisLoaded) return;\n' +
