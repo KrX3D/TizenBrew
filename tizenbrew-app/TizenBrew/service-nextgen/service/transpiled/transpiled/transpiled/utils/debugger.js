@@ -26,10 +26,53 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
       client.Runtime.enable();
       client.Debugger.enable();
       client.on('Runtime.executionContextCreated', function (msg) {
-        // [TizenTube Fix] Inject webapis.js helper for Tizen TV compatibility
-        // This ensures webapis object is available even after navigation to remote domains.
-        // We use an idempotent check to avoid multiple injections if called multiple times.
-        var webapisLoader = "\n                    (function() {\n                        if (window.webapis || window.__webapisLoaded) return;\n                        window.__webapisLoaded = true;\n                        var paths = [\n                            '$WEBAPIS/webapis/webapis.js', \n                            'file:///usr/share/nginx/html/webapis/webapis.js',\n                            'file:///usr/tv/webapis/webapis.js'\n                        ];\n                        var head = document.head || document.documentElement;\n                        \n                        function tryPath(index) {\n                            if (index >= paths.length) return;\n                            var s = document.createElement('script');\n                            s.src = paths[index];\n                            s.onload = function() { console.log('[TizenBrew] webapis.js loaded from ' + paths[index]); };\n                            s.onerror = function() { \n                                console.warn('[TizenBrew] Failed to load ' + paths[index]);\n                                s.remove();\n                                tryPath(index + 1);\n                            };\n                            head.appendChild(s);\n                        }\n                        tryPath(0);\n                    })();\n                ";
+        // [TizenTube Fix] Inject webapis.js content directly for Tizen TV compatibility
+        // This bypasses CSP issues with file:// or $WEBAPIS/ URLs.
+        var webapisContent = null;
+        var fs = require('fs');
+        var possiblePaths = ['/usr/share/nginx/html/webapis/webapis.js',
+        // Common Tizen 2.4+
+        '/usr/tv/webapis/webapis.js',
+        // Legacy
+        '/usr/share/webapis/webapis.js' // Another variant
+        ];
+        for (var _i = 0, _possiblePaths = possiblePaths; _i < _possiblePaths.length; _i++) {
+          var p = _possiblePaths[_i];
+          try {
+            if (fs.existsSync(p)) {
+              console.log('[Debugger] Found webapis.js at ' + p);
+              webapisContent = fs.readFileSync(p, 'utf8');
+              break;
+            }
+          } catch (e) {}
+        }
+        if (webapisContent) {
+          // Wrap in idempotent check
+          var _webapisLoader = "\n                        (function() {\n                            if (window.webapis || window.__webapisLoaded) return;\n                            window.__webapisLoaded = true;\n                            console.log('[TizenBrew] Injecting webapis.js content...');\n                            ".concat(webapisContent, "\n                        })();\n                    ");
+          if (mdl.evaluateScriptOnDocumentStart) {
+            client.Page.addScriptToEvaluateOnNewDocument({
+              expression: _webapisLoader
+            });
+          } else {
+            client.Runtime.evaluate({
+              expression: _webapisLoader,
+              contextId: msg.context.id
+            });
+          }
+        } else {
+          console.warn('[Debugger] webapis.js not found in system paths. Fallback to script tag injection.');
+          var _webapisLoader2 = "\n                        (function() {\n                            if (window.webapis || window.__webapisLoaded) return;\n                            window.__webapisLoaded = true;\n                            var s = document.createElement('script');\n                            s.src = '$WEBAPIS/webapis/webapis.js';\n                            document.head.appendChild(s);\n                        })();\n                    ";
+          if (mdl.evaluateScriptOnDocumentStart) {
+            client.Page.addScriptToEvaluateOnNewDocument({
+              expression: _webapisLoader2
+            });
+          } else {
+            client.Runtime.evaluate({
+              expression: _webapisLoader2,
+              contextId: msg.context.id
+            });
+          }
+        }
 
         // Inject webapis loader appropriately
         if (mdl.evaluateScriptOnDocumentStart) {

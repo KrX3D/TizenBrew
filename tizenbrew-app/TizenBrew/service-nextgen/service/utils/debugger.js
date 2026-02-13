@@ -64,14 +64,13 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                 }
 
                 if (webapisContent) {
-                    const webapisLoader = `
-                        (function() {
-                            if (window.webapis || window.__webapisLoaded) return;
-                            window.__webapisLoaded = true;
-                            console.log('[TizenBrew] Injecting webapis.js content from ${foundPath}...');
-                            ${webapisContent}
-                        })();
-                    `;
+                    const webapisLoader = '(function() {\n' +
+                        'if (window.webapis || window.__webapisLoaded) return;\n' +
+                        'window.__webapisLoaded = true;\n' +
+                        'console.log("[TizenBrew] Injecting webapis.js content from ' + foundPath + '...");\n' +
+                        webapisContent + '\n' +
+                        '})();'
+                        ;
 
                     if (mdl.evaluateScriptOnDocumentStart) {
                         client.Page.addScriptToEvaluateOnNewDocument({ expression: webapisLoader });
@@ -98,12 +97,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     }
                 }
 
-                // Inject webapis loader appropriately
-                if (mdl.evaluateScriptOnDocumentStart) {
-                    client.Page.addScriptToEvaluateOnNewDocument({ expression: webapisLoader });
-                } else {
-                    client.Runtime.evaluate({ expression: webapisLoader, contextId: msg.context.id });
-                }
+
 
                 if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
                     const cache = modulesCache.get(mdl.fullName);

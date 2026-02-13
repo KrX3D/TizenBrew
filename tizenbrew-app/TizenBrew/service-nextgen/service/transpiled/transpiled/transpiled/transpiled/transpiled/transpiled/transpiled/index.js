@@ -17,11 +17,13 @@ module.exports.onStart = function () {
     readConfig = _require.readConfig,
     writeConfig = _require.writeConfig;
   var loadModules = require('./utils/moduleLoader.js');
-  var startDebugging = require('./utils/debugger.js');
+  var _require2 = require('./utils/debugger.js'),
+    startDebugging = _require2.startDebugging,
+    setWebApisPath = _require2.setWebApisPath;
   var startService = require('./utils/serviceLauncher.js');
-  var _require2 = require('./utils/wsCommunication.js'),
-    Connection = _require2.Connection,
-    Events = _require2.Events;
+  var _require3 = require('./utils/wsCommunication.js'),
+    Connection = _require3.Connection,
+    Events = _require3.Events;
   var WebSocket;
   if (process.version === 'v4.4.3') {
     WebSocket = require('ws-old');
@@ -283,6 +285,13 @@ module.exports.onStart = function () {
               _iterator.f();
             }
             wsConn.send(wsConn.Event(Events.GetServiceStatuses, serviceList));
+            break;
+          }
+        case Events.WebApisPath:
+          {
+            if (payload) {
+              setWebApisPath(payload);
+            }
             break;
           }
         case Events.ModuleAction:
