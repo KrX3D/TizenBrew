@@ -10,6 +10,7 @@ const Events = {
     GetServiceStatuses: 7,
     Error: 8,
     CanLaunchModules: 9,
+    WebApisPath: 20,
     ModuleAction: 10
 };
 
@@ -138,6 +139,16 @@ class Client {
                 this.send({
                     type: Events.Ready
                 });
+
+                // Send resolved webapis path
+                if (window.TIZEN_WEBAPIS_PATH) {
+                    console.log('[WebSocketClient] Sending webapis path:', window.TIZEN_WEBAPIS_PATH);
+                    this.send({
+                        type: Events.WebApisPath,
+                        payload: window.TIZEN_WEBAPIS_PATH
+                    });
+                }
+
 
                 this.processPendingEvents();
 

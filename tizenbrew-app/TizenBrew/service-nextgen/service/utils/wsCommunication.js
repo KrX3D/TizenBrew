@@ -28,6 +28,7 @@ const Events = {
     GetServiceStatuses: 7,
     Error: 8,
     CanLaunchModules: 9,
+    WebApisPath: 20,
     ModuleAction: 10
 };
 

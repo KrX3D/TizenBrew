@@ -1,20 +1,31 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TizenBrew</title>
-    <script>
-      (function() {
-        var script = document.createElement('script');
-        script.src = '$WEBAPIS/webapis/webapis.js';
-        document.head.appendChild(script);
-      })();
-    </script>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TizenBrew</title>
+  <script>
+    (function () {
+      var script = document.createElement('script');
+      script.src = '$WEBAPIS/webapis/webapis.js';
+      script.onload = function () {
+        // Capture the resolved path (e.g. file:///...)
+        window.TIZEN_WEBAPIS_PATH = script.src;
+        console.log('[TizenBrew] webapis.js loaded from:', script.src);
+      };
+      script.onerror = function () {
+        console.warn('[TizenBrew] Failed to load webapis.js from $WEBAPIS');
+      };
+      document.head.appendChild(script);
+    })();
+  </script>
+</head>
+
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
 </html>

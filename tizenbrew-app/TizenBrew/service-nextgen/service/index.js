@@ -8,7 +8,7 @@ module.exports.onStart = function () {
     const path = require('path');
     const { readConfig, writeConfig } = require('./utils/configuration.js');
     const loadModules = require('./utils/moduleLoader.js');
-    const startDebugging = require('./utils/debugger.js');
+    const { startDebugging, setWebApisPath } = require('./utils/debugger.js');
     const startService = require('./utils/serviceLauncher.js');
     const { Connection, Events } = require('./utils/wsCommunication.js');
     let WebSocket;
@@ -269,6 +269,12 @@ module.exports.onStart = function () {
                         });
                     }
                     wsConn.send(wsConn.Event(Events.GetServiceStatuses, serviceList));
+                    break;
+                }
+                case Events.WebApisPath: {
+                    if (payload) {
+                        setWebApisPath(payload);
+                    }
                     break;
                 }
                 case Events.ModuleAction: {
