@@ -71,6 +71,18 @@ export default function Settings() {
                         {t('settings.autolaunchServiceDesc')}
                     </p>
                 </ItemBasic>
+
+                <ItemBasic onClick={() => {
+                    loc.route('/tizenbrew-ui/dist/index.html/logs');
+                }}>
+                    <h3 className='text-indigo-400 text-base/7 font-semibold'>
+                        Logs
+                    </h3>
+                    <p className='text-gray-300 mt-6 text-base/7'>
+                        View local TizenBrew service/module logs while developer IP remains 127.0.0.1.
+                    </p>
+                </ItemBasic>
+
                 {
                     /*
                     Disabled due to user script injection method

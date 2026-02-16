@@ -13,7 +13,8 @@ const initialState = {
         error: {
             message: null,
             dissapear: false
-        }
+        },
+        logs: []
     },
     client: null
 };
@@ -33,6 +34,8 @@ function reducer(state, action) {
             return { ...state, sharedData: { ...state.sharedData, state: action.payload } };
         case 'SET_ERROR':
             return { ...state, sharedData: { ...state.sharedData, error: action.payload } };
+        case 'SET_LOGS':
+            return { ...state, sharedData: { ...state.sharedData, logs: action.payload.slice(-300) } };
         default:
             return state;
     }

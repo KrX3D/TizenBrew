@@ -157,24 +157,33 @@ Note that tizen is in `C:\tizen-studio\tools\ide\bin` on Windows and in `~/tizen
 
 ## Developer Mode IP and Logging (SDB)
 
-If you set **Host PC IP** to `127.0.0.1`, the TV expects the development bridge host to be the TV itself. This is required for TizenBrew's localhost-based behavior, but it prevents using `sdb connect <TV IP>` from another machine.
+If you keep **Host PC IP** set to `127.0.0.1`, TV-side developer tools are bound to localhost behavior. This is what TizenBrew needs, but it blocks normal remote `sdb connect <TV IP>` from a different machine.
 
-### Can I use a different SDB port?
+### Does SDB support custom ports?
 
-Usually no. For Samsung TVs, `sdb connect` expects the device-side SDB daemon on its configured port (commonly `26101`). Changing only the port on the client side does not bypass the Host PC IP restriction.
+Yes, SDB can target `ip:port` (for example `sdb connect 192.168.1.20:26101`).
 
-### Practical ways to collect logs
+However, in this specific setup the main blocker is not only the port number — it is the TV Developer Mode Host PC IP policy. If Host PC IP is fixed to `127.0.0.1`, remote SDB sessions from your PC are still typically not accepted even if you try another port.
 
-1. **Switch Host PC IP temporarily to your computer IP**
-   - Set TV Developer Mode Host PC IP to your PC LAN IP.
-   - Reboot TV.
-   - Connect with `sdb connect <TV IP>` and capture logs (`sdb dlog`, app logs, install/debug checks).
-   - When done, switch Host PC IP back to `127.0.0.1` and reboot to run TizenBrew in localhost mode again.
+### New option in TizenBrew (works while staying on `127.0.0.1`)
 
-2. **Use Tizen Web Inspector/Remote debugging when possible**
-   - For web runtime issues, use inspector-based console/network logs while in a debug-compatible Host PC IP state.
+TizenBrew now includes local log streaming inside the app UI:
 
-3. **Emit module/service logs to TizenBrew UI or persistent storage**
-   - If you maintain modules, log over TizenBrew's own websocket/UI channel or to local files/settings, then inspect in-app after returning to `127.0.0.1` mode.
+1. Open **Settings**.
+2. Open **Logs**.
+3. You will see live logs produced by:
+   - TizenBrew service runtime
+   - module service scripts (including `console.log`, `console.warn`, `console.error`)
+   - module/debugger loading failures
 
-> Tip: If you need both frequent SDB logs and localhost behavior, keep a short cycle: **debug window (PC IP)** -> **runtime window (`127.0.0.1`)**.
+This allows you to keep `127.0.0.1` all the time and still capture module/service logs.
+
+### If you still need SDB device logs
+
+For low-level platform logs (outside TizenBrew/module scope), you still need temporary remote-debug mode:
+
+1. Change Host PC IP to your PC LAN IP.
+2. Reboot TV.
+3. Run `sdb connect <TV IP>:26101` (or your configured port).
+4. Collect logs (`sdb dlog`, etc.).
+5. Switch Host PC IP back to `127.0.0.1` and reboot.
