@@ -154,3 +154,27 @@ Note that tizen is in `C:\tizen-studio\tools\ide\bin` on Windows and in `~/tizen
 7. Change the Host PC IP address to `127.0.0.1` by following [this](https://developer.samsung.com/smarttv/develop/getting-started/using-sdk/tv-device.html#Connecting-the-TV-and-SDK)
 
 8. You can now launch the TizenBrew app on your TV.
+
+## Developer Mode IP and Logging (SDB)
+
+If you set **Host PC IP** to `127.0.0.1`, the TV expects the development bridge host to be the TV itself. This is required for TizenBrew's localhost-based behavior, but it prevents using `sdb connect <TV IP>` from another machine.
+
+### Can I use a different SDB port?
+
+Usually no. For Samsung TVs, `sdb connect` expects the device-side SDB daemon on its configured port (commonly `26101`). Changing only the port on the client side does not bypass the Host PC IP restriction.
+
+### Practical ways to collect logs
+
+1. **Switch Host PC IP temporarily to your computer IP**
+   - Set TV Developer Mode Host PC IP to your PC LAN IP.
+   - Reboot TV.
+   - Connect with `sdb connect <TV IP>` and capture logs (`sdb dlog`, app logs, install/debug checks).
+   - When done, switch Host PC IP back to `127.0.0.1` and reboot to run TizenBrew in localhost mode again.
+
+2. **Use Tizen Web Inspector/Remote debugging when possible**
+   - For web runtime issues, use inspector-based console/network logs while in a debug-compatible Host PC IP state.
+
+3. **Emit module/service logs to TizenBrew UI or persistent storage**
+   - If you maintain modules, log over TizenBrew's own websocket/UI channel or to local files/settings, then inspect in-app after returning to `127.0.0.1` mode.
+
+> Tip: If you need both frequent SDB logs and localhost behavior, keep a short cycle: **debug window (PC IP)** -> **runtime window (`127.0.0.1`)**.
