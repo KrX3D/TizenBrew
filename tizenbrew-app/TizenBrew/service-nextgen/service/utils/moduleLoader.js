@@ -1,5 +1,6 @@
 const { readConfig } = require('./configuration.js');
 const fetch = require('node-fetch');
+const { log } = require('./logBus.js');
 
 function loadModules() {
     const config = readConfig();
@@ -9,7 +10,6 @@ function loadModules() {
         return fetch(`https://cdn.jsdelivr.net/${module}/package.json`)
             .then(res => res.json())
             .then(moduleJson => {
-                console
                 let moduleData;
                 const splitData = [
                     module.substring(0, module.indexOf('/')),
@@ -62,7 +62,7 @@ function loadModules() {
                 return moduleData;
             })
             .catch(e => {
-                console.error(e);
+                log('error', 'module-loader', `Failed to load module metadata for ${module}`, e);
 
                 const splitData = [
                     module.substring(0, module.indexOf('/')),
