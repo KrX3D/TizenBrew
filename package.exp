@@ -1,9 +1,64 @@
 #!/usr/bin/expect -f
 
-set timeout -1
+# Fail fast if packaging prompts for interactive input and never exits.
+set timeout 180
+
+if {[info exists env(APP_PATH)] == 0 || [info exists env(CERT)] == 0} {
+    puts "Missing required env vars APP_PATH or CERT"
+    exit 1
+}
+
+set password ""
+if {[info exists env(PASSWORD)]} {
+    set password $env(PASSWORD)
+}
 
 cd $env(APP_PATH)
 
-spawn /home/runner/work/TizenBrew/TizenBrew/tizen-studio/tools/ide/bin/tizen package -t wgt -o ./release -s $env(CERT) -- .buildResult
+set cmd "/home/runner/work/TizenBrew/TizenBrew/tizen-studio/tools/ide/bin/tizen package -t wgt -o ./release -s $env(CERT) -- .buildResult"
+puts "Running: $cmd"
+spawn {*}[split $cmd " "]
 
-expect eof
+expect {
+    # Handle save-password confirmation first so it is not confused with password prompts.
+    -re {(?i)save author password} {
+        send -- "y\r"
+        exp_continue
+    }
+    -re {(?i)yes:\s*\(y\),\s*no:\s*\(n\)\s*\?.*} {
+        send -- "y\r"
+        exp_continue
+    }
+    # Keep password matches line-bounded so they do not consume the Yes/No prompt.
+    -re {(?i)author password[^\n]*:} {
+        if {$password eq ""} {
+            puts "Author password requested but PASSWORD env var is empty"
+            exit 1
+        }
+        send -- "$password\r"
+        exp_continue
+    }
+    -re {(?i)^\s*password[^\n]*:} {
+        if {$password eq ""} {
+            puts "Password requested but PASSWORD env var is empty"
+            exit 1
+        }
+        send -- "$password\r"
+        exp_continue
+    }
+    -re {(?i)continue\?.*} {
+        send -- "y\r"
+        exp_continue
+    }
+    timeout {
+        puts "Timed out waiting for tizen package to finish"
+        catch {exec pkill -f "tizen package -t wgt"}
+        exit 1
+    }
+    eof
+}
+
+# propagate child exit code
+catch wait result
+set exit_code [lindex $result 3]
+exit $exit_code
