@@ -12,48 +12,35 @@ To install TizenBrew, you need to have a Samsung TV (Tizen) device that has at l
 
 This is the easiest method and works on every Samsung TV released since 2017.
 
-#### 1. Set the Host PC IP Address to `127.0.0.1`
+#### 1. Set the Host PC IP Address to your PCs IP
 1. Open **Apps** or **App Settings** on your Samsung TV.
 2. In the **Apps** panel, enter `12345` using your remote control or the on-screen keypad.
 3. A *Developer Mode* configuration popup will appear:
    - Switch **Developer mode** to **On**.
-   - Under **Host PC IP**, enter `127.0.0.1`.
+   - Under **Host PC IP**, enter your PCs IP.
 4. Click **OK**.
 5. Reboot your TV.
 
 For more details, see [Step 1 here under “Connecting the TV and SDK”](https://developer.samsung.com/smarttv/develop/getting-started/using-sdk/tv-device.html#Connecting-the-TV-and-SDK).
 
-#### 2. Install TizenBrew Installer from a USB Drive
-1. Download the [latest `userwidget.zip` file](https://github.com/reisxd/TizenBrewInstaller/releases/latest) from the TizenBrewInstaller repository.
-2. Extract `userwidget.zip` to the **root** of your USB drive.  
-   Example: If your USB is drive **D:**, the path should look like:  
-`D:/userwidget/app.tmg`
-3. Insert the USB drive into your Samsung TV.  
-The TV will automatically install the demo version of TizenBrew Installer and display a notification when the app is installing.
+#### 2. Download and run TizenBrew Installer Desktop on your PC
+1. Download the [latest executable file for your OS](https://github.com/reisxd/TizenBrewInstaller/releases/latest) from the TizenBrewInstaller repository.
+2. Run the executable
 
-#### 3. Install the Full Version
-1. Launch **TizenBrew Installer** on your TV.
-2. Click **Install TizenBrew** to upgrade to the full version.
+If you're on macOS or Linux, you may need to run the file from the terminal and may need to run `chmod +x tizenbrew-installer-os-arch`
+
+#### 3. Install TizenBrew
+1. Click **Install TizenBrew** to install TizenBrew.
 
 > **Note:** If you're on **Tizen 7 or above**, you’ll be prompted to sign in to your Samsung account. Follow the on-screen instructions to create a Samsung certificate.
+
+> Did you know that you can install other apps (such as Jellyfin, Moonlight, etc.) from TizenBrew Installer? All you need is either the GitHub repository (in the format of `user/repo` or WGT/TPK file (TV version of TizenBrew Installer only, you can install it from TizenBrew Installer Desktop.)
 
 ## Other Installation Methods
 
 ### Using USB Demo Package
 
-Note that if you want to install TizenBrew using this method, the app will be installed for only 30 days. If you want to have TizenBrew permanently installed, use either the TizenBrew Installer or the Command Line method.
-
-1. Download the latest TizenBrew USB Demo Package from the [releases page](https://github.com/reisxd/TizenBrew/releases/latest).
-
-2. Extract the contents of the zip file to a USB drive.
-
-3. Connect the USB drive to your TV.
-
-4. Wait for the TV to recognize the USB drive and it'll automatically install TizenBrew.
-
-5. Change the Host PC IP address to `127.0.0.1` by following [this](https://developer.samsung.com/smarttv/develop/getting-started/using-sdk/tv-device.html#Connecting-the-TV-and-SDK)
-
-6. You can now launch the TizenBrew app on your TV.
+This method is now deprecated as USB Demo Packages cannot be made anymore due to Samsung shutting down the service.
 
 ### Using The Command Line
 
@@ -154,21 +141,3 @@ Note that tizen is in `C:\tizen-studio\tools\ide\bin` on Windows and in `~/tizen
 7. Change the Host PC IP address to `127.0.0.1` by following [this](https://developer.samsung.com/smarttv/develop/getting-started/using-sdk/tv-device.html#Connecting-the-TV-and-SDK)
 
 8. You can now launch the TizenBrew app on your TV.
-
-## Developer Mode IP and Logging (SDB)
-
-If you keep **Host PC IP** set to `127.0.0.1`, TV-side developer tools are bound to localhost behavior. This is what TizenBrew needs, but it blocks normal remote `sdb connect <TV IP>` from a different machine.
-
-### Does SDB support custom ports?
-
-Yes, SDB can target `ip:port` (for example `sdb connect 192.168.1.20:26101`).
-
-However, in this setup the main blocker is the TV Developer Mode Host PC IP policy. If Host PC IP is fixed to `127.0.0.1`, remote SDB sessions from your PC are still typically not accepted even if you try another port.
-
-### If you still need SDB logs on your PC
-
-1. Change Host PC IP to your PC LAN IP.
-2. Reboot TV.
-3. Run `sdb connect <TV IP>:26101` (or your configured port).
-4. Collect logs (`sdb dlog`, etc.).
-5. Switch Host PC IP back to `127.0.0.1` and reboot.
