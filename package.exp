@@ -20,7 +20,17 @@ puts "Running: $cmd"
 spawn {*}[split $cmd " "]
 
 expect {
-    -re "(?i)author password.*:" {
+    # Handle save-password confirmation first so it is not confused with password prompts.
+    -re "(?i)save author password" {
+        send -- "y\r"
+        exp_continue
+    }
+    -re "(?i)yes:\s*\(y\),\s*no:\s*\(n\)\s*\?.*" {
+        send -- "y\r"
+        exp_continue
+    }
+    # Keep password matches line-bounded so they do not consume the Yes/No prompt.
+    -re "(?i)author password[^\n]*:" {
         if {$password eq ""} {
             puts "Author password requested but PASSWORD env var is empty"
             exit 1
@@ -28,7 +38,7 @@ expect {
         send -- "$password\r"
         exp_continue
     }
-    -re "(?i)password.*:" {
+    -re "(?i)^\s*password[^\n]*:" {
         if {$password eq ""} {
             puts "Password requested but PASSWORD env var is empty"
             exit 1
@@ -37,14 +47,6 @@ expect {
         exp_continue
     }
     -re "(?i)continue\?.*" {
-        send -- "y\r"
-        exp_continue
-    }
-    -re "(?i)yes:\s*\(y\),\s*no:\s*\(n\)\s*\?.*" {
-        send -- "y\r"
-        exp_continue
-    }
-    -re "(?i)save author password.*\?.*" {
         send -- "y\r"
         exp_continue
     }
