@@ -163,24 +163,9 @@ If you keep **Host PC IP** set to `127.0.0.1`, TV-side developer tools are bound
 
 Yes, SDB can target `ip:port` (for example `sdb connect 192.168.1.20:26101`).
 
-However, in this specific setup the main blocker is not only the port number — it is the TV Developer Mode Host PC IP policy. If Host PC IP is fixed to `127.0.0.1`, remote SDB sessions from your PC are still typically not accepted even if you try another port.
+However, in this setup the main blocker is the TV Developer Mode Host PC IP policy. If Host PC IP is fixed to `127.0.0.1`, remote SDB sessions from your PC are still typically not accepted even if you try another port.
 
-### New option in TizenBrew (works while staying on `127.0.0.1`)
-
-TizenBrew now includes local log streaming inside the app UI:
-
-1. Open **Settings**.
-2. Open **Logs**.
-3. You will see live logs produced by:
-   - TizenBrew service runtime
-   - module service scripts (including `console.log`, `console.warn`, `console.error`)
-   - module/debugger loading failures
-
-This allows you to keep `127.0.0.1` all the time and still capture module/service logs.
-
-### If you still need SDB device logs
-
-For low-level platform logs (outside TizenBrew/module scope), you still need temporary remote-debug mode:
+### If you still need SDB logs on your PC
 
 1. Change Host PC IP to your PC LAN IP.
 2. Reboot TV.

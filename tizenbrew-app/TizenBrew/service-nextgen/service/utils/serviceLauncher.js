@@ -2,7 +2,7 @@
 
 const vm = require('vm');
 const fetch = require('node-fetch');
-const { log } = require('./logBus.js');
+const { buildModuleFileUrl } = require('./moduleSource.js');
 
 function startService(mdl, services) {
     let sandbox = {};
@@ -18,19 +18,7 @@ function startService(mdl, services) {
     sandbox['tizen'] = global.tizen;
     sandbox['module'] = { exports: {} };
 
-    sandbox['console'] = {
-        log: function () {
-            log.apply(null, ['info', `module-service:${mdl.fullName}`].concat(Array.prototype.slice.call(arguments)));
-        },
-        warn: function () {
-            log.apply(null, ['warn', `module-service:${mdl.fullName}`].concat(Array.prototype.slice.call(arguments)));
-        },
-        error: function () {
-            log.apply(null, ['error', `module-service:${mdl.fullName}`].concat(Array.prototype.slice.call(arguments)));
-        }
-    };
-
-    fetch(`https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.serviceFile}`)
+    fetch(buildModuleFileUrl(mdl.fullName, mdl.sourceMode || 'cdn', mdl.serviceFile, mdl.sourceBranch || 'main'))
         .then(res => res.text())
         .then(script => {
             services.set(mdl.fullName, {

@@ -73,31 +73,16 @@ export default function Settings() {
                 </ItemBasic>
 
                 <ItemBasic onClick={() => {
-                    loc.route('/tizenbrew-ui/dist/index.html/logs');
+                    loc.route('/tizenbrew-ui/dist/index.html/settings/change-ua');
                 }}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>
-                        Logs
+                        {t('settings.useragent')}
                     </h3>
                     <p className='text-gray-300 mt-6 text-base/7'>
-                        View local TizenBrew service/module logs while developer IP remains 127.0.0.1.
+                        {t('settings.useragentDesc')}
                     </p>
                 </ItemBasic>
 
-                {
-                    /*
-                    Disabled due to user script injection method
-                    <ItemBasic onClick={() => {
-                        loc.route('/tizenbrew-ui/dist/index.html/settings/change-ua');
-                    }}>
-                        <h3 className='text-indigo-400 text-base/7 font-semibold'>
-                            {t('settings.useragent')}
-                        </h3>
-                        <p className='text-gray-300 mt-6 text-base/7'>
-                            {t('settings.useragentDesc')}
-                        </p>
-                    </ItemBasic>
-                    */
-                }
             </div>
         </div>
     )
