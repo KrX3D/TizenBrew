@@ -40,6 +40,14 @@ expect {
         send -- "y\r"
         exp_continue
     }
+    -re "(?i)yes:\s*\(y\),\s*no:\s*\(n\)\s*\?.*" {
+        send -- "y\r"
+        exp_continue
+    }
+    -re "(?i)save author password.*\?.*" {
+        send -- "y\r"
+        exp_continue
+    }
     timeout {
         puts "Timed out waiting for tizen package to finish"
         catch {exec pkill -f "tizen package -t wgt"}
