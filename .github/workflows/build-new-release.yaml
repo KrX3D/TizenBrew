@@ -108,6 +108,7 @@ jobs:
       - name: Package TizenBrew for Old Tizen
         env:
           PASSWORD: ${{ secrets.TIZEN_AUTHOR_KEY_PW }}
+          TIZEN_AUTHOR_KEY_PW: ${{ secrets.TIZEN_AUTHOR_KEY_PW }}
           APP_PATH: tizenbrew-app/TizenBrew
           CERT: TizenBrew-Old
         run: |
