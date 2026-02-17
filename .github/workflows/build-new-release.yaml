@@ -111,8 +111,13 @@ jobs:
           APP_PATH: tizenbrew-app/TizenBrew
           CERT: TizenBrew-Old
         run: |
-          expect ./package.exp
-          cat "${GITHUB_WORKSPACE}/tizen-studio-data/cli/logs/cli.log"
+          set -euo pipefail
+          expect ./package.exp || {
+            echo "Packaging failed; dumping Tizen CLI logs"
+            cat "${GITHUB_WORKSPACE}/tizen-studio-data/cli/logs/cli.log" || true
+            exit 1
+          }
+          cat "${GITHUB_WORKSPACE}/tizen-studio-data/cli/logs/cli.log" || true
           mv tizenbrew-app/TizenBrew/release/TizenBrewNextGeneration.wgt tizenbrew-app/TizenBrew/release/TizenBrewStandalone-Old.wgt
 
 
