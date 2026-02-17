@@ -37,6 +37,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                             sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                             client.Page.addScriptToEvaluateOnNewDocument({ expression: modFile });
                         }).catch(e => {
+                            log('error', 'debugger', `Failed to fetch module script ${mdl.fullName}`, e);
                             sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                             client.Page.addScriptToEvaluateOnNewDocument({ expression: `alert("Failed to load module: '${mdl.fullName}'. Please relaunch TizenBrew to try again.")` });
                         });
@@ -90,11 +91,13 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
         }).on('error', (err) => {
             if (attempts >= 15) {
                 if (!isAnotherApp) {
+                    log('error', 'debugger', 'Failed to connect to the debugger after retries');
                     clientConn.send(clientConn.Event(Events.Error, 'Failed to connect to the debugger'));
                     inDebug.tizenDebug = false;
                     return;
                 } else return;
             }
+            log('warn', 'debugger', 'Debugger connection attempt failed', err);
             attempts++;
             setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts), 750)
         });
