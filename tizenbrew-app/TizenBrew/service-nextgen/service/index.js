@@ -1,7 +1,6 @@
 "use strict";
 
 module.exports.onStart = function () {
-    console.log('Service started');
     const adbhost = require('adbhost');
     const express = require('express');
     const fetch = require('node-fetch');
@@ -133,7 +132,7 @@ module.exports.onStart = function () {
         adbClient = adbhost.createConnection({ host: '127.0.0.1', port: 26101 });
 
         adbClient._stream.on('connect', () => {
-            console.log('ADB connection established');
+            log('info', 'service', 'ADB connection established');
             //Launch app
             const tbPackageId = tizen.application.getAppInfo().packageId;
             const shellCmd = adbClient.createStream(`shell:0 debug ${tbPackageId}.TizenBrewStandalone${isTizen3 ? ' 0' : ''}`);
@@ -148,21 +147,35 @@ module.exports.onStart = function () {
         });
 
         adbClient._stream.on('error', (e) => {
-            console.log('ADB connection error. ' + e);
+            log('error', 'service', 'ADB connection error.', e);
         });
         adbClient._stream.on('close', () => {
-            console.log('ADB connection closed.');
+            log('info', 'service', 'ADB connection closed.');
         });
     }
 
 
     wsServer.on('connection', (ws) => {
+        const unsubscribeLogs = subscribe(entry => {
+            try {
+                ws.send(JSON.stringify({
+                    type: Events.LogEntry,
+                    payload: [entry]
+                }));
+            } catch (e) {
+                // ignore send failures on closed websocket
+            }
+        });
         const wsConn = new Connection(ws);
         for (const event of queuedEvents) {
             wsConn.send(event);
             queuedEvents.splice(queuedEvents.indexOf(event), 1);
         }
         services.set('wsConn', wsConn);
+        ws.on('close', () => {
+            unsubscribeLogs();
+        });
+
         ws.on('message', (message) => {
             let msg;
             try {
@@ -270,6 +283,10 @@ module.exports.onStart = function () {
                         });
                     }
                     wsConn.send(wsConn.Event(Events.GetServiceStatuses, serviceList));
+                    break;
+                }
+                case Events.GetLogs: {
+                    wsConn.send(wsConn.Event(Events.LogEntry, getLogs()));
                     break;
                 }
                 case Events.ModuleAction: {
