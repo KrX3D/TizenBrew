@@ -4,6 +4,16 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Release version/tag name to use for manual runs (e.g. v1.2.3)'
+        required: false
+      publish_release:
+        description: 'Publish a GitHub Release from this run'
+        required: false
+        default: false
+        type: boolean
 
 env:
   TIZEN_STUDIO_VER: 5.6
@@ -16,7 +26,14 @@ jobs:
         uses: actions/checkout@v4
       
       - name: Set env
-        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> "$GITHUB_ENV"
+          elif [ -n "${{ github.event.inputs.release_version }}" ]; then
+            echo "RELEASE_VERSION=${{ github.event.inputs.release_version }}" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_VERSION=manual-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          fi
       
       - name: Install modules and transpile service
         working-directory: tizenbrew-app/TizenBrew/service-nextgen/service
@@ -47,25 +64,50 @@ jobs:
         run: |
           rm -r transpiled
 
+      - name: Cache Tizen Studio installer
+        uses: actions/cache@v4
+        with:
+          path: web-cli_Tizen_Studio_${{ env.TIZEN_STUDIO_VER }}_ubuntu-64.bin
+          key: tizen-studio-${{ env.TIZEN_STUDIO_VER }}-${{ runner.os }}
+
       - name: Download Tizen-Studio
         run: |
-          curl -o tizen-installer "https://download.tizen.org/sdk/Installer/tizen-studio_${TIZEN_STUDIO_VER}/web-cli_Tizen_Studio_${TIZEN_STUDIO_VER}_ubuntu-64.bin"
+          INSTALLER_FILE=web-cli_Tizen_Studio_${TIZEN_STUDIO_VER}_ubuntu-64.bin
+          if [ ! -f "${INSTALLER_FILE}" ]; then
+            sudo apt-get update
+            sudo apt-get install -y aria2
+            aria2c -j 8 -s 8 -x 8 \
+              -o "${INSTALLER_FILE}" \
+              --header='Referer: https://developer.tizen.org/' \
+              -U 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' \
+              "https://download.tizen.org/sdk/Installer/tizen-studio_${TIZEN_STUDIO_VER}/web-cli_Tizen_Studio_${TIZEN_STUDIO_VER}_ubuntu-64.bin"
+          fi
 
       - name: Install Tizen-Studio
         run: |
-          chmod +x tizen-installer
-          ./tizen-installer --accept-license "${GITHUB_WORKSPACE}/tizen-studio"
-          rm ./tizen-installer
+          INSTALLER_FILE=web-cli_Tizen_Studio_${TIZEN_STUDIO_VER}_ubuntu-64.bin
+          chmod +x "${INSTALLER_FILE}"
+          ./${INSTALLER_FILE} --accept-license "${GITHUB_WORKSPACE}/tizen-studio"
           echo 'export PATH=$PATH:${GITHUB_WORKSPACE}/tizen-studio/tools/ide/bin' >> .bashrc
 
       - name: Prepare Tizen Certificate
+        env:
+          TIZEN_AUTHOR_KEY_PW: ${{ secrets.TIZEN_AUTHOR_KEY_PW }}
         run: |
           mkdir -p "${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/"
           echo "${{ secrets.TIZEN_AUTHOR_KEY }}" | base64 -d > "${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/tizenbrew-author.p12"
           ./tizen-studio/tools/ide/bin/tizen cli-config "profiles.path=${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
           cp .github/assets/profiles.xml "${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
-          sed -i "s|\$GITHUB_WORKSPACE|${GITHUB_WORKSPACE}|g" "${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
-          sed -i "s|\$KEY_PW|${{ secrets.TIZEN_AUTHOR_KEY_PW }}|g" "${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
+          python - <<'PYCONF'
+import os
+from pathlib import Path
+profile_path = Path(os.environ['GITHUB_WORKSPACE']) / 'tizen-studio-data/profile/profiles.xml'
+text = profile_path.read_text(encoding='utf-8')
+text = text.replace('$GITHUB_WORKSPACE', os.environ['GITHUB_WORKSPACE'])
+text = text.replace('$KEY_PW', os.environ['TIZEN_AUTHOR_KEY_PW'])
+profile_path.write_text(text, encoding='utf-8')
+PYCONF
+          openssl pkcs12 -in "${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/tizenbrew-author.p12" -passin "pass:${TIZEN_AUTHOR_KEY_PW}" -noout
           chmod 755 "./tizen-studio-data/profile/profiles.xml"
 
       - name: Build TizenBrew
@@ -76,12 +118,25 @@ jobs:
       - name: Package TizenBrew for Old Tizen
         env:
           PASSWORD: ${{ secrets.TIZEN_AUTHOR_KEY_PW }}
+          TIZEN_AUTHOR_KEY_PW: ${{ secrets.TIZEN_AUTHOR_KEY_PW }}
           APP_PATH: tizenbrew-app/TizenBrew
           CERT: TizenBrew-Old
         run: |
-          expect ./package.exp
-          cat "${GITHUB_WORKSPACE}/tizen-studio-data/cli/logs/cli.log"
+          set -euo pipefail
+          expect ./package.exp || {
+            echo "Packaging failed; dumping Tizen CLI logs"
+            cat "${GITHUB_WORKSPACE}/tizen-studio-data/cli/logs/cli.log" || true
+            exit 1
+          }
+          cat "${GITHUB_WORKSPACE}/tizen-studio-data/cli/logs/cli.log" || true
           mv tizenbrew-app/TizenBrew/release/TizenBrewNextGeneration.wgt tizenbrew-app/TizenBrew/release/TizenBrewStandalone-Old.wgt
+
+
+      - name: Verify signed TizenBrew package
+        working-directory: tizenbrew-app/TizenBrew
+        run: |
+          test -f release/TizenBrewStandalone-Old.wgt
+          unzip -l release/TizenBrewStandalone-Old.wgt | grep -q "signature1.xml"
 
       - name: Package TizenBrew as USB Demo Package
         working-directory: tizenbrew-app/TizenBrew
@@ -100,6 +155,7 @@ jobs:
           zip -r release/TizenBrewStandaloneUSBDemo.zip userwidget/
       
       - name: Release TizenBrew Build Results
+        if: github.event_name == 'push' || github.event.inputs.publish_release == 'true'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.RELEASE_VERSION }}
