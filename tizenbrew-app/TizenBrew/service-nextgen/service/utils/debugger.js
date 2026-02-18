@@ -5,6 +5,7 @@ const fetch = require('node-fetch');
 const { Events } = require('./wsCommunication.js');
 const { readConfig } = require('./configuration.js');
 const WebSocket = require('ws');
+const { buildModuleFileUrl } = require('./moduleSource.js');
 
 const modulesCache = new Map();
 
@@ -31,7 +32,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                         client.Page.addScriptToEvaluateOnNewDocument({ expression: cache });
                         sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                     } else {
-                        fetch(`https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.mainFile}`).then(res => res.text()).then(modFile => {
+                        fetch(buildModuleFileUrl(mdl.fullName, mdl.sourceMode || 'cdn', mdl.mainFile, mdl.sourceBranch || 'main')).then(res => res.text()).then(modFile => {
                             modulesCache.set(mdl.fullName, modFile);
                             sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                             client.Page.addScriptToEvaluateOnNewDocument({ expression: modFile });
@@ -48,6 +49,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
 
                 inDebug.tizenDebug = false;
                 inDebug.webDebug = false;
+                inDebug.appDebug = false;
                 inDebug.rwiDebug = false;
 
                 mdl.fullName = '';
@@ -84,7 +86,10 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     }
                 }
             }
-            if (!isAnotherApp) inDebug.webDebug = true;
+            if (!isAnotherApp) {
+                inDebug.webDebug = true;
+                inDebug.appDebug = true;
+            }
             appControlData = null;
         }).on('error', (err) => {
             if (attempts >= 15) {

@@ -11,6 +11,7 @@ module.exports.onStart = function () {
     const startDebugging = require('./utils/debugger.js');
     const startService = require('./utils/serviceLauncher.js');
     const { Connection, Events } = require('./utils/wsCommunication.js');
+    const { buildModuleFileUrl } = require('./utils/moduleSource.js');
     let WebSocket;
     if (process.version === 'v4.4.3') {
         WebSocket = require('ws-old');
@@ -29,7 +30,15 @@ module.exports.onStart = function () {
             const splittedUrl = req.url.split('/');
             const encodedModuleName = splittedUrl[2];
             const moduleName = decodeURIComponent(encodedModuleName);
-            fetch(`https://cdn.jsdelivr.net/${moduleName}/${req.url.replace(`/module/${encodedModuleName}/`, '')}`)
+            const moduleEntry = modulesCache && modulesCache.find(m => m.fullName === moduleName);
+            const moduleFilePath = req.url.replace(`/module/${encodedModuleName}/`, '');
+            const moduleFileUrl = buildModuleFileUrl(
+                moduleName,
+                moduleEntry && moduleEntry.sourceMode ? moduleEntry.sourceMode : 'cdn',
+                moduleFilePath,
+                moduleEntry && moduleEntry.sourceBranch ? moduleEntry.sourceBranch : 'main'
+            );
+            fetch(moduleFileUrl)
                 .then(fetchRes => {
                     return fetchRes.body.pipe(res);
                 })
@@ -46,13 +55,25 @@ module.exports.onStart = function () {
 
     let adbClient;
     let canLaunchInDebug = null;
-    fetch('http://127.0.0.1:8001/api/v2/').then(res => res.json())
-        .then(json => {
-            canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
-        });
+
+    function refreshCanLaunchInDebugStatus() {
+        return fetch('http://127.0.0.1:8001/api/v2/')
+            .then(res => res.json())
+            .then(json => {
+                canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
+                return canLaunchInDebug;
+            })
+            .catch(() => {
+                canLaunchInDebug = false;
+                return canLaunchInDebug;
+            });
+    }
+
+    refreshCanLaunchInDebugStatus();
     const inDebug = {
         tizenDebug: false,
         webDebug: false,
+        appDebug: false,
         rwiDebug: false
     };
 
@@ -65,7 +86,9 @@ module.exports.onStart = function () {
         appPath: '',
         moduleType: '',
         packageType: '',
-        serviceFile: ''
+        serviceFile: '',
+        sourceMode: 'cdn',
+        sourceBranch: 'main'
     };
 
     const appControlData = {
@@ -73,9 +96,21 @@ module.exports.onStart = function () {
         args: null
     };
 
+    function normalizeServiceAutoLaunchList(value) {
+        if (Array.isArray(value)) {
+            return value.filter(moduleName => typeof moduleName === 'string' && moduleName.length > 0);
+        }
+
+        if (typeof value === 'string' && value.length > 0) {
+            return [value];
+        }
+
+        return [];
+    }
+
     loadModules().then(modules => {
         modulesCache = modules;
-        const serviceModuleList = readConfig().autoLaunchServiceList;
+        const serviceModuleList = normalizeServiceAutoLaunchList(readConfig().autoLaunchServiceList);
         if (serviceModuleList.length > 0) {
             serviceModuleList.forEach(module => {
                 const service = modules.find(m => m.name === module);
@@ -161,11 +196,9 @@ module.exports.onStart = function () {
                     break;
                 }
                 case Events.CanLaunchInDebug: {
-                    fetch('http://127.0.0.1:8001/api/v2/').then(res => res.json())
-                        .then(json => {
-                            canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
-                        });
-                    wsConn.send(wsConn.Event(Events.CanLaunchInDebug, canLaunchInDebug));
+                    refreshCanLaunchInDebugStatus().then((status) => {
+                        wsConn.send(wsConn.Event(Events.CanLaunchInDebug, status));
+                    });
                     break;
                 }
                 case Events.ReLaunchInDebug: {
@@ -194,9 +227,12 @@ module.exports.onStart = function () {
                     currentModule.moduleType = mdl.moduleType;
                     currentModule.packageType = mdl.packageType;
                     currentModule.serviceFile = mdl.serviceFile;
+                    currentModule.sourceMode = mdl.sourceMode || 'cdn';
+                    currentModule.sourceBranch = mdl.sourceBranch || 'main';
 
                     if (mdl.packageType === 'app') {
                         inDebug.webDebug = false;
+                        inDebug.appDebug = false;
                         inDebug.tizenDebug = false;
                     } else {
                         currentModule.mainFile = mdl.mainFile;
@@ -237,22 +273,32 @@ module.exports.onStart = function () {
                     break;
                 }
                 case Events.ModuleAction: {
-                    const { action, module } = payload;
+                    const action = payload.action;
+                    const module = payload.module;
 
                     const config = readConfig();
+                    if (!config.moduleSources) config.moduleSources = {};
+
                     switch (action) {
                         case 'add': {
                             const index = config.modules.findIndex(m => m === module);
                             if (index === -1) {
                                 config.modules.push(module);
-                                writeConfig(config);
                             }
+
+                            config.moduleSources[module] = payload.sourceMode === 'direct' ? 'direct' : 'cdn';
+                            if (payload.sourceBranch) {
+                                config.moduleSources[`${module}:branch`] = payload.sourceBranch;
+                            }
+                            writeConfig(config);
                             break;
                         }
                         case 'remove': {
                             const index = config.modules.findIndex(m => m === module);
                             if (index !== -1) {
                                 config.modules.splice(index, 1);
+                                delete config.moduleSources[module];
+                                delete config.moduleSources[`${module}:branch`];
                                 writeConfig(config);
                             }
                             break;
@@ -263,7 +309,7 @@ module.exports.onStart = function () {
                             break;
                         }
                         case 'autolaunchService': {
-                            config.autoLaunchServiceList = module;
+                            config.autoLaunchServiceList = normalizeServiceAutoLaunchList(module);
                             writeConfig(config);
                             break;
                         }
