@@ -7,10 +7,6 @@ on:
       - master
     tags:
       - 'v*.*.*'
-  pull_request:
-    branches:
-      - main
-      - master
   workflow_dispatch:
     inputs:
       release_version:
@@ -125,7 +121,7 @@ jobs:
 
           ./tizen-studio/tools/ide/bin/tizen cli-config "profiles.path=${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
           cp .github/assets/profiles.xml "${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
-          AUTHOR_KEY_PW="${AUTHOR_KEY_PW}" python -c "import os; from pathlib import Path; p = Path(os.environ['GITHUB_WORKSPACE']) / 'tizen-studio-data/profile/profiles.xml'; t = p.read_text(encoding='utf-8'); t = t.replace('$GITHUB_WORKSPACE', os.environ['GITHUB_WORKSPACE']).replace('$KEY_PW', os.environ['AUTHOR_KEY_PW']); p.write_text(t, encoding='utf-8')"
+          AUTHOR_KEY_PW="${AUTHOR_KEY_PW}" python -c "import os; from pathlib import Path; p = Path(os.environ['GITHUB_WORKSPACE']) / 'tizen-studio-data/profile/profiles.xml'; t = p.read_text(encoding='utf-8'); t = t.replace('\$GITHUB_WORKSPACE', os.environ['GITHUB_WORKSPACE']).replace('\$KEY_PW', os.environ['AUTHOR_KEY_PW']); p.write_text(t, encoding='utf-8')"
           openssl pkcs12 -in "${AUTHOR_P12}" -passin "pass:${AUTHOR_KEY_PW}" -noout
           chmod 755 "./tizen-studio-data/profile/profiles.xml"
 
