@@ -12,7 +12,7 @@ function classNames(...classes) {
 function Item({ children, module, id, state }) {
     const { t } = useTranslation();
     const { ref, focused } = useFocusable();
-      useEffect(() => {
+    useEffect(() => {
         if (focused) {
             ref.current.scrollIntoView({
                 behavior: 'smooth',
@@ -60,7 +60,7 @@ function Item({ children, module, id, state }) {
 
 function ItemBasic({ children, onClick }) {
     const { ref, focused } = useFocusable();
-      useEffect(() => {
+    useEffect(() => {
         if (focused) {
             ref.current.scrollIntoView({
                 behavior: 'smooth',
@@ -93,9 +93,7 @@ export default function ModuleManager() {
             <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
                 {state?.sharedData?.modules?.map((module, moduleIdx) => (
                     <Item module={module} id={moduleIdx} state={state}>
-                        <h3
-                            className='text-indigo-400 text-base/7 font-semibold'
-                        >
+                        <h3 className='text-indigo-400 text-base/7 font-semibold'>
                             {module.appName} ({module.version})
                         </h3>
                         <p className='text-gray-300 mt-6 text-base/7'>
@@ -125,8 +123,34 @@ export default function ModuleManager() {
     )
 }
 
+function normalizeInput(raw, type) {
+    const value = raw.trim();
+    if (!value) return '';
+
+    if (type === 'gh') {
+        const cleaned = value
+            .replace(/^https?:\/\/github\.com\//i, '')
+            .replace(/\.git$/i, '')
+            .replace(/^gh\//i, '')
+            .replace(/^\/+|\/+$/g, '');
+        return cleaned;
+    }
+
+    if (type === 'npm') {
+        if (value.includes('npmjs.com/package/')) {
+            const parsed = value.split('npmjs.com/package/')[1] || '';
+            return decodeURIComponent(parsed.replace(/^\/+|\/+$/g, ''));
+        }
+
+        return value.replace(/^npm\//i, '').replace(/^\/+|\/+$/g, '');
+    }
+
+    return value;
+}
+
 function AddModule() {
     const [name, setName] = useState('');
+    const [sourceMode, setSourceMode] = useState('cdn');
     const loc = useLocation();
     const { state } = useContext(GlobalStateContext);
     const ref = useRef(null);
@@ -135,35 +159,83 @@ function AddModule() {
     useEffect(() => {
         ref.current.focus();
     }, [ref]);
+
+    const type = loc.query.type;
+    const example = type === 'gh' ? 'reisxd/TizenTube or https://github.com/reisxd/TizenTube' : '@foxreis/tizentube or https://www.npmjs.com/package/@foxreis/tizentube';
+
+    function submitModule() {
+        const normalized = normalizeInput(name, type);
+        if (!normalized) {
+            loc.route('/tizenbrew-ui/dist/index.html/module-manager');
+            setFocus('sn:focusable-item-1');
+            return;
+        }
+
+        state.client.send({
+            type: Events.ModuleAction,
+            payload: {
+                action: 'add',
+                module: `${type}/${normalized}`,
+                sourceMode
+            }
+        });
+
+        state.client.send({
+            type: Events.GetModules,
+            payload: true
+        });
+
+        loc.route('/tizenbrew-ui/dist/index.html/module-manager');
+        setFocus('sn:focusable-item-1');
+    }
+
     return (
         <div className="relative isolate lg:px-8">
             <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
                 <ItemBasic>
+                    <h3 className='text-indigo-400 text-base/7 font-semibold mb-2'>
+                        {t('moduleManager.addModule')}
+                    </h3>
+                    <p className='text-gray-300 mb-4 text-sm'>
+                        {t('moduleManager.moduleName', { type })}
+                    </p>
+                    <p className='text-slate-400 mb-4 text-sm'>
+                        Example: {example}
+                    </p>
+
+                    <div className='flex gap-2 mb-3'>
+                        <button className={`px-3 py-2 rounded ${sourceMode === 'cdn' ? 'bg-indigo-600' : 'bg-gray-700'}`} onClick={() => setSourceMode('cdn')}>CDN</button>
+                        <button className={`px-3 py-2 rounded ${sourceMode === 'direct' ? 'bg-indigo-600' : 'bg-gray-700'}`} onClick={() => setSourceMode('direct')}>Direct</button>
+                    </div>
+
                     <input
                         type="text"
+                        inputMode="url"
                         ref={ref}
                         value={name}
                         className="w-full p-2 rounded-lg bg-gray-800 text-gray-200"
                         onChange={(e) => setName(e.target.value)}
-                        onBlur={(e) => {
-                            if (name) {
-                                state.client.send({
-                                    type: Events.ModuleAction,
-                                    payload: {
-                                        action: 'add',
-                                        module: `${loc.query.type}/${name}`
-                                    }
-                                });
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                submitModule();
                             }
-                            state.client.send({
-                                type: Events.GetModules,
-                                payload: true
-                            });
+                        }}
+                        placeholder={t('moduleManager.moduleName', { type })}
+                    />
+
+                    <div className='flex gap-2 mt-3'>
+                        <button className='px-3 py-1 rounded bg-gray-700' onClick={() => setName(prev => prev + '@')}>@</button>
+                        <button className='px-3 py-1 rounded bg-gray-700' onClick={() => setName(prev => prev + '/')}>/</button>
+                        <button className='px-3 py-1 rounded bg-gray-700' onClick={() => setName(prev => prev + '_')}>_</button>
+                    </div>
+
+                    <div className='flex gap-2 mt-4'>
+                        <button className='px-4 py-2 rounded bg-indigo-600' onClick={submitModule}>Done</button>
+                        <button className='px-4 py-2 rounded bg-gray-700' onClick={() => {
                             loc.route('/tizenbrew-ui/dist/index.html/module-manager');
                             setFocus('sn:focusable-item-1');
-                        }}
-                        placeholder={t('moduleManager.moduleName', { type: loc.query.type })}
-                    />
+                        }}>Cancel</button>
+                    </div>
                 </ItemBasic>
             </div>
         </div>
