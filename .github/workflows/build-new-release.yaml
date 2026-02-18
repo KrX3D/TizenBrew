@@ -128,7 +128,7 @@ jobs:
 
           ./tizen-studio/tools/ide/bin/tizen cli-config "profiles.path=${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
           cp .github/assets/profiles.xml "${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
-          AUTHOR_KEY_PW="${AUTHOR_KEY_PW}" python -c 'import os; from pathlib import Path; profile_path = Path(os.environ["GITHUB_WORKSPACE"]) / "tizen-studio-data/profile/profiles.xml"; text = profile_path.read_text(encoding="utf-8"); text = text.replace("$GITHUB_WORKSPACE", os.environ["GITHUB_WORKSPACE"]); text = text.replace("$KEY_PW", os.environ["AUTHOR_KEY_PW"]); profile_path.write_text(text, encoding="utf-8")'
+          AUTHOR_KEY_PW="${AUTHOR_KEY_PW}" python -c 'import os,xml.etree.ElementTree as ET; p=os.path.join(os.environ["GITHUB_WORKSPACE"],"tizen-studio-data/profile/profiles.xml"); tree=ET.parse(p); root=tree.getroot(); ws=os.environ["GITHUB_WORKSPACE"]; pw=os.environ["AUTHOR_KEY_PW"]; [(e.set(k,v.replace("$GITHUB_WORKSPACE",ws)) if "$GITHUB_WORKSPACE" in v else None, e.set(k,pw) if v=="$KEY_PW" else None) for e in root.iter() for k,v in list(e.attrib.items())]; tree.write(p, encoding="UTF-8", xml_declaration=True)'
           openssl pkcs12 -in "${AUTHOR_P12}" -passin "pass:${AUTHOR_KEY_PW}" -noout
           echo "PASSWORD=${AUTHOR_KEY_PW}" >> "$GITHUB_ENV"
           chmod 755 "./tizen-studio-data/profile/profiles.xml"
