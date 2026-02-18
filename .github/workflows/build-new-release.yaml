@@ -117,7 +117,9 @@ jobs:
 
           ./tizen-studio/tools/ide/bin/tizen cli-config "profiles.path=${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
           AUTHOR_KEY_PW="${AUTHOR_KEY_PW}" AUTHOR_P12="${AUTHOR_P12}" python -c 'import os,xml.etree.ElementTree as ET; ws=os.environ["GITHUB_WORKSPACE"]; pw=os.environ["AUTHOR_KEY_PW"]; author=os.environ["AUTHOR_P12"]; p=os.path.join(ws,"tizen-studio-data/profile/profiles.xml"); root=ET.Element("profiles",{"active":"TizenBrew-Old","version":"3.1"}); profiles=[("TizenBrew-Old","tizen-distributor-ca.cer","tizen-distributor-signer.p12"),("TizenBrew-New","tizen-distributor-ca-new.cer","tizen-distributor-signer-new.p12")]; [ (lambda prof: (ET.SubElement(prof,"profileitem",{"ca":f"{ws}/tizen-studio/tools/certificate-generator/certificates/developer/tizen-developer-ca.cer","distributor":"0","key":author,"password":pw,"rootca":""}), ET.SubElement(prof,"profileitem",{"ca":f"{ws}/tizen-studio/tools/certificate-generator/certificates/distributor/sdk-public/{dca}","distributor":"1","key":f"{ws}/tizen-studio/tools/certificate-generator/certificates/distributor/sdk-public/{dkey}","password":"tizenpkcs12passfordsigner","rootca":""}), ET.SubElement(prof,"profileitem",{"ca":"","distributor":"2","key":"","password":"","rootca":""}) ))(ET.SubElement(root,"profile",{"name":name})) for name,dca,dkey in profiles ]; ET.ElementTree(root).write(p, encoding="UTF-8", xml_declaration=True)'
-          openssl pkcs12 -in "${AUTHOR_P12}" -passin "pass:${AUTHOR_KEY_PW}" -noout
+          # The file is exported with -legacy for Tizen compatibility, so validation must
+          # also load legacy algorithms on OpenSSL 3.
+          openssl pkcs12 -legacy -in "${AUTHOR_P12}" -passin "pass:${AUTHOR_KEY_PW}" -noout
           {
             echo 'PASSWORD<<EOF'
             echo "${AUTHOR_KEY_PW}"
