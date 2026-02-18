@@ -112,6 +112,13 @@ jobs:
           if [ -n "${TIZEN_AUTHOR_KEY_B64:-}" ]; then
             echo "Using TIZEN_AUTHOR_KEY secret"
             echo "${TIZEN_AUTHOR_KEY_B64}" | base64 -d > "${AUTHOR_P12}"
+            if ! openssl pkcs12 -in "${AUTHOR_P12}" -passin "pass:${AUTHOR_KEY_PW}" -noout; then
+              echo "Provided author key password is invalid; falling back to generated CI certificate"
+              AUTHOR_KEY_PW="tizenbrew-author"
+              openssl req -newkey rsa:2048 -nodes -x509 -days 3650                 -subj "/CN=TizenBrew CI/O=TizenBrew"                 -keyout author.key -out author.crt
+              openssl pkcs12 -export -out "${AUTHOR_P12}"                 -inkey author.key -in author.crt -passout "pass:${AUTHOR_KEY_PW}"
+              rm -f author.key author.crt
+            fi
           else
             echo "TIZEN_AUTHOR_KEY missing; generating temporary author certificate for CI"
             openssl req -newkey rsa:2048 -nodes -x509 -days 3650               -subj "/CN=TizenBrew CI/O=TizenBrew"               -keyout author.key -out author.crt
@@ -121,8 +128,9 @@ jobs:
 
           ./tizen-studio/tools/ide/bin/tizen cli-config "profiles.path=${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
           cp .github/assets/profiles.xml "${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
-          AUTHOR_KEY_PW="${AUTHOR_KEY_PW}" python -c "import os; from pathlib import Path; p = Path(os.environ['GITHUB_WORKSPACE']) / 'tizen-studio-data/profile/profiles.xml'; t = p.read_text(encoding='utf-8'); t = t.replace('\$GITHUB_WORKSPACE', os.environ['GITHUB_WORKSPACE']).replace('\$KEY_PW', os.environ['AUTHOR_KEY_PW']); p.write_text(t, encoding='utf-8')"
+          AUTHOR_KEY_PW="${AUTHOR_KEY_PW}" python -c 'import os; from pathlib import Path; profile_path = Path(os.environ["GITHUB_WORKSPACE"]) / "tizen-studio-data/profile/profiles.xml"; text = profile_path.read_text(encoding="utf-8"); text = text.replace("$GITHUB_WORKSPACE", os.environ["GITHUB_WORKSPACE"]); text = text.replace("$KEY_PW", os.environ["AUTHOR_KEY_PW"]); profile_path.write_text(text, encoding="utf-8")'
           openssl pkcs12 -in "${AUTHOR_P12}" -passin "pass:${AUTHOR_KEY_PW}" -noout
+          echo "PASSWORD=${AUTHOR_KEY_PW}" >> "$GITHUB_ENV"
           chmod 755 "./tizen-studio-data/profile/profiles.xml"
 
       - name: Build TizenBrew
@@ -132,7 +140,6 @@ jobs:
 
       - name: Package TizenBrew for Old Tizen
         env:
-          PASSWORD: ${{ secrets.TIZEN_AUTHOR_KEY_PW }}
           TIZEN_AUTHOR_KEY_PW: ${{ secrets.TIZEN_AUTHOR_KEY_PW }}
           FALLBACK_PASSWORD: tizenbrew-author
           APP_PATH: tizenbrew-app/TizenBrew
