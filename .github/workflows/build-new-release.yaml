@@ -2,8 +2,15 @@ name: Build TizenBrew Standalone Application and Release
 
 on:
   push:
+    branches:
+      - main
+      - master
     tags:
       - 'v*.*.*'
+  pull_request:
+    branches:
+      - main
+      - master
   workflow_dispatch:
     inputs:
       release_version:
