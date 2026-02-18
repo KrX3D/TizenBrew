@@ -10,7 +10,9 @@ const Events = {
     GetServiceStatuses: 7,
     Error: 8,
     CanLaunchModules: 9,
-    ModuleAction: 10
+    ModuleAction: 10,
+    GetLogs: 11,
+    LogEntry: 12
 };
 
 class Client {
@@ -26,6 +28,10 @@ class Client {
     }
 
     onOpen() {
+        this.send({
+            type: Events.GetLogs
+        });
+
         const data = tizen.application.getCurrentApplication().getRequestedAppControl().appControl.data;
         if (data.length > 0 && data[0].value.length > 0) {
             // TizenBrew allows other apps to launch a specific module outside of the TizenBrew app.
@@ -163,6 +169,16 @@ class Client {
                     this.handleCanLaunchModules(payload);
                 }
 
+                break;
+            }
+
+
+            case Events.LogEntry: {
+                const currentLogs = this.context.state.sharedData.logs || [];
+                this.context.dispatch({
+                    type: 'SET_LOGS',
+                    payload: currentLogs.concat(payload || [])
+                });
                 break;
             }
 
