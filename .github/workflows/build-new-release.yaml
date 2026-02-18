@@ -91,13 +91,23 @@ jobs:
           echo 'export PATH=$PATH:${GITHUB_WORKSPACE}/tizen-studio/tools/ide/bin' >> .bashrc
 
       - name: Prepare Tizen Certificate
+        env:
+          TIZEN_AUTHOR_KEY_PW: ${{ secrets.TIZEN_AUTHOR_KEY_PW }}
         run: |
           mkdir -p "${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/"
           echo "${{ secrets.TIZEN_AUTHOR_KEY }}" | base64 -d > "${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/tizenbrew-author.p12"
           ./tizen-studio/tools/ide/bin/tizen cli-config "profiles.path=${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
           cp .github/assets/profiles.xml "${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
-          sed -i "s|\$GITHUB_WORKSPACE|${GITHUB_WORKSPACE}|g" "${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
-          sed -i "s|\$KEY_PW|${{ secrets.TIZEN_AUTHOR_KEY_PW }}|g" "${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
+          python - <<'PYCONF'
+import os
+from pathlib import Path
+profile_path = Path(os.environ['GITHUB_WORKSPACE']) / 'tizen-studio-data/profile/profiles.xml'
+text = profile_path.read_text(encoding='utf-8')
+text = text.replace('$GITHUB_WORKSPACE', os.environ['GITHUB_WORKSPACE'])
+text = text.replace('$KEY_PW', os.environ['TIZEN_AUTHOR_KEY_PW'])
+profile_path.write_text(text, encoding='utf-8')
+PYCONF
+          openssl pkcs12 -in "${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/tizenbrew-author.p12" -passin "pass:${TIZEN_AUTHOR_KEY_PW}" -noout
           chmod 755 "./tizen-studio-data/profile/profiles.xml"
 
       - name: Build TizenBrew
