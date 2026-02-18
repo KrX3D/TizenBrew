@@ -2,6 +2,7 @@
 
 const vm = require('vm');
 const fetch = require('node-fetch');
+const { buildModuleFileUrl } = require('./moduleSource.js');
 
 function startService(mdl, services) {
     let sandbox = {};
@@ -17,7 +18,7 @@ function startService(mdl, services) {
     sandbox['tizen'] = global.tizen;
     sandbox['module'] = { exports: {} };
 
-    fetch(`https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.serviceFile}`)
+    fetch(buildModuleFileUrl(mdl.fullName, mdl.sourceMode || 'cdn', mdl.serviceFile, mdl.sourceBranch || 'main'))
         .then(res => res.text())
         .then(script => {
             services.set(mdl.fullName, {

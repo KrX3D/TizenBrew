@@ -4,6 +4,16 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Release version/tag name to use for manual runs (e.g. v1.2.3)'
+        required: false
+      publish_release:
+        description: 'Publish a GitHub Release from this run'
+        required: false
+        default: false
+        type: boolean
 
 env:
   TIZEN_STUDIO_VER: 5.6
@@ -14,10 +24,55 @@ jobs:
     steps:
       - name: Clone repo
         uses: actions/checkout@v4
-      
-      - name: Set env
-        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
-      
+
+      - name: Set release/app version
+        run: |
+          set -euo pipefail
+          CONFIG_XML="tizenbrew-app/TizenBrew/config.xml"
+
+          CURRENT_APP_VERSION="$(python -c "import xml.etree.ElementTree as ET; print(ET.parse('${CONFIG_XML}').getroot().attrib.get('version','').strip())")"
+          if [ -z "${CURRENT_APP_VERSION}" ]; then
+            echo "Failed to read app version from ${CONFIG_XML}" >&2
+            exit 1
+          fi
+
+          bump_patch_version() {
+            python -c "import xml.etree.ElementTree as ET; m,n,p=map(int,ET.parse('${CONFIG_XML}').getroot().attrib['version'].split('.')); print(f'{m}.{n}.{p+1}')"
+          }
+
+          normalize_release_version() {
+            local raw="$1"
+            raw="${raw#refs/tags/}"
+            raw="${raw#refs/heads/}"
+            if [[ "$raw" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              [[ "$raw" == v* ]] || raw="v${raw}"
+              printf '%s' "$raw"
+              return 0
+            fi
+            return 1
+          }
+
+          if [ "${{ github.event_name }}" = "push" ] && [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            RELEASE_VERSION="$(normalize_release_version "${GITHUB_REF#refs/tags/}")"
+            APP_VERSION="${RELEASE_VERSION#v}"
+          elif [ -n "${{ github.event.inputs.release_version }}" ] && normalize_release_version "${{ github.event.inputs.release_version }}" >/dev/null; then
+            RELEASE_VERSION="$(normalize_release_version "${{ github.event.inputs.release_version }}")"
+            APP_VERSION="${RELEASE_VERSION#v}"
+          else
+            if [ -n "${{ github.event.inputs.release_version }}" ]; then
+              echo "Ignoring invalid release_version input '${{ github.event.inputs.release_version }}'; using auto-bumped patch version."
+            fi
+            APP_VERSION="$(bump_patch_version)"
+            RELEASE_VERSION="v${APP_VERSION}"
+          fi
+
+          APP_VERSION="${APP_VERSION#v}"
+          APP_VERSION="${APP_VERSION}" python -c "import os, xml.etree.ElementTree as ET; path='${CONFIG_XML}'; tree=ET.parse(path); root=tree.getroot(); root.set('version', os.environ['APP_VERSION']); tree.write(path, encoding='utf-8', xml_declaration=False)"
+
+          echo "APP_VERSION=${APP_VERSION}" >> "$GITHUB_ENV"
+          echo "RELEASE_VERSION=${RELEASE_VERSION}" >> "$GITHUB_ENV"
+          echo "Set app version to ${APP_VERSION} and release tag to ${RELEASE_VERSION}"
+
       - name: Install modules and transpile service
         working-directory: tizenbrew-app/TizenBrew/service-nextgen/service
         run: |
@@ -47,25 +102,61 @@ jobs:
         run: |
           rm -r transpiled
 
+      - name: Cache Tizen Studio installer
+        uses: actions/cache@v4
+        with:
+          path: web-cli_Tizen_Studio_${{ env.TIZEN_STUDIO_VER }}_ubuntu-64.bin
+          key: tizen-studio-${{ env.TIZEN_STUDIO_VER }}-${{ runner.os }}
+
       - name: Download Tizen-Studio
         run: |
-          curl -o tizen-installer "https://download.tizen.org/sdk/Installer/tizen-studio_${TIZEN_STUDIO_VER}/web-cli_Tizen_Studio_${TIZEN_STUDIO_VER}_ubuntu-64.bin"
+          INSTALLER_FILE=web-cli_Tizen_Studio_${TIZEN_STUDIO_VER}_ubuntu-64.bin
+          if [ ! -f "${INSTALLER_FILE}" ]; then
+            sudo apt-get update
+            sudo apt-get install -y aria2
+            aria2c -j 8 -s 8 -x 8 \
+              -o "${INSTALLER_FILE}" \
+              --header='Referer: https://developer.tizen.org/' \
+              -U 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' \
+              "https://download.tizen.org/sdk/Installer/tizen-studio_${TIZEN_STUDIO_VER}/web-cli_Tizen_Studio_${TIZEN_STUDIO_VER}_ubuntu-64.bin"
+          fi
 
       - name: Install Tizen-Studio
         run: |
-          chmod +x tizen-installer
-          ./tizen-installer --accept-license "${GITHUB_WORKSPACE}/tizen-studio"
-          rm ./tizen-installer
+          INSTALLER_FILE=web-cli_Tizen_Studio_${TIZEN_STUDIO_VER}_ubuntu-64.bin
+          chmod +x "${INSTALLER_FILE}"
+          ./${INSTALLER_FILE} --accept-license "${GITHUB_WORKSPACE}/tizen-studio"
           echo 'export PATH=$PATH:${GITHUB_WORKSPACE}/tizen-studio/tools/ide/bin' >> .bashrc
 
       - name: Prepare Tizen Certificate
         run: |
+          set -euo pipefail
           mkdir -p "${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/"
-          echo "${{ secrets.TIZEN_AUTHOR_KEY }}" | base64 -d > "${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/tizenbrew-author.p12"
+          mkdir -p "${GITHUB_WORKSPACE}/tizen-studio-data/profile/"
+
+          AUTHOR_KEY_PW="tizenbrew-author"
+          AUTHOR_P12="${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/tizenbrew-author.p12"
+
+          # Always generate a fresh local author certificate (no GitHub secrets), matching the fork's approach.
+          openssl req -newkey rsa:2048 -nodes -x509 -days 3650 \
+            -subj "/CN=TizenBrew CI/O=TizenBrew" \
+            -keyout author.key -out author.crt
+          # Tizen CLI's Java signer is sensitive to modern PKCS#12 ciphers from OpenSSL 3,
+          # so export with legacy compatibility to avoid false "Invalid password" failures.
+          openssl pkcs12 -export -legacy -out "${AUTHOR_P12}" \
+            -inkey author.key -in author.crt -passout "pass:${AUTHOR_KEY_PW}"
+          rm -f author.key author.crt
+
           ./tizen-studio/tools/ide/bin/tizen cli-config "profiles.path=${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
-          cp .github/assets/profiles.xml "${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
-          sed -i "s|\$GITHUB_WORKSPACE|${GITHUB_WORKSPACE}|g" "${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
-          sed -i "s|\$KEY_PW|${{ secrets.TIZEN_AUTHOR_KEY_PW }}|g" "${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
+          AUTHOR_KEY_PW="${AUTHOR_KEY_PW}" AUTHOR_P12="${AUTHOR_P12}" python -c 'import os,xml.etree.ElementTree as ET; ws=os.environ["GITHUB_WORKSPACE"]; pw=os.environ["AUTHOR_KEY_PW"]; author=os.environ["AUTHOR_P12"]; p=os.path.join(ws,"tizen-studio-data/profile/profiles.xml"); root=ET.Element("profiles",{"active":"TizenBrew-Old","version":"3.1"}); profiles=[("TizenBrew-Old","tizen-distributor-ca.cer","tizen-distributor-signer.p12"),("TizenBrew-New","tizen-distributor-ca-new.cer","tizen-distributor-signer-new.p12")]; [ (lambda prof: (ET.SubElement(prof,"profileitem",{"ca":f"{ws}/tizen-studio/tools/certificate-generator/certificates/developer/tizen-developer-ca.cer","distributor":"0","key":author,"password":pw,"rootca":""}), ET.SubElement(prof,"profileitem",{"ca":f"{ws}/tizen-studio/tools/certificate-generator/certificates/distributor/sdk-public/{dca}","distributor":"1","key":f"{ws}/tizen-studio/tools/certificate-generator/certificates/distributor/sdk-public/{dkey}","password":"tizenpkcs12passfordsigner","rootca":""}), ET.SubElement(prof,"profileitem",{"ca":"","distributor":"2","key":"","password":"","rootca":""}) ))(ET.SubElement(root,"profile",{"name":name})) for name,dca,dkey in profiles ]; ET.ElementTree(root).write(p, encoding="UTF-8", xml_declaration=True)'
+          # The file is exported with -legacy for Tizen compatibility, so validation must
+          # also load legacy algorithms on OpenSSL 3.
+          openssl pkcs12 -legacy -in "${AUTHOR_P12}" -passin "pass:${AUTHOR_KEY_PW}" -noout
+          {
+            echo 'PASSWORD<<EOF'
+            echo "${AUTHOR_KEY_PW}"
+            echo 'EOF'
+          } >> "$GITHUB_ENV"
           chmod 755 "./tizen-studio-data/profile/profiles.xml"
 
       - name: Build TizenBrew
@@ -75,33 +166,81 @@ jobs:
 
       - name: Package TizenBrew for Old Tizen
         env:
-          PASSWORD: ${{ secrets.TIZEN_AUTHOR_KEY_PW }}
+          FALLBACK_PASSWORD: tizenbrew-author
           APP_PATH: tizenbrew-app/TizenBrew
           CERT: TizenBrew-Old
         run: |
-          expect ./package.exp
-          cat "${GITHUB_WORKSPACE}/tizen-studio-data/cli/logs/cli.log"
+          set -euo pipefail
+          export PASSWORD="${PASSWORD:-${TIZEN_AUTHOR_KEY_PW:-${FALLBACK_PASSWORD}}}"
+          expect ./package.exp || {
+            echo "Packaging failed; dumping Tizen CLI logs"
+            cat "${GITHUB_WORKSPACE}/tizen-studio-data/cli/logs/cli.log" || true
+            exit 1
+          }
+          cat "${GITHUB_WORKSPACE}/tizen-studio-data/cli/logs/cli.log" || true
           mv tizenbrew-app/TizenBrew/release/TizenBrewNextGeneration.wgt tizenbrew-app/TizenBrew/release/TizenBrewStandalone-Old.wgt
+
+
+      - name: Verify signed TizenBrew package
+        working-directory: tizenbrew-app/TizenBrew
+        run: |
+          test -f release/TizenBrewStandalone-Old.wgt
+          unzip -l release/TizenBrewStandalone-Old.wgt | grep -q "signature1.xml"
 
       - name: Package TizenBrew as USB Demo Package
         working-directory: tizenbrew-app/TizenBrew
         run: |
-          wgt-to-usb release/TizenBrewStandalone-Old.wgt 
+          set -euo pipefail
+          if ! wgt-to-usb release/TizenBrewStandalone-Old.wgt; then
+            echo "wgt-to-usb failed (likely Samsung cookie endpoint/network); continuing with WGT artifact and fallback zip only."
+          fi
 
       - name: Upload TizenBrew package artifact for Old Tizen
         uses: actions/upload-artifact@v4
         with:
             name: app-${{ github.sha }}-old.wgt
             path: tizenbrew-app/TizenBrew/release/TizenBrewStandalone-Old.wgt
-      
+
       - name: Zip USB Demo Package
         working-directory: tizenbrew-app/TizenBrew
         run: |
-          zip -r release/TizenBrewStandaloneUSBDemo.zip userwidget/
-      
+          set -euo pipefail
+          if [ -d userwidget ] && [ -n "$(find userwidget -mindepth 1 -print -quit)" ]; then
+            zip -r release/TizenBrewStandaloneUSBDemo.zip userwidget/
+          else
+            echo "Skipping USB demo zip: userwidget/ was not generated (wgt-to-usb likely unavailable)."
+          fi
+
+      - name: Generate release notes
+        if: github.event_name == 'push' || github.event.inputs.publish_release == 'true'
+        run: |
+          set -euo pipefail
+          LAST_TAG="$(git tag --sort=-version:refname | grep -v "^${RELEASE_VERSION}$" | head -n1 || true)"
+          if [ -n "${LAST_TAG}" ]; then
+            CHANGE_LOG="$(git log --pretty='- %s (%h)' "${LAST_TAG}"..HEAD)"
+          else
+            CHANGE_LOG="$(git log -20 --pretty='- %s (%h)')"
+          fi
+
+          {
+            echo "# TizenBrew ${RELEASE_VERSION}"
+            echo
+            echo "App version: ${APP_VERSION}"
+            echo
+            echo "## Changes"
+            if [ -n "${CHANGE_LOG}" ]; then
+              echo "${CHANGE_LOG}"
+            else
+              echo "- No commit changes found."
+            fi
+          } > release_notes.md
+
       - name: Release TizenBrew Build Results
+        if: github.event_name == 'push' || github.event.inputs.publish_release == 'true'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.RELEASE_VERSION }}
+          name: TizenBrew ${{ env.RELEASE_VERSION }}
+          body_path: release_notes.md
           files: |
             tizenbrew-app/TizenBrew/release/*
