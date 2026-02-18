@@ -102,29 +102,13 @@ jobs:
           mkdir -p "${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/"
           mkdir -p "${GITHUB_WORKSPACE}/tizen-studio-data/profile/"
 
-          AUTHOR_KEY_PW="${TIZEN_AUTHOR_KEY_PW:-}"
-          if [ -z "${AUTHOR_KEY_PW}" ]; then
-            AUTHOR_KEY_PW="tizenbrew-author"
-            echo "TIZEN_AUTHOR_KEY_PW not set; using ephemeral CI password"
-          fi
-
+          AUTHOR_KEY_PW="tizenbrew-author"
           AUTHOR_P12="${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/tizenbrew-author.p12"
-          if [ -n "${TIZEN_AUTHOR_KEY_B64:-}" ]; then
-            echo "Using TIZEN_AUTHOR_KEY secret"
-            echo "${TIZEN_AUTHOR_KEY_B64}" | base64 -d > "${AUTHOR_P12}"
-            if ! openssl pkcs12 -in "${AUTHOR_P12}" -passin "pass:${AUTHOR_KEY_PW}" -noout; then
-              echo "Provided author key password is invalid; falling back to generated CI certificate"
-              AUTHOR_KEY_PW="tizenbrew-author"
-              openssl req -newkey rsa:2048 -nodes -x509 -days 3650                 -subj "/CN=TizenBrew CI/O=TizenBrew"                 -keyout author.key -out author.crt
-              openssl pkcs12 -export -out "${AUTHOR_P12}"                 -inkey author.key -in author.crt -passout "pass:${AUTHOR_KEY_PW}"
-              rm -f author.key author.crt
-            fi
-          else
-            echo "TIZEN_AUTHOR_KEY missing; generating temporary author certificate for CI"
-            openssl req -newkey rsa:2048 -nodes -x509 -days 3650               -subj "/CN=TizenBrew CI/O=TizenBrew"               -keyout author.key -out author.crt
-            openssl pkcs12 -export -out "${AUTHOR_P12}"               -inkey author.key -in author.crt -passout "pass:${AUTHOR_KEY_PW}"
-            rm -f author.key author.crt
-          fi
+
+          # Always generate a fresh local author certificate (no GitHub secrets), matching the fork's approach.
+          openssl req -newkey rsa:2048 -nodes -x509 -days 3650             -subj "/CN=TizenBrew CI/O=TizenBrew"             -keyout author.key -out author.crt
+          openssl pkcs12 -export -out "${AUTHOR_P12}"             -inkey author.key -in author.crt -passout "pass:${AUTHOR_KEY_PW}"
+          rm -f author.key author.crt
 
           ./tizen-studio/tools/ide/bin/tizen cli-config "profiles.path=${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
           AUTHOR_KEY_PW="${AUTHOR_KEY_PW}" AUTHOR_P12="${AUTHOR_P12}" python -c 'import os,xml.etree.ElementTree as ET; ws=os.environ["GITHUB_WORKSPACE"]; pw=os.environ["AUTHOR_KEY_PW"]; author=os.environ["AUTHOR_P12"]; p=os.path.join(ws,"tizen-studio-data/profile/profiles.xml"); root=ET.Element("profiles",{"active":"TizenBrew-Old","version":"3.1"}); profiles=[("TizenBrew-Old","tizen-distributor-ca.cer","tizen-distributor-signer.p12"),("TizenBrew-New","tizen-distributor-ca-new.cer","tizen-distributor-signer-new.p12")]; [ (lambda prof: (ET.SubElement(prof,"profileitem",{"ca":f"{ws}/tizen-studio/tools/certificate-generator/certificates/developer/tizen-developer-ca.cer","distributor":"0","key":author,"password":pw,"rootca":""}), ET.SubElement(prof,"profileitem",{"ca":f"{ws}/tizen-studio/tools/certificate-generator/certificates/distributor/sdk-public/{dca}","distributor":"1","key":f"{ws}/tizen-studio/tools/certificate-generator/certificates/distributor/sdk-public/{dkey}","password":"tizenpkcs12passfordsigner","rootca":""}), ET.SubElement(prof,"profileitem",{"ca":"","distributor":"2","key":"","password":"","rootca":""}) ))(ET.SubElement(root,"profile",{"name":name})) for name,dca,dkey in profiles ]; ET.ElementTree(root).write(p, encoding="UTF-8", xml_declaration=True)'
@@ -143,7 +127,6 @@ jobs:
 
       - name: Package TizenBrew for Old Tizen
         env:
-          TIZEN_AUTHOR_KEY_PW: ${{ secrets.TIZEN_AUTHOR_KEY_PW }}
           FALLBACK_PASSWORD: tizenbrew-author
           APP_PATH: tizenbrew-app/TizenBrew
           CERT: TizenBrew-Old
