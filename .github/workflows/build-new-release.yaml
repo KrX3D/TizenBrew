@@ -158,7 +158,10 @@ jobs:
       - name: Package TizenBrew as USB Demo Package
         working-directory: tizenbrew-app/TizenBrew
         run: |
-          wgt-to-usb release/TizenBrewStandalone-Old.wgt
+          set -euo pipefail
+          if ! wgt-to-usb release/TizenBrewStandalone-Old.wgt; then
+            echo "wgt-to-usb failed (likely Samsung cookie endpoint/network); continuing with WGT artifact and fallback zip only."
+          fi
 
       - name: Upload TizenBrew package artifact for Old Tizen
         uses: actions/upload-artifact@v4
