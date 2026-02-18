@@ -172,7 +172,12 @@ jobs:
       - name: Zip USB Demo Package
         working-directory: tizenbrew-app/TizenBrew
         run: |
-          zip -r release/TizenBrewStandaloneUSBDemo.zip userwidget/
+          set -euo pipefail
+          if [ -d userwidget ] && [ -n "$(find userwidget -mindepth 1 -print -quit)" ]; then
+            zip -r release/TizenBrewStandaloneUSBDemo.zip userwidget/
+          else
+            echo "Skipping USB demo zip: userwidget/ was not generated (wgt-to-usb likely unavailable)."
+          fi
 
       - name: Release TizenBrew Build Results
         if: github.event_name == 'push' || github.event.inputs.publish_release == 'true'
