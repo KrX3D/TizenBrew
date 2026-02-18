@@ -100,13 +100,33 @@ jobs:
       - name: Prepare Tizen Certificate
         env:
           TIZEN_AUTHOR_KEY_PW: ${{ secrets.TIZEN_AUTHOR_KEY_PW }}
+          TIZEN_AUTHOR_KEY_B64: ${{ secrets.TIZEN_AUTHOR_KEY }}
         run: |
+          set -euo pipefail
           mkdir -p "${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/"
-          echo "${{ secrets.TIZEN_AUTHOR_KEY }}" | base64 -d > "${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/tizenbrew-author.p12"
+          mkdir -p "${GITHUB_WORKSPACE}/tizen-studio-data/profile/"
+
+          AUTHOR_KEY_PW="${TIZEN_AUTHOR_KEY_PW:-}"
+          if [ -z "${AUTHOR_KEY_PW}" ]; then
+            AUTHOR_KEY_PW="tizenbrew-author"
+            echo "TIZEN_AUTHOR_KEY_PW not set; using ephemeral CI password"
+          fi
+
+          AUTHOR_P12="${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/tizenbrew-author.p12"
+          if [ -n "${TIZEN_AUTHOR_KEY_B64:-}" ]; then
+            echo "Using TIZEN_AUTHOR_KEY secret"
+            echo "${TIZEN_AUTHOR_KEY_B64}" | base64 -d > "${AUTHOR_P12}"
+          else
+            echo "TIZEN_AUTHOR_KEY missing; generating temporary author certificate for CI"
+            openssl req -newkey rsa:2048 -nodes -x509 -days 3650               -subj "/CN=TizenBrew CI/O=TizenBrew"               -keyout author.key -out author.crt
+            openssl pkcs12 -export -out "${AUTHOR_P12}"               -inkey author.key -in author.crt -passout "pass:${AUTHOR_KEY_PW}"
+            rm -f author.key author.crt
+          fi
+
           ./tizen-studio/tools/ide/bin/tizen cli-config "profiles.path=${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
           cp .github/assets/profiles.xml "${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
-          python -c "import os; from pathlib import Path; p = Path(os.environ['GITHUB_WORKSPACE']) / 'tizen-studio-data/profile/profiles.xml'; t = p.read_text(encoding='utf-8'); t = t.replace('$GITHUB_WORKSPACE', os.environ['GITHUB_WORKSPACE']).replace('$KEY_PW', os.environ['TIZEN_AUTHOR_KEY_PW']); p.write_text(t, encoding='utf-8')"
-          openssl pkcs12 -in "${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/tizenbrew-author.p12" -passin "pass:${TIZEN_AUTHOR_KEY_PW}" -noout
+          AUTHOR_KEY_PW="${AUTHOR_KEY_PW}" python -c "import os; from pathlib import Path; p = Path(os.environ['GITHUB_WORKSPACE']) / 'tizen-studio-data/profile/profiles.xml'; t = p.read_text(encoding='utf-8'); t = t.replace('$GITHUB_WORKSPACE', os.environ['GITHUB_WORKSPACE']).replace('$KEY_PW', os.environ['AUTHOR_KEY_PW']); p.write_text(t, encoding='utf-8')"
+          openssl pkcs12 -in "${AUTHOR_P12}" -passin "pass:${AUTHOR_KEY_PW}" -noout
           chmod 755 "./tizen-studio-data/profile/profiles.xml"
 
       - name: Build TizenBrew
@@ -118,10 +138,12 @@ jobs:
         env:
           PASSWORD: ${{ secrets.TIZEN_AUTHOR_KEY_PW }}
           TIZEN_AUTHOR_KEY_PW: ${{ secrets.TIZEN_AUTHOR_KEY_PW }}
+          FALLBACK_PASSWORD: tizenbrew-author
           APP_PATH: tizenbrew-app/TizenBrew
           CERT: TizenBrew-Old
         run: |
           set -euo pipefail
+          export PASSWORD="${PASSWORD:-${TIZEN_AUTHOR_KEY_PW:-${FALLBACK_PASSWORD}}}"
           expect ./package.exp || {
             echo "Packaging failed; dumping Tizen CLI logs"
             cat "${GITHUB_WORKSPACE}/tizen-studio-data/cli/logs/cli.log" || true
