@@ -27,7 +27,7 @@ jobs:
     steps:
       - name: Clone repo
         uses: actions/checkout@v4
-      
+
       - name: Set env
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
@@ -37,7 +37,7 @@ jobs:
           else
             echo "RELEASE_VERSION=manual-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
           fi
-      
+
       - name: Install modules and transpile service
         working-directory: tizenbrew-app/TizenBrew/service-nextgen/service
         run: |
@@ -127,10 +127,13 @@ jobs:
           fi
 
           ./tizen-studio/tools/ide/bin/tizen cli-config "profiles.path=${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
-          cp .github/assets/profiles.xml "${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
-          AUTHOR_KEY_PW="${AUTHOR_KEY_PW}" python -c 'import os,xml.etree.ElementTree as ET; p=os.path.join(os.environ["GITHUB_WORKSPACE"],"tizen-studio-data/profile/profiles.xml"); tree=ET.parse(p); root=tree.getroot(); ws=os.environ["GITHUB_WORKSPACE"]; pw=os.environ["AUTHOR_KEY_PW"]; [(e.set(k,v.replace("$GITHUB_WORKSPACE",ws)) if "$GITHUB_WORKSPACE" in v else None, e.set(k,pw) if v=="$KEY_PW" else None) for e in root.iter() for k,v in list(e.attrib.items())]; tree.write(p, encoding="UTF-8", xml_declaration=True)'
+          AUTHOR_KEY_PW="${AUTHOR_KEY_PW}" AUTHOR_P12="${AUTHOR_P12}" python -c 'import os,xml.etree.ElementTree as ET; ws=os.environ["GITHUB_WORKSPACE"]; pw=os.environ["AUTHOR_KEY_PW"]; author=os.environ["AUTHOR_P12"]; p=os.path.join(ws,"tizen-studio-data/profile/profiles.xml"); root=ET.Element("profiles",{"active":"TizenBrew-Old","version":"3.1"}); profiles=[("TizenBrew-Old","tizen-distributor-ca.cer","tizen-distributor-signer.p12"),("TizenBrew-New","tizen-distributor-ca-new.cer","tizen-distributor-signer-new.p12")]; [ (lambda prof: (ET.SubElement(prof,"profileitem",{"ca":f"{ws}/tizen-studio/tools/certificate-generator/certificates/developer/tizen-developer-ca.cer","distributor":"0","key":author,"password":pw,"rootca":""}), ET.SubElement(prof,"profileitem",{"ca":f"{ws}/tizen-studio/tools/certificate-generator/certificates/distributor/sdk-public/{dca}","distributor":"1","key":f"{ws}/tizen-studio/tools/certificate-generator/certificates/distributor/sdk-public/{dkey}","password":"tizenpkcs12passfordsigner","rootca":""}), ET.SubElement(prof,"profileitem",{"ca":"","distributor":"2","key":"","password":"","rootca":""}) ))(ET.SubElement(root,"profile",{"name":name})) for name,dca,dkey in profiles ]; ET.ElementTree(root).write(p, encoding="UTF-8", xml_declaration=True)'
           openssl pkcs12 -in "${AUTHOR_P12}" -passin "pass:${AUTHOR_KEY_PW}" -noout
-          echo "PASSWORD=${AUTHOR_KEY_PW}" >> "$GITHUB_ENV"
+          {
+            echo 'PASSWORD<<EOF'
+            echo "${AUTHOR_KEY_PW}"
+            echo 'EOF'
+          } >> "$GITHUB_ENV"
           chmod 755 "./tizen-studio-data/profile/profiles.xml"
 
       - name: Build TizenBrew
@@ -165,19 +168,19 @@ jobs:
       - name: Package TizenBrew as USB Demo Package
         working-directory: tizenbrew-app/TizenBrew
         run: |
-          wgt-to-usb release/TizenBrewStandalone-Old.wgt 
+          wgt-to-usb release/TizenBrewStandalone-Old.wgt
 
       - name: Upload TizenBrew package artifact for Old Tizen
         uses: actions/upload-artifact@v4
         with:
             name: app-${{ github.sha }}-old.wgt
             path: tizenbrew-app/TizenBrew/release/TizenBrewStandalone-Old.wgt
-      
+
       - name: Zip USB Demo Package
         working-directory: tizenbrew-app/TizenBrew
         run: |
           zip -r release/TizenBrewStandaloneUSBDemo.zip userwidget/
-      
+
       - name: Release TizenBrew Build Results
         if: github.event_name == 'push' || github.event.inputs.publish_release == 'true'
         uses: softprops/action-gh-release@v1
