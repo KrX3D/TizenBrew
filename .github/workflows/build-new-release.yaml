@@ -106,8 +106,13 @@ jobs:
           AUTHOR_P12="${GITHUB_WORKSPACE}/tizen-studio-data/keystore/author/tizenbrew-author.p12"
 
           # Always generate a fresh local author certificate (no GitHub secrets), matching the fork's approach.
-          openssl req -newkey rsa:2048 -nodes -x509 -days 3650             -subj "/CN=TizenBrew CI/O=TizenBrew"             -keyout author.key -out author.crt
-          openssl pkcs12 -export -out "${AUTHOR_P12}"             -inkey author.key -in author.crt -passout "pass:${AUTHOR_KEY_PW}"
+          openssl req -newkey rsa:2048 -nodes -x509 -days 3650 \
+            -subj "/CN=TizenBrew CI/O=TizenBrew" \
+            -keyout author.key -out author.crt
+          # Tizen CLI's Java signer is sensitive to modern PKCS#12 ciphers from OpenSSL 3,
+          # so export with legacy compatibility to avoid false "Invalid password" failures.
+          openssl pkcs12 -export -legacy -out "${AUTHOR_P12}" \
+            -inkey author.key -in author.crt -passout "pass:${AUTHOR_KEY_PW}"
           rm -f author.key author.crt
 
           ./tizen-studio/tools/ide/bin/tizen cli-config "profiles.path=${GITHUB_WORKSPACE}/tizen-studio-data/profile/profiles.xml"
