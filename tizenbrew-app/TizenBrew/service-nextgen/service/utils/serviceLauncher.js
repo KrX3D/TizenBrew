@@ -32,18 +32,21 @@ function startService(mdl, services) {
             } catch (e) {
                 services.get(mdl.fullName).hasCrashed = true;
                 services.get(mdl.fullName).error = e;
+                log('error', `module-service:${mdl.fullName}`, 'Service script crashed', e);
             }
         })
         .catch(e => {
             if (services.has(mdl.fullName)) {
                 services.get(mdl.fullName).hasCrashed = true;
                 services.get(mdl.fullName).error = e;
+                log('error', `module-service:${mdl.fullName}`, 'Service script crashed', e);
             } else {
                 services.set(mdl.fullName, {
                     context: null,
                     hasCrashed: true,
                     error: e
                 });
+                log('error', `module-service:${mdl.fullName}`, 'Failed to fetch service script', e);
             }
         });
 }
