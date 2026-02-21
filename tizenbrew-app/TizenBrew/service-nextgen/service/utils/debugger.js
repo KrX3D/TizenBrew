@@ -14,7 +14,6 @@ let bridgedWebApisCode = null;
 function setWebApisPath(path) {
     if (!path) return;
     console.log('[Debugger] Caching webapis.js path:', path);
-    // Remove file:// prefix if present to get filesystem path
     if (path.startsWith('file://')) {
         cachedWebApisPath = path.replace('file://', '');
     } else {
@@ -38,32 +37,22 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
     try {
         CDP({ port, host: ip, local: true }, (client) => {
             client.Runtime.enable();
-            client.Debugger.enable();
+            client.Page.enable();
 
             client.on('Runtime.executionContextCreated', (msg) => {
-                // [TizenTube Fix] Inject webapis.js content directly for Tizen TV compatibility
-                // This bypasses CSP issues with file:// or $WEBAPIS/ URLs.
-                let webapisContent = bridgedWebApisCode; // Prioritize bridged code from local session
+                let webapisContent = bridgedWebApisCode;
                 const fs = require('fs');
 
                 if (!webapisContent) {
-                    // Extended path list for better compatibility
                     const possiblePaths = [
+                        cachedWebApisPath,
                         '/usr/share/nginx/html/webapis/webapis.js',
                         '/usr/tv/webapis/webapis.js',
                         '/usr/share/webapis/webapis.js',
                         '/usr/bin/webapis/webapis.js',
                         '/opt/share/webapp/webapis/webapis.js',
-                        '/usr/lib/wrt-engine/webapis/webapis.js',
-                        '/usr/share/wrt-engine/webapis/webapis.js',
-                        '/usr/share/tizen-webapis/webapis.js',
                         '/usr/lib/tizen-webapis/webapis.js'
-                    ];
-
-                    // Prioritize cached path from browser detection
-                    if (cachedWebApisPath) {
-                        possiblePaths.unshift(cachedWebApisPath);
-                    }
+                    ].filter(p => p);
 
                     for (const p of possiblePaths) {
                         try {
@@ -72,48 +61,38 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                                 webapisContent = fs.readFileSync(p, 'utf8');
                                 break;
                             }
-                        } catch (e) {
-                            console.warn('[Debugger] Error checking ' + p + ': ' + e.message);
-                        }
+                        } catch (e) { }
                     }
                 }
 
-                if (bridgedWebApisCode) {
-                    const webapisLoader = '(function() {\n' +
-                        'if ((window.webapis && window.webapis.avplay && window.webapis.voiceinteraction) || window.__webapisLoaded) return;\n' +
-                        'window.__webapisLoaded = true;\n' +
-                        'console.log("[TizenBrew] Injecting WebAPI via proxy...");\n' +
-                        'var s = document.createElement("script");\n' +
-                        's.src = "http://127.0.0.1:8081/webapis.js";\n' +
-                        's.onload = function() { console.log("[TizenBrew] WebAPI Loaded via Proxy. AVPlay: " + (window.webapis && !!window.webapis.avplay)); };\n' +
-                        'document.head.appendChild(s);\n' +
-                        '})();'
-                        ;
-
-                    if (mdl.evaluateScriptOnDocumentStart) {
-                        client.Page.addScriptToEvaluateOnNewDocument({ expression: webapisLoader });
-                    } else {
-                        client.Runtime.evaluate({ expression: webapisLoader, contextId: msg.context.id });
+                // THE INJECTION
+                const injectionCode = `
+                (function() {
+                    if (window.__tizentube_injected) return;
+                    window.__tizentube_injected = true;
+                    console.log("[TizenBrew] Starting API Injection...");
+                    
+                    // 1. Try to restore window.tizen if missing
+                    if (!window.tizen && window.parent && window.parent.tizen) {
+                        window.tizen = window.parent.tizen;
                     }
-                } else {
-                    console.warn('[Debugger] webapis.js not found in system paths.');
 
-                    // Fallback to script tag injection just in case
-                    const webapisLoader = `
-                        (function() {
-                            if (window.webapis || window.__webapisLoaded) return;
-                            window.__webapisLoaded = true;
-                            var s = document.createElement('script');
-                            s.src = '$WEBAPIS/webapis/webapis.js';
-                            document.head.appendChild(s);
-                        })();
-                    `;
-                    if (mdl.evaluateScriptOnDocumentStart) {
-                        client.Page.addScriptToEvaluateOnNewDocument({ expression: webapisLoader });
-                    } else {
-                        client.Runtime.evaluate({ expression: webapisLoader, contextId: msg.context.id });
+                    // 2. Inject WebAPIs
+                    if (!window.webapis || !window.webapis.avplay) {
+                        ${webapisContent ? `
+                        try {
+                            ${webapisContent}
+                            console.log("[TizenBrew] WebAPI Injected via Code.");
+                        } catch(e) { console.error("Injection Error:", e); }
+                        ` : `
+                        var s = document.createElement("script");
+                        s.src = "http://127.0.0.1:8081/webapis.js";
+                        document.head.appendChild(s);
+                        console.log("[TizenBrew] WebAPI Injected via Script Tag.");
+                        `}
                     }
-                }
+                })();
+                `;
 
                 if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
                     const cache = modulesCache.get(mdl.fullName);
@@ -179,75 +158,24 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             });
 
             client.on('disconnect', () => {
-                if (isAnotherApp) return;
-
-                inDebug.tizenDebug = false;
-                inDebug.webDebug = false;
-                inDebug.rwiDebug = false;
-
-                mdl.fullName = '';
-                mdl.name = '';
-                mdl.appPath = '';
-                mdl.moduleType = '';
-                mdl.packageType = '';
-                mdl.serviceFile = '';
-                mdl.mainFile = '';
+                if (!isAnotherApp) inDebug.tizenDebug = false;
             });
 
-            if (!isAnotherApp) {
-                const clientConnection = clientConn.get('wsConn');
-                if (appControlData.module) {
-                    const data = clientConnection.Event(Events.CanLaunchModules, {
-                        type: 'appControl',
-                        module: appControlData.module,
-                        args: appControlData.args
-                    });
-                    sendClientInformation(clientConn, data);
-                } else {
-                    const config = readConfig();
-                    if (config.autoLaunchModule) {
-                        const data = clientConnection.Event(Events.CanLaunchModules, {
-                            type: 'autolaunch',
-                            module: config.autoLaunchModule
-                        });
-
-                        sendClientInformation(clientConn, data);
-
-                    } else {
-                        const data = clientConnection.Event(Events.CanLaunchModules, null);
-                        sendClientInformation(clientConn, data);
-                    }
-                }
+            // Signal Ready
+            const clientConnection = clientConn.get('wsConn');
+            if (clientConnection) {
+                const data = clientConnection.Event(Events.CanLaunchModules, appControlData.module ? {
+                    type: 'appControl',
+                    module: appControlData.module,
+                    args: appControlData.args
+                } : null);
+                clientConnection.send(data);
             }
 
         }).on('error', (err) => {
-            if (isAnotherApp) return;
-
-            if (attempts < 20) {
-                setTimeout(() => {
-                    startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts + 1);
-                }, 1000);
-            } else {
-                inDebug.tizenDebug = false;
-            }
+            if (attempts < 20) setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts + 1), 1000);
         });
-    } catch (e) {
-        if (!isAnotherApp) inDebug.tizenDebug = false;
-    }
+    } catch (e) { }
 }
 
-function sendClientInformation(clientConn, data) {
-    if (clientConn.has('wsConn')) {
-        clientConn.get('wsConn').send(data);
-    } else {
-        queuedEvents.push(data);
-    }
-}
-
-
-module.exports = {
-    startDebugging,
-    setWebApisPath,
-    setWebApisCode,
-    getWebApisCode
-};
+module.exports = { startDebugging, setWebApisPath, setWebApisCode, getWebApisCode };
