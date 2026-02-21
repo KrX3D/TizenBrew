@@ -28,6 +28,10 @@ function setWebApisCode(code) {
     bridgedWebApisCode = code;
 }
 
+function getWebApisCode() {
+    return bridgedWebApisCode;
+}
+
 function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts) {
     if (!attempts) attempts = 1;
     if (!isAnotherApp) inDebug.tizenDebug = true;
@@ -74,20 +78,15 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     }
                 }
 
-                if (webapisContent) {
+                if (bridgedWebApisCode) {
                     const webapisLoader = '(function() {\n' +
                         'if ((window.webapis && window.webapis.avplay && window.webapis.voiceinteraction) || window.__webapisLoaded) return;\n' +
                         'window.__webapisLoaded = true;\n' +
-                        'console.log("[TizenBrew] Injecting webapis.js content...");\n' +
-                        'try {\n' +
-                        '    const oldWebapis = window.webapis || {};\n' +
-                        webapisContent + '\n' +
-                        '    if (window.webapis) {\n' +
-                        '        // Merge old keys back if they were lost, but prioritize injected ones\n' +
-                        '        for (let key in oldWebapis) { if (!window.webapis[key]) window.webapis[key] = oldWebapis[key]; }\n' +
-                        '        console.log("[TizenBrew] WebAPI Injected. AVPlay: " + !!window.webapis.avplay);\n' +
-                        '    }\n' +
-                        '} catch(e) { console.error("[TizenBrew] Injection Error: " + e.message); }\n' +
+                        'console.log("[TizenBrew] Injecting WebAPI via proxy...");\n' +
+                        'var s = document.createElement("script");\n' +
+                        's.src = "http://127.0.0.1:8081/webapis.js";\n' +
+                        's.onload = function() { console.log("[TizenBrew] WebAPI Loaded via Proxy. AVPlay: " + (window.webapis && !!window.webapis.avplay)); };\n' +
+                        'document.head.appendChild(s);\n' +
                         '})();'
                         ;
 
@@ -249,5 +248,6 @@ function sendClientInformation(clientConn, data) {
 module.exports = {
     startDebugging,
     setWebApisPath,
-    setWebApisCode
+    setWebApisCode,
+    getWebApisCode
 };

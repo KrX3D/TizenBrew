@@ -25,7 +25,17 @@ module.exports.onStart = function () {
 
     // HTTP Proxy for modules 
     app.all('*', (req, res) => {
-        if (req.url.startsWith('/module/')) {
+        if (req.url === '/webapis.js') {
+            const { getWebApisCode } = require('./utils/debugger.js');
+            const code = getWebApisCode();
+            if (code) {
+                res.setHeader('Content-Type', 'application/javascript');
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                res.send(code);
+            } else {
+                res.status(404).send('WebAPIs not bridged yet. Open TizenBrew UI first.');
+            }
+        } else if (req.url.startsWith('/module/')) {
             const splittedUrl = req.url.split('/');
             const encodedModuleName = splittedUrl[2];
             const moduleName = decodeURIComponent(encodedModuleName);
