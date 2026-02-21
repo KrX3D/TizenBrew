@@ -83,8 +83,16 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     const webapisLoader = '(function() {\n' +
                         'if ((window.webapis && window.webapis.avplay && window.webapis.voiceinteraction) || window.__webapisLoaded) return;\n' +
                         'window.__webapisLoaded = true;\n' +
-                        'console.log("[TizenBrew] Injecting webapis.js content from ' + foundPath + '...");\n' +
+                        'console.log("[TizenBrew] Injecting webapis.js content...");\n' +
+                        'try {\n' +
+                        '    const oldWebapis = window.webapis || {};\n' +
                         webapisContent + '\n' +
+                        '    if (window.webapis) {\n' +
+                        '        // Merge old keys back if they were lost, but prioritize injected ones\n' +
+                        '        for (let key in oldWebapis) { if (!window.webapis[key]) window.webapis[key] = oldWebapis[key]; }\n' +
+                        '        alert("[TizenBrew] WebAPI Injected. AVPlay: " + !!window.webapis.avplay);\n' +
+                        '    }\n' +
+                        '} catch(e) { alert("[TizenBrew] Injection Error: " + e.message); }\n' +
                         '})();'
                         ;
 
