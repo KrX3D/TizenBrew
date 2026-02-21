@@ -9,6 +9,7 @@ const WebSocket = require('ws');
 const modulesCache = new Map();
 
 let cachedWebApisPath = null;
+let bridgedWebApisCode = null;
 
 function setWebApisPath(path) {
     if (!path) return;
@@ -19,6 +20,12 @@ function setWebApisPath(path) {
     } else {
         cachedWebApisPath = path;
     }
+}
+
+function setWebApisCode(code) {
+    if (!code) return;
+    console.log('[Debugger] Caching bridged webapis.js code (length: ' + code.length + ')');
+    bridgedWebApisCode = code;
 }
 
 function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts) {
@@ -32,50 +39,38 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             client.on('Runtime.executionContextCreated', (msg) => {
                 // [TizenTube Fix] Inject webapis.js content directly for Tizen TV compatibility
                 // This bypasses CSP issues with file:// or $WEBAPIS/ URLs.
-                let webapisContent = null;
+                let webapisContent = bridgedWebApisCode; // Prioritize bridged code from local session
                 const fs = require('fs');
-                // Extended path list for better compatibility
-                const possiblePaths = [
-                    '/usr/share/nginx/html/webapis/webapis.js',
-                    '/usr/tv/webapis/webapis.js',
-                    '/usr/share/webapis/webapis.js',
-                    '/usr/bin/webapis/webapis.js',
-                    '/opt/share/webapp/webapis/webapis.js',
-                    '/usr/lib/wrt-engine/webapis/webapis.js'
-                ];
 
-                // Prioritize cached path from browser detection
-                if (cachedWebApisPath) {
-                    possiblePaths.unshift(cachedWebApisPath);
-                }
+                if (!webapisContent) {
+                    // Extended path list for better compatibility
+                    const possiblePaths = [
+                        '/usr/share/nginx/html/webapis/webapis.js',
+                        '/usr/tv/webapis/webapis.js',
+                        '/usr/share/webapis/webapis.js',
+                        '/usr/bin/webapis/webapis.js',
+                        '/opt/share/webapp/webapis/webapis.js',
+                        '/usr/lib/wrt-engine/webapis/webapis.js',
+                        '/usr/share/wrt-engine/webapis/webapis.js',
+                        '/usr/share/tizen-webapis/webapis.js',
+                        '/usr/lib/tizen-webapis/webapis.js'
+                    ];
 
-                let foundPath = null;
-                for (const p of possiblePaths) {
-                    try {
-                        if (fs.existsSync(p)) {
-                            console.log('[Debugger] Found webapis.js at ' + p);
-                            webapisContent = fs.readFileSync(p, 'utf8');
-                            foundPath = p;
-                            break;
-                        }
-                    } catch (e) {
-                        console.warn('[Debugger] Error checking ' + p + ': ' + e.message);
+                    // Prioritize cached path from browser detection
+                    if (cachedWebApisPath) {
+                        possiblePaths.unshift(cachedWebApisPath);
                     }
-                }
 
-                if (foundPath) {
-                    try {
-                        const path = require('path');
-                        const dir = path.dirname(foundPath);
-                        const files = fs.readdirSync(dir);
-                        const listScript = `alert("TizenTube DEBUG: Files in ${dir}: ${files.join(', ')}");`;
-                        if (mdl.evaluateScriptOnDocumentStart) {
-                            client.Page.addScriptToEvaluateOnNewDocument({ expression: listScript });
-                        } else {
-                            client.Runtime.evaluate({ expression: listScript, contextId: msg.context.id });
+                    for (const p of possiblePaths) {
+                        try {
+                            if (fs.existsSync(p)) {
+                                console.log('[Debugger] Found webapis.js at ' + p);
+                                webapisContent = fs.readFileSync(p, 'utf8');
+                                break;
+                            }
+                        } catch (e) {
+                            console.warn('[Debugger] Error checking ' + p + ': ' + e.message);
                         }
-                    } catch (e) {
-                        console.warn('[Debugger] Failed to list dir:', e.message);
                     }
                 }
 
@@ -90,9 +85,9 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                         '    if (window.webapis) {\n' +
                         '        // Merge old keys back if they were lost, but prioritize injected ones\n' +
                         '        for (let key in oldWebapis) { if (!window.webapis[key]) window.webapis[key] = oldWebapis[key]; }\n' +
-                        '        alert("[TizenBrew] WebAPI Injected. AVPlay: " + !!window.webapis.avplay);\n' +
+                        '        console.log("[TizenBrew] WebAPI Injected. AVPlay: " + !!window.webapis.avplay);\n' +
                         '    }\n' +
-                        '} catch(e) { alert("[TizenBrew] Injection Error: " + e.message); }\n' +
+                        '} catch(e) { console.error("[TizenBrew] Injection Error: " + e.message); }\n' +
                         '})();'
                         ;
 
@@ -120,8 +115,6 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                         client.Runtime.evaluate({ expression: webapisLoader, contextId: msg.context.id });
                     }
                 }
-
-
 
                 if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
                     const cache = modulesCache.get(mdl.fullName);
@@ -227,41 +220,34 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     }
                 }
             }
-            if (!isAnotherApp) inDebug.webDebug = true;
-            appControlData = null;
+
         }).on('error', (err) => {
-            if (attempts >= 15) {
-                if (!isAnotherApp) {
-                    clientConn.send(clientConn.Event(Events.Error, 'Failed to connect to the debugger'));
-                    inDebug.tizenDebug = false;
-                    return;
-                } else return;
+            if (isAnotherApp) return;
+
+            if (attempts < 20) {
+                setTimeout(() => {
+                    startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts + 1);
+                }, 1000);
+            } else {
+                inDebug.tizenDebug = false;
             }
-            attempts++;
-            setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts), 750)
         });
     } catch (e) {
-        if (attempts >= 15) {
-            if (!isAnotherApp) {
-                clientConn.send(clientConn.Event(Events.Error, 'Failed to connect to the debugger'));
-                inDebug.tizenDebug = false;
-                return;
-            } else return;
-        }
-        attempts++;
-        setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts), 750)
-        return;
+        if (!isAnotherApp) inDebug.tizenDebug = false;
     }
 }
 
 function sendClientInformation(clientConn, data) {
-    const clientConnection = clientConn.get('wsConn');
-    if ((clientConnection && clientConnection.connection && (clientConnection.connection.readyState !== WebSocket.OPEN && !clientConnection.isReady)) || !clientConnection) {
-        return setTimeout(() => sendClientInformation(clientConn, data), 50);
+    if (clientConn.has('wsConn')) {
+        clientConn.get('wsConn').send(data);
+    } else {
+        queuedEvents.push(data);
     }
-    setTimeout(() => {
-        clientConnection.send(data);
-    }, 500);
 }
 
-module.exports = { startDebugging, setWebApisPath };
+
+module.exports = {
+    startDebugging,
+    setWebApisPath,
+    setWebApisCode
+};

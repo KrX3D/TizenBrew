@@ -11,6 +11,7 @@ const Events = {
     Error: 8,
     CanLaunchModules: 9,
     WebApisPath: 20,
+    WebApisCode: 21,
     ModuleAction: 10
 };
 
@@ -147,6 +148,18 @@ class Client {
                         type: Events.WebApisPath,
                         payload: window.TIZEN_WEBAPIS_PATH
                     });
+
+                    // Fetch the actual code and send it to the service
+                    fetch(window.TIZEN_WEBAPIS_PATH)
+                        .then(res => res.text())
+                        .then(code => {
+                            console.log('[WebSocketClient] Sending webapis code (length: ' + code.length + ')');
+                            this.send({
+                                type: Events.WebApisCode,
+                                payload: code
+                            });
+                        })
+                        .catch(err => console.error('[WebSocketClient] Failed to fetch webapis code:', err));
                 }
 
 

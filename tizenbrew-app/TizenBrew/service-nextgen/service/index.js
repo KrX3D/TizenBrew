@@ -277,6 +277,13 @@ module.exports.onStart = function () {
                     }
                     break;
                 }
+                case Events.WebApisCode: {
+                    if (payload) {
+                        const { setWebApisCode } = require('./utils/debugger.js');
+                        setWebApisCode(payload);
+                    }
+                    break;
+                }
                 case Events.ModuleAction: {
                     const { action, module } = payload;
 
