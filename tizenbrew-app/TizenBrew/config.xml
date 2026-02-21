@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<widget xmlns:tizen="http://tizen.org/ns/widgets" xmlns="http://www.w3.org/ns/widgets" id="https://tizenbrew.vercel.app" version="2.1.18" viewmodes="maximized">
+<widget xmlns:tizen="http://tizen.org/ns/widgets" xmlns="http://www.w3.org/ns/widgets" id="https://tizenbrew.vercel.app" version="2.1.19" viewmodes="maximized">
     <access origin="*" subdomains="true"></access>
     <tizen:app-control>
         <tizen:src name="tizenbrew-ui/dist/index.html" reload="disable"/>
         <tizen:operation name="http://samsung.com/appcontrol/operation/eden_resume"/>
     </tizen:app-control>
-    <tizen:application id="xvvl3S1bvH.TizenBrewStandalone" package="xvvl3S1bvH" required_version="3.0"/>
+    <tizen:application id="xvvl3S1bvH.TizenBrewStandalone" package="xvvl3S1bvH" required_version="6.0"/>
     <author href="https://tizenbrew.vercel.app">Reis Can</author>
     <content src="tizenbrew-ui/dist/index.html"/>
     <feature name="http://tizen.org/feature/screen.size.all"/>
