@@ -20,7 +20,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                 if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
                     const expression = `
                     const script = document.createElement('script');
-                    script.src = 'https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.mainFile}?v=${Date.now()}';
+                    script.src = 'http://127.0.0.1:8081/module/' + encodeURIComponent(mdl.versionedFullName || mdl.fullName) + '/' + mdl.mainFile + '?v=' + Date.now() + '&sourceMode=' + (mdl.sourceMode === 'direct' ? 'direct' : 'cdn');
                     document.head.appendChild(script);
                     `;
                     client.Runtime.evaluate({ expression, contextId: msg.context.id });
@@ -31,7 +31,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                         client.Page.addScriptToEvaluateOnNewDocument({ expression: cache });
                         sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                     } else {
-                        fetch(`https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.mainFile}`).then(res => res.text()).then(modFile => {
+                        fetch('http://127.0.0.1:8081/module/' + encodeURIComponent(mdl.versionedFullName || mdl.fullName) + '/' + mdl.mainFile + '?sourceMode=' + (mdl.sourceMode === 'direct' ? 'direct' : 'cdn')).then(res => res.text()).then(modFile => {
                             modulesCache.set(mdl.fullName, modFile);
                             sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                             client.Page.addScriptToEvaluateOnNewDocument({ expression: modFile });

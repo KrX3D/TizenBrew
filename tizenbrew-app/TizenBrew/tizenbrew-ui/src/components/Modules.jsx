@@ -63,7 +63,7 @@ export default function Modules() {
               {module.appName} ({module.version})
             </h3>
             <p className='text-gray-400 mt-2 text-sm'>
-              {`${(module.moduleType || '').toUpperCase()} ${(module.sourceMode || 'cdn').toUpperCase()}`}
+              {`${(module.moduleType || '').toUpperCase()} ${(module.sourceMode || 'cdn').toUpperCase()} ${(module.fullName || '').replace(/^(npm|gh)\//, '')}`}
             </p>
             <p className='text-gray-300 mt-4 text-base/7'>
               {module.description}

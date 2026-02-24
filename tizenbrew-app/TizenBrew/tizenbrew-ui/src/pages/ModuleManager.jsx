@@ -22,6 +22,28 @@ function Item({ children, module, id, state }) {
         }
     }, [focused, ref]);
 
+    useEffect(() => {
+        if (!focused) return;
+
+        const onKeyDown = (e) => {
+            if (e.keyCode !== 403) return;
+
+            const nextMode = module.sourceMode === 'direct' ? 'cdn' : 'direct';
+            state.client.send({
+                type: Events.ModuleAction,
+                payload: {
+                    action: 'setSourceMode',
+                    module: module.fullName,
+                    sourceMode: nextMode
+                }
+            });
+            state.client.send({ type: Events.GetModules, payload: true });
+        };
+
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [focused, module, state]);
+
     function handleOnClick() {
         const deleteConfirm = confirm(t('moduleManager.confirmDelete', { packageName: module.appName }));
         if (deleteConfirm) {
@@ -117,6 +139,9 @@ export default function ModuleManager() {
                         <p className='text-gray-400 mt-1 text-xs break-all'>
                             {(module.fullName || '').replace(/^(npm|gh)\//, '')}
                         </p>
+                        <p className='text-gray-400 mt-1 text-xs'>
+                            RED: toggle CDN/DIRECT for this module
+                        </p>
                         <p className='text-gray-300 mt-3 text-base/7'>
                             {module.description}
                         </p>
@@ -127,7 +152,7 @@ export default function ModuleManager() {
                         {t('moduleManager.addNPM')}
                     </h3>
                     <p className='text-gray-300 mt-3 text-base/7'>
-                        {`NPM ${addSourceMode.toUpperCase()} (RED=CDN, GREEN=DIRECT)`}
+                        {`NPM CDN`}
                     </p>
                     <p className='text-gray-300 mt-3 text-base/7'>
                         {t('moduleManager.addNPMDesc')}
@@ -138,7 +163,7 @@ export default function ModuleManager() {
                         {t('moduleManager.addGH')}
                     </h3>
                     <p className='text-gray-300 mt-3 text-base/7'>
-                        {`GH ${addSourceMode.toUpperCase()} (RED=CDN, GREEN=DIRECT)`}
+                        {`GH CDN`}
                     </p>
                     <p className='text-gray-300 mt-3 text-base/7'>
                         {t('moduleManager.addGHDesc')}
@@ -185,12 +210,6 @@ function AddModule() {
     const moduleType = loc.query.type === 'gh' ? 'gh' : 'npm';
 
     useEffect(() => {
-        const mode = loc.query.sourceMode === 'direct' ? 'direct' : 'cdn';
-        setSourceMode(mode);
-        localStorage.setItem('addModuleSourceMode', mode);
-    }, [loc.query.sourceMode]);
-
-    useEffect(() => {
         ref.current.focus();
     }, [ref]);
 
@@ -206,7 +225,7 @@ function AddModule() {
                 payload: {
                     action: 'add',
                     module: normalized,
-                    sourceMode
+                    sourceMode: 'cdn'
                 }
             });
         }
@@ -242,9 +261,6 @@ function AddModule() {
                     />
                     <p className='text-gray-400 mt-2 text-sm'>
                         {moduleType === 'gh' ? `GH example: ${example}` : `NPM example: ${example}`}
-                    </p>
-                    <p className='text-gray-400 mt-2 text-sm'>
-                        {`Source: ${sourceMode.toUpperCase()}`}
                     </p>
                 </ItemBasic>
             </div>
