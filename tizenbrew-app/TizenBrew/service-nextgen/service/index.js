@@ -58,7 +58,9 @@ module.exports.onStart = function () {
 
             // Check if versioned
             if (moduleName.includes('@')) {
-                const [rawRepo, tag] = moduleName.split('@');
+                const versionSepIndex = moduleName.lastIndexOf('@');
+                const rawRepo = moduleName.substring(0, versionSepIndex);
+                const tag = moduleName.substring(versionSepIndex + 1);
                 const repo = getGitHubRepo(rawRepo);
                 if (repo) {
                     upstreamUrl = sourceMode === 'direct'
