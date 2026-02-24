@@ -247,18 +247,21 @@ function AddModule() {
                     <h3 className='text-indigo-400 text-base/7 font-semibold mb-2'>
                         {t('moduleManager.addModule')}
                     </h3>
-                    <input
-                        type="text"
-                        ref={ref}
-                        value={name}
-                        className="w-full p-2 rounded-lg bg-gray-800 text-gray-200"
-                        onChange={(e) => setName(e.target.value)}
-                        onBlur={submit}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.keyCode === 13) submit();
-                        }}
-                        placeholder={t('moduleManager.moduleName', { type: moduleType })}
-                    />
+                    <form onSubmit={(e) => { e.preventDefault(); submit(); }}>
+                        <input
+                            type="text"
+                            ref={ref}
+                            value={name}
+                            className="w-full p-2 rounded-lg bg-gray-800 text-gray-200"
+                            onChange={(e) => setName(e.target.value)}
+                            onBlur={submit}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.keyCode === 13) submit();
+                            }}
+                            placeholder={t('moduleManager.moduleName', { type: moduleType })}
+                        />
+                        <button type="submit" className="hidden">submit</button>
+                    </form>
                     <p className='text-gray-400 mt-2 text-sm'>
                         {moduleType === 'gh' ? `GH example: ${example}` : `NPM example: ${example}`}
                     </p>
