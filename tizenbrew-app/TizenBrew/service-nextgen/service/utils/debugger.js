@@ -8,6 +8,10 @@ const WebSocket = require('ws');
 
 const modulesCache = new Map();
 
+function getModuleCacheKey(mdl) {
+    return (mdl.fullName || '') + '::' + (mdl.sourceMode === 'direct' ? 'direct' : 'cdn');
+}
+
 function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts) {
     if (!attempts) attempts = 1;
     if (!isAnotherApp) inDebug.tizenDebug = true;
@@ -25,14 +29,18 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     `;
                     client.Runtime.evaluate({ expression, contextId: msg.context.id });
                 } else if (mdl.name !== '' && mdl.evaluateScriptOnDocumentStart) {
-                    const cache = modulesCache.get(mdl.fullName);
+                    const cacheKey = getModuleCacheKey(mdl);
+                    const cache = modulesCache.get(cacheKey);
                     const clientConnection = clientConn.get('wsConn');
                     if (cache) {
                         client.Page.addScriptToEvaluateOnNewDocument({ expression: cache });
                         sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                     } else {
-                        fetch('http://127.0.0.1:8081/module/' + encodeURIComponent(mdl.versionedFullName || mdl.fullName) + '/' + mdl.mainFile + '?sourceMode=' + (mdl.sourceMode === 'direct' ? 'direct' : 'cdn')).then(res => res.text()).then(modFile => {
-                            modulesCache.set(mdl.fullName, modFile);
+                        fetch('http://127.0.0.1:8081/module/' + encodeURIComponent(mdl.versionedFullName || mdl.fullName) + '/' + mdl.mainFile + '?sourceMode=' + (mdl.sourceMode === 'direct' ? 'direct' : 'cdn')).then(res => {
+                            if (!res.ok) throw new Error('Failed to fetch module script: HTTP ' + res.status);
+                            return res.text();
+                        }).then(modFile => {
+                            modulesCache.set(cacheKey, modFile);
                             sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                             client.Page.addScriptToEvaluateOnNewDocument({ expression: modFile });
                         }).catch(e => {
