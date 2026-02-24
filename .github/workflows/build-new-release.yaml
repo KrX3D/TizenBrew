@@ -4,6 +4,18 @@ on:
   push:
     tags:
       - 'v*.*.*'
+    branches:
+      - new
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Release version/tag name to use for manual runs (e.g. v1.2.3)'
+        required: false
+      publish_release:
+        description: 'Publish a GitHub Release from this run'
+        required: false
+        default: false
+        type: boolean
 
 env:
   TIZEN_STUDIO_VER: 5.6
