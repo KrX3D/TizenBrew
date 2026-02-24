@@ -87,6 +87,21 @@ export default function ModuleManager() {
     const { state } = useContext(GlobalStateContext);
     const loc = useLocation();
     const { t } = useTranslation();
+    const [addSourceMode, setAddSourceMode] = useState(localStorage.getItem('addModuleSourceMode') || 'cdn');
+
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if (e.keyCode === 403) {
+                setAddSourceMode('cdn');
+                localStorage.setItem('addModuleSourceMode', 'cdn');
+            } else if (e.keyCode === 404) {
+                setAddSourceMode('direct');
+                localStorage.setItem('addModuleSourceMode', 'direct');
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, []);
 
     return (
         <div className="relative isolate lg:px-8">
@@ -97,26 +112,35 @@ export default function ModuleManager() {
                             {module.appName} ({module.version})
                         </h3>
                         <p className='text-gray-400 mt-2 text-sm'>
-                            {`${(module.moduleType || '').toUpperCase()} · ${(module.sourceMode || 'cdn').toUpperCase()}`}
+                            {`${(module.moduleType || '').toUpperCase()} ${(module.sourceMode || 'cdn').toUpperCase()}`}
                         </p>
-                        <p className='text-gray-300 mt-4 text-base/7'>
+                        <p className='text-gray-400 mt-1 text-xs break-all'>
+                            {(module.fullName || '').replace(/^(npm|gh)\//, '')}
+                        </p>
+                        <p className='text-gray-300 mt-3 text-base/7'>
                             {module.description}
                         </p>
                     </Item>
                 ))}
-                <ItemBasic onClick={() => loc.route('/tizenbrew-ui/dist/index.html/module-manager/add?type=npm')}>
+                <ItemBasic onClick={() => loc.route(`/tizenbrew-ui/dist/index.html/module-manager/add?type=npm&sourceMode=${addSourceMode}`)}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>
                         {t('moduleManager.addNPM')}
                     </h3>
-                    <p className='text-gray-300 mt-6 text-base/7'>
+                    <p className='text-gray-300 mt-3 text-base/7'>
+                        {`NPM ${addSourceMode.toUpperCase()} (RED=CDN, GREEN=DIRECT)`}
+                    </p>
+                    <p className='text-gray-300 mt-3 text-base/7'>
                         {t('moduleManager.addNPMDesc')}
                     </p>
                 </ItemBasic>
-                <ItemBasic onClick={() => loc.route('/tizenbrew-ui/dist/index.html/module-manager/add?type=gh')}>
+                <ItemBasic onClick={() => loc.route(`/tizenbrew-ui/dist/index.html/module-manager/add?type=gh&sourceMode=${addSourceMode}`)}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>
                         {t('moduleManager.addGH')}
                     </h3>
-                    <p className='text-gray-300 mt-6 text-base/7'>
+                    <p className='text-gray-300 mt-3 text-base/7'>
+                        {`GH ${addSourceMode.toUpperCase()} (RED=CDN, GREEN=DIRECT)`}
+                    </p>
+                    <p className='text-gray-300 mt-3 text-base/7'>
                         {t('moduleManager.addGHDesc')}
                     </p>
                 </ItemBasic>
@@ -155,15 +179,25 @@ function AddModule() {
     const loc = useLocation();
     const { state } = useContext(GlobalStateContext);
     const ref = useRef(null);
+    const submittedRef = useRef(false);
     const { t } = useTranslation();
 
     const moduleType = loc.query.type === 'gh' ? 'gh' : 'npm';
+
+    useEffect(() => {
+        const mode = loc.query.sourceMode === 'direct' ? 'direct' : 'cdn';
+        setSourceMode(mode);
+        localStorage.setItem('addModuleSourceMode', mode);
+    }, [loc.query.sourceMode]);
 
     useEffect(() => {
         ref.current.focus();
     }, [ref]);
 
     const submit = () => {
+        if (submittedRef.current) return;
+        submittedRef.current = true;
+
         const normalized = moduleType === 'gh' ? normalizeGitHubModule(name) : normalizeNpmModule(name);
 
         if (normalized) {
@@ -202,9 +236,7 @@ function AddModule() {
                         onChange={(e) => setName(e.target.value)}
                         onBlur={submit}
                         onKeyDown={(e) => {
-                            // Red or Green switches source mode while staying in input focus.
-                            if (e.keyCode === 403) setSourceMode('cdn');
-                            if (e.keyCode === 404) setSourceMode('direct');
+                            if (e.key === 'Enter' || e.keyCode === 13) submit();
                         }}
                         placeholder={t('moduleManager.moduleName', { type: moduleType })}
                     />
@@ -212,7 +244,7 @@ function AddModule() {
                         {moduleType === 'gh' ? `GH example: ${example}` : `NPM example: ${example}`}
                     </p>
                     <p className='text-gray-400 mt-2 text-sm'>
-                        {`Source: ${sourceMode.toUpperCase()} (RED=CDN, GREEN=DIRECT)`}
+                        {`Source: ${sourceMode.toUpperCase()}`}
                     </p>
                 </ItemBasic>
             </div>
