@@ -109,6 +109,21 @@ export default function ModuleManager() {
     const { state } = useContext(GlobalStateContext);
     const loc = useLocation();
     const { t } = useTranslation();
+    const [addSourceMode, setAddSourceMode] = useState(localStorage.getItem('addModuleSourceMode') || 'cdn');
+
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if (e.keyCode === 403) {
+                setAddSourceMode('cdn');
+                localStorage.setItem('addModuleSourceMode', 'cdn');
+            } else if (e.keyCode === 404) {
+                setAddSourceMode('direct');
+                localStorage.setItem('addModuleSourceMode', 'direct');
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, []);
 
     return (
         <div className="relative isolate lg:px-8">
@@ -132,7 +147,7 @@ export default function ModuleManager() {
                         </p>
                     </Item>
                 ))}
-                <ItemBasic onClick={() => loc.route('/tizenbrew-ui/dist/index.html/module-manager/add?type=npm')}>
+                <ItemBasic onClick={() => loc.route(`/tizenbrew-ui/dist/index.html/module-manager/add?type=npm&sourceMode=${addSourceMode}`)}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>
                         {t('moduleManager.addNPM')}
                     </h3>
@@ -143,7 +158,7 @@ export default function ModuleManager() {
                         {t('moduleManager.addNPMDesc')}
                     </p>
                 </ItemBasic>
-                <ItemBasic onClick={() => loc.route('/tizenbrew-ui/dist/index.html/module-manager/add?type=gh')}>
+                <ItemBasic onClick={() => loc.route(`/tizenbrew-ui/dist/index.html/module-manager/add?type=gh&sourceMode=${addSourceMode}`)}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>
                         {t('moduleManager.addGH')}
                     </h3>
@@ -185,6 +200,7 @@ function normalizeNpmModule(input) {
 
 function AddModule() {
     const [name, setName] = useState('');
+    const [sourceMode, setSourceMode] = useState('cdn');
     const loc = useLocation();
     const { state } = useContext(GlobalStateContext);
     const ref = useRef(null);
