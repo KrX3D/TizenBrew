@@ -112,16 +112,13 @@ class Client {
                     });
                 }
                 else {
-                    // SDB unavailable — show warning but continue loading modules
                     this.context.dispatch({
                         type: 'SET_ERROR',
                         payload: {
                             message: 'errors.debuggingNotEnabled',
-                            disappear: true
+                            disappear: false
                         }
                     });
-                    // Load modules anyway (non-debug mode)
-                    this.send({ type: Events.GetModules });
                 }
 
                 break;

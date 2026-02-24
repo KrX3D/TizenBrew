@@ -331,24 +331,6 @@ module.exports.onStart = function () {
                 case Events.Ready: {
                     wsConn.isReady = true;
                     services.set('wsConn', wsConn);
-                    // If not in debug mode, still allow module launching
-                    if (!inDebug.tizenDebug && !inDebug.webDebug) {
-                        const config = readConfig();
-                        if (config.autoLaunchModule) {
-                            wsConn.send(wsConn.Event(Events.CanLaunchModules, {
-                                type: 'autolaunch',
-                                module: config.autoLaunchModule
-                            }));
-                        } else if (appControlData.module) {
-                            wsConn.send(wsConn.Event(Events.CanLaunchModules, {
-                                type: 'appControl',
-                                module: appControlData.module,
-                                args: appControlData.args
-                            }));
-                        } else {
-                            wsConn.send(wsConn.Event(Events.CanLaunchModules, null));
-                        }
-                    }
                     break;
                 }
                 default: {
