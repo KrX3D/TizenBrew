@@ -26,10 +26,36 @@ jobs:
     steps:
       - name: Clone repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed to get full git history for changelog
       
       - name: Set env
         run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
       
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git tag --sort=-creatordate | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed -n '2p')
+          CURRENT_TAG=${GITHUB_REF#refs/tags/}
+
+          if [ -z "$PREV_TAG" ]; then
+            # No previous tag, list all commits
+            LOG=$(git log --pretty=format:"- %s (%h)" HEAD)
+          else
+            LOG=$(git log --pretty=format:"- %s (%h)" ${PREV_TAG}..HEAD)
+          fi
+
+          # Write to file to avoid issues with special characters
+          echo "## What's Changed" > changelog.md
+          echo "" >> changelog.md
+          echo "$LOG" >> changelog.md
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "" >> changelog.md
+            echo "**Full changelog**: [$PREV_TAG → $CURRENT_TAG](https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${CURRENT_TAG})" >> changelog.md
+          fi
+
       - name: Install modules and transpile service
         working-directory: tizenbrew-app/TizenBrew/service-nextgen/service
         run: |
@@ -120,5 +146,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.RELEASE_VERSION }}
+          name: ${{ env.RELEASE_VERSION }}
+          body_path: changelog.md
           files: |
             tizenbrew-app/TizenBrew/release/*
