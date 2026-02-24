@@ -89,20 +89,10 @@ module.exports.onStart = function () {
     let adbClient;
     let canLaunchInDebug = null;
     
-    function refreshCanLaunchInDebugStatus() {
-        return fetch('http://127.0.0.1:8001/api/v2/')
-            .then(res => res.json())
-            .then(json => {
-                canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
-                return canLaunchInDebug;
-            })
-            .catch(() => {
-                canLaunchInDebug = false;
-                return canLaunchInDebug;
-            });
-    }
-
-    refreshCanLaunchInDebugStatus();
+    fetch('http://127.0.0.1:8001/api/v2/').then(res => res.json())
+        .then(json => {
+            canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
+        });
 
     const inDebug = {
         tizenDebug: false,
@@ -129,21 +119,9 @@ module.exports.onStart = function () {
         args: null
     };
 
-    function normalizeServiceAutoLaunchList(value) {
-        if (Array.isArray(value)) {
-            return value.filter(moduleName => typeof moduleName === 'string' && moduleName.length > 0);
-        }
-
-        if (typeof value === 'string' && value.length > 0) {
-            return [value];
-        }
-
-        return [];
-    }
-
     loadModules().then(modules => {
         modulesCache = modules;
-        const serviceModuleList = normalizeServiceAutoLaunchList(readConfig().autoLaunchServiceList);
+        const serviceModuleList = readConfig().autoLaunchServiceList;
         if (serviceModuleList.length > 0) {
             serviceModuleList.forEach(module => {
                 const service = modules.find(m => m.name === module);
@@ -229,9 +207,11 @@ module.exports.onStart = function () {
                     break;
                 }
                 case Events.CanLaunchInDebug: {
-                    refreshCanLaunchInDebugStatus().then((status) => {
-                        wsConn.send(wsConn.Event(Events.CanLaunchInDebug, status));
-                    });
+                    fetch('http://127.0.0.1:8001/api/v2/').then(res => res.json())
+                        .then(json => {
+                            canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
+                        });
+                    wsConn.send(wsConn.Event(Events.CanLaunchInDebug, canLaunchInDebug));
                     break;
                 }
                 case Events.ReLaunchInDebug: {
@@ -343,7 +323,7 @@ module.exports.onStart = function () {
                             break;
                         }
                         case 'autolaunchService': {
-                            config.autoLaunchServiceList = normalizeServiceAutoLaunchList(module);
+                            config.autoLaunchServiceList = module;
                             writeConfig(config);
                             break;
                         }
