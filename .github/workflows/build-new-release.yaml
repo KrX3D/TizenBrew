@@ -6,6 +6,8 @@ on:
       - 'v*.*.*'
     branches:
       - new
+    paths-ignore:
+      - 'tizenbrew-app/TizenBrew/config.xml'
   workflow_dispatch:
     inputs:
       release_version:
@@ -53,6 +55,10 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add tizenbrew-app/TizenBrew/config.xml
+          if git diff --cached --quiet; then
+            echo "No version change, skipping commit and tag"
+            exit 0
+          fi
           git commit -m "chore: bump version to ${{ env.RELEASE_VERSION }}"
           git push origin new
           git tag ${{ env.RELEASE_VERSION }}
