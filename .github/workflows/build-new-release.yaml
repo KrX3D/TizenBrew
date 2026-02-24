@@ -34,7 +34,7 @@ jobs:
       - name: Set env and bump version
         run: |
           # Read current version from config.xml
-          CURRENT=$(grep -oP '(?<=version=")[^"]+' tizenbrew-app/TizenBrew/config.xml | head -1)
+          CURRENT=$(grep '<widget' tizenbrew-app/TizenBrew/config.xml | grep -oP '(?<=version=")[^"]+')
           echo "Current version: $CURRENT"
 
           # Split into parts and bump patch
@@ -48,7 +48,7 @@ jobs:
           echo "RELEASE_VERSION=v${NEW_VERSION}" >> $GITHUB_ENV
 
           # Write new version back into config.xml
-          sed -i "/ns0:widget/s/version=\"${CURRENT}\"/version=\"${NEW_VERSION}\"/" tizenbrew-app/TizenBrew/config.xml
+          sed -i "/<widget/s/version=\"${CURRENT}\"/version=\"${NEW_VERSION}\"/" tizenbrew-app/TizenBrew/config.xml
 
       - name: Commit bumped version and create tag
         run: |
