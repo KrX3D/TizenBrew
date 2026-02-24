@@ -30,8 +30,20 @@ jobs:
           fetch-depth: 0  # needed to get full git history for changelog
       
       - name: Set env
-        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
-      
+        run: |
+          VERSION=$(grep -oP 'version="\K[^"]+' tizenbrew-app/TizenBrew/config.xml | head -1)
+          echo "RELEASE_VERSION=v${VERSION}" >> $GITHUB_ENV
+
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          # Only create tag if it doesn't already exist
+          if ! git rev-parse "${{ env.RELEASE_VERSION }}" >/dev/null 2>&1; then
+            git tag ${{ env.RELEASE_VERSION }}
+            git push origin ${{ env.RELEASE_VERSION }}
+          fi
+
       - name: Generate changelog
         id: changelog
         run: |
