@@ -29,20 +29,34 @@ jobs:
         with:
           fetch-depth: 0  # needed to get full git history for changelog
       
-      - name: Set env
+      - name: Set env and bump version
         run: |
-          VERSION=$(grep -oP 'version="\K[^"]+' tizenbrew-app/TizenBrew/config.xml | head -1)
-          echo "RELEASE_VERSION=v${VERSION}" >> $GITHUB_ENV
+          # Read current version from config.xml
+          CURRENT=$(grep -oP '(?<=version=")[^"]+' tizenbrew-app/TizenBrew/config.xml | head -1)
+          echo "Current version: $CURRENT"
 
-      - name: Create and push tag
+          # Split into parts and bump patch
+          MAJOR=$(echo $CURRENT | cut -d. -f1)
+          MINOR=$(echo $CURRENT | cut -d. -f2)
+          PATCH=$(echo $CURRENT | cut -d. -f3)
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+
+          echo "New version: $NEW_VERSION"
+          echo "RELEASE_VERSION=v${NEW_VERSION}" >> $GITHUB_ENV
+
+          # Write new version back into config.xml
+          sed -i "s/version=\"${CURRENT}\"/version=\"${NEW_VERSION}\"/" tizenbrew-app/TizenBrew/config.xml
+
+      - name: Commit bumped version and create tag
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          # Only create tag if it doesn't already exist
-          if ! git rev-parse "${{ env.RELEASE_VERSION }}" >/dev/null 2>&1; then
-            git tag ${{ env.RELEASE_VERSION }}
-            git push origin ${{ env.RELEASE_VERSION }}
-          fi
+          git add tizenbrew-app/TizenBrew/config.xml
+          git commit -m "chore: bump version to ${{ env.RELEASE_VERSION }}"
+          git push origin new
+          git tag ${{ env.RELEASE_VERSION }}
+          git push origin ${{ env.RELEASE_VERSION }}
 
       - name: Generate changelog
         id: changelog
