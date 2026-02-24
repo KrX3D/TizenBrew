@@ -43,7 +43,11 @@ module.exports.onStart = function () {
             const cacheBuster = `?t=${Date.now()}`;
 
             let upstreamUrl;
-            const filePath = req.url.replace(`/module/${encodedModuleName}/`, '');
+            const filePathWithQuery = req.url.replace(`/module/${encodedModuleName}/`, '');
+            const queryIndex = filePathWithQuery.indexOf('?');
+            const filePath = queryIndex === -1 ? filePathWithQuery : filePathWithQuery.substring(0, queryIndex);
+            const queryString = queryIndex === -1 ? '' : filePathWithQuery.substring(queryIndex + 1);
+            const sourceMode = queryString.indexOf('sourceMode=direct') !== -1 ? 'direct' : 'cdn';
 
             // Strip jsDelivr prefixes to get clean GitHub user/repo
             function getGitHubRepo(name) {
@@ -57,17 +61,26 @@ module.exports.onStart = function () {
                 const [rawRepo, tag] = moduleName.split('@');
                 const repo = getGitHubRepo(rawRepo);
                 if (repo) {
-                    upstreamUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${filePath}`;
+                    upstreamUrl = sourceMode === 'direct'
+                        ? `https://raw.githubusercontent.com/${repo}/${tag}/${filePath}`
+                        : `https://cdn.jsdelivr.net/gh/${repo}@${tag}/${filePath}`;
                 } else {
-                    // npm package, fallback to jsDelivr
-                    upstreamUrl = `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
+                    const npmName = moduleName.replace(/^npm\//, '');
+                    upstreamUrl = sourceMode === 'direct'
+                        ? `https://unpkg.com/${npmName}/${filePath}`
+                        : `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
                 }
             } else {
                 const repo = getGitHubRepo(moduleName);
                 if (repo) {
-                    upstreamUrl = `https://raw.githubusercontent.com/${repo}/main/${filePath}`;
+                    upstreamUrl = sourceMode === 'direct'
+                        ? `https://raw.githubusercontent.com/${repo}/main/${filePath}`
+                        : `https://cdn.jsdelivr.net/gh/${repo}/${filePath}`;
                 } else {
-                    upstreamUrl = `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
+                    const npmName = moduleName.replace(/^npm\//, '');
+                    upstreamUrl = sourceMode === 'direct'
+                        ? `https://unpkg.com/${npmName}/${filePath}`
+                        : `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
                 }
             }
 
@@ -111,7 +124,8 @@ module.exports.onStart = function () {
         appPath: '',
         moduleType: '',
         packageType: '',
-        serviceFile: ''
+        serviceFile: '',
+        sourceMode: 'cdn'
     };
 
     const appControlData = {
@@ -241,6 +255,7 @@ module.exports.onStart = function () {
                     currentModule.moduleType = mdl.moduleType;
                     currentModule.packageType = mdl.packageType;
                     currentModule.serviceFile = mdl.serviceFile;
+                    currentModule.sourceMode = mdl.sourceMode || 'cdn';
 
                     if (mdl.packageType === 'app') {
                         inDebug.webDebug = false;
@@ -297,22 +312,36 @@ module.exports.onStart = function () {
                     break;
                 }
                 case Events.ModuleAction: {
-                    const { action, module } = payload;
+                    const { action, module, sourceMode } = payload;
 
                     const config = readConfig();
                     switch (action) {
                         case 'add': {
-                            const index = config.modules.findIndex(m => m === module);
+                            const normalizedMode = sourceMode === 'direct' ? 'direct' : 'cdn';
+                            const index = config.modules.findIndex(m => (typeof m === 'string' ? m : m.name || m.module) === module);
                             if (index === -1) {
-                                config.modules.push(module);
+                                config.modules.push({ name: module, sourceMode: normalizedMode });
                                 writeConfig(config);
                             }
                             break;
                         }
                         case 'remove': {
-                            const index = config.modules.findIndex(m => m === module);
+                            const index = config.modules.findIndex(m => (typeof m === 'string' ? m : m.name || m.module) === module);
                             if (index !== -1) {
                                 config.modules.splice(index, 1);
+                                writeConfig(config);
+                            }
+                            break;
+                        }
+                        case 'setSourceMode': {
+                            const normalizedMode = sourceMode === 'direct' ? 'direct' : 'cdn';
+                            const index = config.modules.findIndex(m => (typeof m === 'string' ? m : m.name || m.module) === module);
+                            if (index !== -1) {
+                                if (typeof config.modules[index] === 'string') {
+                                    config.modules[index] = { name: config.modules[index], sourceMode: normalizedMode };
+                                } else {
+                                    config.modules[index].sourceMode = normalizedMode;
+                                }
                                 writeConfig(config);
                             }
                             break;
