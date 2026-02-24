@@ -46,7 +46,7 @@ jobs:
           echo "RELEASE_VERSION=v${NEW_VERSION}" >> $GITHUB_ENV
 
           # Write new version back into config.xml
-          sed -i "s/version=\"${CURRENT}\"/version=\"${NEW_VERSION}\"/" tizenbrew-app/TizenBrew/config.xml
+          sed -i "/ns0:widget/s/version=\"${CURRENT}\"/version=\"${NEW_VERSION}\"/" tizenbrew-app/TizenBrew/config.xml
 
       - name: Commit bumped version and create tag
         run: |
