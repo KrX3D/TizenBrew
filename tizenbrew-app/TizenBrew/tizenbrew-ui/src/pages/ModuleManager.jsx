@@ -12,7 +12,7 @@ function classNames(...classes) {
 function Item({ children, module, id, state }) {
     const { t } = useTranslation();
     const { ref, focused } = useFocusable();
-      useEffect(() => {
+    useEffect(() => {
         if (focused) {
             ref.current.scrollIntoView({
                 behavior: 'smooth',
@@ -60,7 +60,7 @@ function Item({ children, module, id, state }) {
 
 function ItemBasic({ children, onClick }) {
     const { ref, focused } = useFocusable();
-      useEffect(() => {
+    useEffect(() => {
         if (focused) {
             ref.current.scrollIntoView({
                 behavior: 'smooth',
@@ -93,12 +93,13 @@ export default function ModuleManager() {
             <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
                 {state?.sharedData?.modules?.map((module, moduleIdx) => (
                     <Item module={module} id={moduleIdx} state={state}>
-                        <h3
-                            className='text-indigo-400 text-base/7 font-semibold'
-                        >
+                        <h3 className='text-indigo-400 text-base/7 font-semibold'>
                             {module.appName} ({module.version})
                         </h3>
-                        <p className='text-gray-300 mt-6 text-base/7'>
+                        <p className='text-gray-400 mt-2 text-sm'>
+                            {`${(module.moduleType || '').toUpperCase()} · ${(module.sourceMode || 'cdn').toUpperCase()}`}
+                        </p>
+                        <p className='text-gray-300 mt-4 text-base/7'>
                             {module.description}
                         </p>
                     </Item>
@@ -125,45 +126,94 @@ export default function ModuleManager() {
     )
 }
 
+function normalizeGitHubModule(input) {
+    let value = (input || '').trim();
+    if (!value) return '';
+
+    value = value.replace(/^https?:\/\/github\.com\//i, '');
+    value = value.replace(/^gh\//i, '');
+    value = value.replace(/\.git$/i, '');
+    value = value.replace(/^\/+|\/+$/g, '');
+
+    return value ? `gh/${value}` : '';
+}
+
+function normalizeNpmModule(input) {
+    let value = (input || '').trim();
+    if (!value) return '';
+
+    value = value.replace(/^https?:\/\/(www\.)?npmjs\.com\/package\//i, '');
+    value = value.replace(/^npm\//i, '');
+    value = value.replace(/^\/+|\/+$/g, '');
+
+    return value ? `npm/${value}` : '';
+}
+
 function AddModule() {
     const [name, setName] = useState('');
+    const [sourceMode, setSourceMode] = useState('cdn');
     const loc = useLocation();
     const { state } = useContext(GlobalStateContext);
     const ref = useRef(null);
     const { t } = useTranslation();
 
+    const moduleType = loc.query.type === 'gh' ? 'gh' : 'npm';
+
     useEffect(() => {
         ref.current.focus();
     }, [ref]);
+
+    const submit = () => {
+        const normalized = moduleType === 'gh' ? normalizeGitHubModule(name) : normalizeNpmModule(name);
+
+        if (normalized) {
+            state.client.send({
+                type: Events.ModuleAction,
+                payload: {
+                    action: 'add',
+                    module: normalized,
+                    sourceMode
+                }
+            });
+        }
+
+        state.client.send({
+            type: Events.GetModules,
+            payload: true
+        });
+        loc.route('/tizenbrew-ui/dist/index.html/module-manager');
+        setFocus('sn:focusable-item-1');
+    };
+
+    const example = moduleType === 'gh' ? 'reisxd/TizenTube' : '@foxreis/tizentube';
+
     return (
         <div className="relative isolate lg:px-8">
             <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
                 <ItemBasic>
+                    <h3 className='text-indigo-400 text-base/7 font-semibold mb-2'>
+                        {t('moduleManager.addModule')}
+                    </h3>
                     <input
                         type="text"
                         ref={ref}
                         value={name}
                         className="w-full p-2 rounded-lg bg-gray-800 text-gray-200"
                         onChange={(e) => setName(e.target.value)}
-                        onBlur={(e) => {
-                            if (name) {
-                                state.client.send({
-                                    type: Events.ModuleAction,
-                                    payload: {
-                                        action: 'add',
-                                        module: `${loc.query.type}/${name}`
-                                    }
-                                });
-                            }
-                            state.client.send({
-                                type: Events.GetModules,
-                                payload: true
-                            });
-                            loc.route('/tizenbrew-ui/dist/index.html/module-manager');
-                            setFocus('sn:focusable-item-1');
+                        onBlur={submit}
+                        onKeyDown={(e) => {
+                            // Red or Green switches source mode while staying in input focus.
+                            if (e.keyCode === 403) setSourceMode('cdn');
+                            if (e.keyCode === 404) setSourceMode('direct');
                         }}
-                        placeholder={t('moduleManager.moduleName', { type: loc.query.type })}
+                        placeholder={t('moduleManager.moduleName', { type: moduleType })}
                     />
+                    <p className='text-gray-400 mt-2 text-sm'>
+                        {moduleType === 'gh' ? `GH example: ${example}` : `NPM example: ${example}`}
+                    </p>
+                    <p className='text-gray-400 mt-2 text-sm'>
+                        {`Source: ${sourceMode.toUpperCase()} (RED=CDN, GREEN=DIRECT)`}
+                    </p>
                 </ItemBasic>
             </div>
         </div>
