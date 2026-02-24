@@ -93,12 +93,13 @@ export default function ModuleManager() {
             <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
                 {state?.sharedData?.modules?.map((module, moduleIdx) => (
                     <Item module={module} id={moduleIdx} state={state}>
-                        <h3
-                            className='text-indigo-400 text-base/7 font-semibold'
-                        >
+                        <h3 className='text-indigo-400 text-base/7 font-semibold'>
                             {module.appName} ({module.version})
                         </h3>
-                        <p className='text-gray-300 mt-6 text-base/7'>
+                        <p className='text-gray-400 mt-2 text-sm'>
+                            {`${(module.moduleType || '').toUpperCase()} · ${(module.sourceMode || 'cdn').toUpperCase()}`}
+                        </p>
+                        <p className='text-gray-300 mt-4 text-base/7'>
                             {module.description}
                         </p>
                     </Item>
@@ -184,11 +185,6 @@ function AddModule() {
         setFocus('sn:focusable-item-1');
     };
 
-    const cancel = () => {
-        loc.route('/tizenbrew-ui/dist/index.html/module-manager');
-        setFocus('sn:focusable-item-1');
-    };
-
     const example = moduleType === 'gh' ? 'reisxd/TizenTube' : '@foxreis/tizentube';
 
     return (
@@ -204,8 +200,11 @@ function AddModule() {
                         value={name}
                         className="w-full p-2 rounded-lg bg-gray-800 text-gray-200"
                         onChange={(e) => setName(e.target.value)}
+                        onBlur={submit}
                         onKeyDown={(e) => {
-                            if (e.key === 'Enter') submit();
+                            // Red or Green switches source mode while staying in input focus.
+                            if (e.keyCode === 403) setSourceMode('cdn');
+                            if (e.keyCode === 404) setSourceMode('direct');
                         }}
                         placeholder={t('moduleManager.moduleName', { type: moduleType })}
                     />
@@ -213,34 +212,8 @@ function AddModule() {
                         {moduleType === 'gh' ? `GH example: ${example}` : `NPM example: ${example}`}
                     </p>
                     <p className='text-gray-400 mt-2 text-sm'>
-                        Source: <span className='text-gray-200'>{sourceMode.toUpperCase()}</span>
+                        {`Source: ${sourceMode.toUpperCase()} (RED=CDN, GREEN=DIRECT)`}
                     </p>
-                </ItemBasic>
-
-                <ItemBasic onClick={() => setSourceMode('cdn')}>
-                    <h3 className='text-indigo-400 text-base/7 font-semibold'>CDN</h3>
-                    <p className='text-gray-300 mt-6 text-base/7'>Use jsDelivr/CDN delivery.</p>
-                </ItemBasic>
-
-                <ItemBasic onClick={() => setSourceMode('direct')}>
-                    <h3 className='text-indigo-400 text-base/7 font-semibold'>Direct</h3>
-                    <p className='text-gray-300 mt-6 text-base/7'>Use direct source mode.</p>
-                </ItemBasic>
-
-                {['@', '/', '_'].map((char) => (
-                    <ItemBasic key={char} onClick={() => setName((prev) => `${prev}${char}`)}>
-                        <h3 className='text-indigo-400 text-base/7 font-semibold'>Insert {char}</h3>
-                    </ItemBasic>
-                ))}
-
-                <ItemBasic onClick={submit}>
-                    <h3 className='text-indigo-400 text-base/7 font-semibold'>Done</h3>
-                    <p className='text-gray-300 mt-6 text-base/7'>Save and return.</p>
-                </ItemBasic>
-
-                <ItemBasic onClick={cancel}>
-                    <h3 className='text-indigo-400 text-base/7 font-semibold'>Cancel</h3>
-                    <p className='text-gray-300 mt-6 text-base/7'>Return without changes.</p>
                 </ItemBasic>
             </div>
         </div>
