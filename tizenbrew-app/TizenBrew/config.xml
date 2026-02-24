@@ -1,4 +1,4 @@
-<?xml version="1.0.1" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <widget xmlns:tizen="http://tizen.org/ns/widgets" xmlns="http://www.w3.org/ns/widgets" id="https://tizenbrew.vercel.app" version="2.2.1" viewmodes="maximized">
     <access origin="*" subdomains="true"></access>
     <tizen:app-control>
