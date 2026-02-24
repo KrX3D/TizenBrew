@@ -153,27 +153,13 @@ jobs:
           cat "${GITHUB_WORKSPACE}/tizen-studio-data/cli/logs/cli.log"
           mv tizenbrew-app/TizenBrew/release/TizenBrewNextGeneration.wgt tizenbrew-app/TizenBrew/release/TizenBrewStandalone-Old.wgt
 
-      - name: Package TizenBrew as USB Demo Package
-        continue-on-error: true
-        working-directory: tizenbrew-app/TizenBrew
-        run: |
-          wgt-to-usb release/TizenBrewStandalone-Old.wgt 
 
       - name: Upload TizenBrew package artifact for Old Tizen
         uses: actions/upload-artifact@v4
         with:
             name: app-${{ github.sha }}-old.wgt
             path: tizenbrew-app/TizenBrew/release/TizenBrewStandalone-Old.wgt
-      
-      - name: Zip USB Demo Package
-        working-directory: tizenbrew-app/TizenBrew
-        run: |
-          if [ -d "userwidget" ]; then
-            zip -r release/TizenBrewStandaloneUSBDemo.zip userwidget/
-          else
-            echo "USB Demo directory (userwidget) missing. Skipping zip."
-          fi
-      
+            
       - name: Release TizenBrew Build Results
         uses: softprops/action-gh-release@v1
         with:
