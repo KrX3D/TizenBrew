@@ -9,6 +9,14 @@ function classNames(...classes) {
     return classes.filter(Boolean).join(' ')
 }
 
+function getModuleTypeLabel(module) {
+    if (module?.moduleType) {
+        return String(module.moduleType).toUpperCase();
+    }
+
+    return module?.fullName?.startsWith('gh/') ? 'GH' : 'NPM';
+}
+
 function Item({ children, module, id, state }) {
     const { t } = useTranslation();
     const { ref, focused } = useFocusable();
@@ -98,6 +106,12 @@ export default function ModuleManager() {
                         >
                             {module.appName} ({module.version})
                         </h3>
+                        <p className='text-gray-400 mt-2 text-sm'>
+                            {`${getModuleTypeLabel(module)} ${(module.sourceMode || 'cdn').toUpperCase()}`}
+                        </p>
+                        <p className='text-gray-400 mt-1 text-xs break-all'>
+                            {(module.fullName || '').replace(/^(npm|gh)\//, '')}
+                        </p>
                         <p className='text-gray-300 mt-6 text-base/7'>
                             {module.description}
                         </p>
@@ -127,6 +141,7 @@ export default function ModuleManager() {
 
 function AddModule() {
     const [name, setName] = useState('');
+    const [sourceMode, setSourceMode] = useState('cdn');
     const loc = useLocation();
     const { state } = useContext(GlobalStateContext);
     const ref = useRef(null);
@@ -135,10 +150,30 @@ function AddModule() {
     useEffect(() => {
         ref.current.focus();
     }, [ref]);
+
+    useEffect(() => {
+        try {
+            tizen.tvinputdevice.registerKey('ColorF0Red');
+        } catch (e) {
+            // ignore on non-tv environments
+        }
+
+        const onKeyDown = (event) => {
+            if (event.keyCode === 403) {
+                setSourceMode(prev => prev === 'cdn' ? 'direct' : 'cdn');
+            }
+        };
+
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, []);
     return (
         <div className="relative isolate lg:px-8">
             <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
                 <ItemBasic>
+                    <p className='text-gray-400 mb-3 text-sm'>
+                        {`${loc.query.type?.toUpperCase() || 'NPM'} ${sourceMode.toUpperCase()} (RED = TOGGLE)`}
+                    </p>
                     <input
                         type="text"
                         ref={ref}
@@ -151,7 +186,8 @@ function AddModule() {
                                     type: Events.ModuleAction,
                                     payload: {
                                         action: 'add',
-                                        module: `${loc.query.type}/${name}`
+                                        module: `${loc.query.type}/${name}`,
+                                        sourceMode
                                     }
                                 });
                             }

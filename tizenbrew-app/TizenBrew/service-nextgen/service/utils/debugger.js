@@ -100,7 +100,8 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                 // Module Injection
                 if (mdl.name !== '') {
                     const proxyModule = encodeURIComponent(mdl.versionedFullName || mdl.fullName);
-                    const modUrl = 'http://127.0.0.1:8081/module/' + proxyModule + '/' + mdl.mainFile + '?v=' + Date.now();
+                    const mode = mdl.sourceMode === 'direct' ? 'direct' : 'cdn';
+                    const modUrl = 'http://127.0.0.1:8081/module/' + proxyModule + '/' + mdl.mainFile + '?sourceMode=' + mode + '&v=' + Date.now();
                     const modExpression = 'var s = document.createElement("script"); s.src = "' + modUrl + '"; (document.head || document.documentElement).appendChild(s);';
                     client.Runtime.evaluate({ expression: modExpression, contextId: msg.context.id });
                 }
