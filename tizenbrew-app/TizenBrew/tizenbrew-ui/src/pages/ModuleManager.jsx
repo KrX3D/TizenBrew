@@ -9,7 +9,7 @@ function classNames(...classes) {
     return classes.filter(Boolean).join(' ')
 }
 
-function Item({ children, module, id, state, pendingDeleteModule, onRequestDelete }) {
+function Item({ children, module, id, onRequestDelete }) {
     const { t } = useTranslation();
     const { ref, focused } = useFocusable();
     useEffect(() => {
@@ -34,8 +34,7 @@ function Item({ children, module, id, state, pendingDeleteModule, onRequestDelet
             className={classNames(
                 'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw]',
                 focused ? 'focus' : '',
-                id === 0 ? 'ml-4' : '',
-                pendingDeleteModule === module.fullName ? 'ring-2 ring-red-500' : ''
+                id === 0 ? 'ml-4' : ''
             )}
         >
             {children}
@@ -72,35 +71,32 @@ export default function ModuleManager() {
     const { state } = useContext(GlobalStateContext);
     const loc = useLocation();
     const { t } = useTranslation();
-    const [pendingDeleteModule, setPendingDeleteModule] = useState('');
+    const [pendingDelete, setPendingDelete] = useState(null);
 
-    function handleDeleteRequest(module) {
-        if (pendingDeleteModule === module.fullName) {
-            state.client.send({
-                type: Events.ModuleAction,
-                payload: {
-                    action: 'remove',
-                    module: module.fullName
-                }
-            });
+    function confirmDelete() {
+        if (!pendingDelete) return;
+        state.client.send({
+            type: Events.ModuleAction,
+            payload: {
+                action: 'remove',
+                module: pendingDelete.fullName
+            }
+        });
 
-            state.client.send({
-                type: Events.GetModules,
-                payload: true
-            });
-            setPendingDeleteModule('');
-            setFocus('sn:focusable-item-1');
-            return;
-        }
+        state.client.send({
+            type: Events.GetModules,
+            payload: true
+        });
 
-        setPendingDeleteModule(module.fullName);
+        setPendingDelete(null);
+        setFocus('sn:focusable-item-1');
     }
 
     return (
         <div className="relative isolate lg:px-8">
             <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
                 {state?.sharedData?.modules?.map((module, moduleIdx) => (
-                    <Item module={module} id={moduleIdx} state={state} pendingDeleteModule={pendingDeleteModule} onRequestDelete={handleDeleteRequest}>
+                    <Item module={module} id={moduleIdx} onRequestDelete={setPendingDelete}>
                         <h3
                             className='text-indigo-400 text-base/7 font-semibold'
                         >
@@ -115,9 +111,6 @@ export default function ModuleManager() {
                         <p className='text-gray-300 mt-3 text-base/7'>
                             {module.description}
                         </p>
-                        {pendingDeleteModule === module.fullName ? (
-                            <p className='text-red-400 mt-2 text-sm'>Press OK again to remove</p>
-                        ) : null}
                     </Item>
                 ))}
                 <ItemBasic onClick={() => loc.route(`/tizenbrew-ui/dist/index.html/module-manager/add?type=npm&sourceMode=${addSourceMode}`)}>
