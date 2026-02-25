@@ -28,7 +28,9 @@ function startService(mdl, services) {
     let fetchUrl;
     const cleanName = mdl.versionedFullName || mdl.fullName;
     if (cleanName.includes('@')) {
-        const [rawRepo, tag] = cleanName.split('@');
+        const versionSepIndex = cleanName.lastIndexOf('@');
+        const rawRepo = cleanName.substring(0, versionSepIndex);
+        const tag = cleanName.substring(versionSepIndex + 1);
         const repo = getGitHubRepo(rawRepo);
         if (repo) {
             fetchUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${mdl.serviceFile}`;
