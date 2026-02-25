@@ -33,14 +33,9 @@ function loadModules() {
                     name: splitData[1],
                     type: splitData[0]
                 }
-                let versionedModule = module;
-                if (module.startsWith('gh/')) {
-                    // For GitHub modules, use @main to ensure we hit the latest code on the default branch 
-                    // and let the debugger's cache-buster handle the sync.
-                    versionedModule = `${module}@main`;
-                } else if (moduleJson.version) {
-                    versionedModule = `${module}@${moduleJson.version}`;
-                }
+                // Do not append @version/@main to module identifiers.
+                // Some environments and module paths break when version suffixes are used.
+                const versionedModule = module;
 
                 if (moduleJson.packageType === 'app') {
                     moduleData = {
