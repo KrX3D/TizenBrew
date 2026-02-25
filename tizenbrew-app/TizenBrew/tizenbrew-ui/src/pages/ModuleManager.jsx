@@ -13,7 +13,7 @@ function classNames(...classes) {
 function Item({ children, module, id, state }) {
     const { t } = useTranslation();
     const { ref, focused } = useFocusable();
-      useEffect(() => {
+    useEffect(() => {
         if (focused) {
             ref.current.scrollIntoView({
                 behavior: 'smooth',
@@ -61,7 +61,7 @@ function Item({ children, module, id, state }) {
 
 function ItemBasic({ children, onClick }) {
     const { ref, focused } = useFocusable();
-      useEffect(() => {
+    useEffect(() => {
         if (focused) {
             ref.current.scrollIntoView({
                 behavior: 'smooth',
@@ -88,35 +88,60 @@ export default function ModuleManager() {
     const { state } = useContext(GlobalStateContext);
     const loc = useLocation();
     const { t } = useTranslation();
+    const [addSourceMode, setAddSourceMode] = useState(localStorage.getItem('addModuleSourceMode') || 'cdn');
+
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if (e.keyCode === 403) {
+                setAddSourceMode('cdn');
+                localStorage.setItem('addModuleSourceMode', 'cdn');
+            } else if (e.keyCode === 404) {
+                setAddSourceMode('direct');
+                localStorage.setItem('addModuleSourceMode', 'direct');
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, []);
 
     return (
         <div className="relative isolate lg:px-8">
             <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
                 {state?.sharedData?.modules?.map((module, moduleIdx) => (
                     <Item module={module} id={moduleIdx} state={state}>
-                        <h3
-                            className='text-indigo-400 text-base/7 font-semibold'
-                        >
+                        <h3 className='text-indigo-400 text-base/7 font-semibold'>
                             {module.appName} ({module.version})
                         </h3>
+                        <p className='text-gray-400 mt-2 text-sm'>
+                            {`${getModuleTypeLabel(module)} ${(module.sourceMode || 'cdn').toUpperCase()}`}
+                        </p>
+                        <p className='text-gray-400 mt-1 text-xs break-all'>
+                            {(module.fullName || '').replace(/^(npm|gh)\//, '')}
+                        </p>
                         <p className='text-gray-300 mt-6 text-base/7'>
                             {module.description}
                         </p>
                     </Item>
                 ))}
-                <ItemBasic onClick={() => loc.route('/tizenbrew-ui/dist/index.html/module-manager/add?type=npm')}>
+                <ItemBasic onClick={() => loc.route(`/tizenbrew-ui/dist/index.html/module-manager/add?type=npm&sourceMode=${addSourceMode}`)}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>
                         {t('moduleManager.addNPM')}
                     </h3>
-                    <p className='text-gray-300 mt-6 text-base/7'>
+                    <p className='text-gray-300 mt-3 text-base/7'>
+                        {`NPM ${addSourceMode.toUpperCase()} (RED=CDN, GREEN=DIRECT)`}
+                    </p>
+                    <p className='text-gray-300 mt-3 text-base/7'>
                         {t('moduleManager.addNPMDesc')}
                     </p>
                 </ItemBasic>
-                <ItemBasic onClick={() => loc.route('/tizenbrew-ui/dist/index.html/module-manager/add?type=gh')}>
+                <ItemBasic onClick={() => loc.route(`/tizenbrew-ui/dist/index.html/module-manager/add?type=gh&sourceMode=${addSourceMode}`)}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>
                         {t('moduleManager.addGH')}
                     </h3>
-                    <p className='text-gray-300 mt-6 text-base/7'>
+                    <p className='text-gray-300 mt-3 text-base/7'>
+                        {`GH ${addSourceMode.toUpperCase()} (RED=CDN, GREEN=DIRECT)`}
+                    </p>
+                    <p className='text-gray-300 mt-3 text-base/7'>
                         {t('moduleManager.addGHDesc')}
                     </p>
                 </ItemBasic>
@@ -126,20 +151,73 @@ export default function ModuleManager() {
     )
 }
 
+function normalizeGitHubModule(input) {
+    let value = (input || '').trim();
+    if (!value) return '';
+
+    value = value.replace(/^https?:\/\/github\.com\//i, '');
+    value = value.replace(/^gh\//i, '');
+    value = value.replace(/\.git$/i, '');
+    value = value.replace(/^\/+|\/+$/g, '');
+
+    return value ? `gh/${value}` : '';
+}
+
+function normalizeNpmModule(input) {
+    let value = (input || '').trim();
+    if (!value) return '';
+
+    value = value.replace(/^https?:\/\/(www\.)?npmjs\.com\/package\//i, '');
+    value = value.replace(/^npm\//i, '');
+    value = value.replace(/^\/+|\/+$/g, '');
+
+    return value ? `npm/${value}` : '';
+}
+
 function AddModule() {
     const [name, setName] = useState('');
+    const [sourceMode, setSourceMode] = useState('cdn');
     const loc = useLocation();
     const { state } = useContext(GlobalStateContext);
     const ref = useRef(null);
+    const submittedRef = useRef(false);
     const { t } = useTranslation();
+
+    const moduleType = loc.query.type === 'gh' ? 'gh' : 'npm';
+
+    useEffect(() => {
+        const mode = loc.query.sourceMode === 'direct' ? 'direct' : 'cdn';
+        setSourceMode(mode);
+        localStorage.setItem('addModuleSourceMode', mode);
+    }, [loc.query.sourceMode]);
 
     useEffect(() => {
         ref.current.focus();
     }, [ref]);
+
+    useEffect(() => {
+        try {
+            tizen.tvinputdevice.registerKey('ColorF0Red');
+        } catch (e) {
+            // ignore on non-tv environments
+        }
+
+        const onKeyDown = (event) => {
+            if (event.keyCode === 403) {
+                setSourceMode(prev => prev === 'cdn' ? 'direct' : 'cdn');
+            }
+        };
+
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, []);
     return (
         <div className="relative isolate lg:px-8">
             <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
                 <ItemBasic>
+                    <p className='text-gray-400 mb-3 text-sm'>
+                        {`${loc.query.type?.toUpperCase() || 'NPM'} ${sourceMode.toUpperCase()} (RED = TOGGLE)`}
+                    </p>
                     <input
                         type="text"
                         ref={ref}
@@ -152,7 +230,8 @@ function AddModule() {
                                     type: Events.ModuleAction,
                                     payload: {
                                         action: 'add',
-                                        module: `${loc.query.type}/${name}`
+                                        module: `${loc.query.type}/${name}`,
+                                        sourceMode
                                     }
                                 });
                             }
@@ -163,8 +242,14 @@ function AddModule() {
                             loc.route('/tizenbrew-ui/dist/index.html/module-manager');
                             setFocus('sn:focusable-item-1');
                         }}
-                        placeholder={t('moduleManager.moduleName', { type: loc.query.type })}
+                        placeholder={t('moduleManager.moduleName', { type: moduleType })}
                     />
+                    <p className='text-gray-400 mt-2 text-sm'>
+                        {moduleType === 'gh' ? `GH example: ${example}` : `NPM example: ${example}`}
+                    </p>
+                    <p className='text-gray-400 mt-2 text-sm'>
+                        {`Source: ${sourceMode.toUpperCase()}`}
+                    </p>
                 </ItemBasic>
             </div>
         </div>
