@@ -66,33 +66,24 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                 }
 
                 // THE INJECTION
-                const injectionCode = `
-                (function() {
-                    if (window.__tizentube_injected) return;
-                    window.__tizentube_injected = true;
-                    console.log("[TizenBrew] Starting API Injection...");
-                    
-                    // 1. Try to restore window.tizen if missing
-                    if (!window.tizen && window.parent && window.parent.tizen) {
-                        window.tizen = window.parent.tizen;
-                    }
+                let webApisInjection = '';
+                if (webapisContent) {
+                    webApisInjection = 'try { eval(' + JSON.stringify(webapisContent) + '); console.log("[TizenBrew] WebAPI Injected via Code."); } catch(e) { console.error("Injection Error:", e); }';
+                } else {
+                    webApisInjection = 'var s = document.createElement("script"); s.src = "http://127.0.0.1:8081/webapis.js"; document.head.appendChild(s); console.log("[TizenBrew] WebAPI Injected via Script Tag.");';
+                }
 
-                    // 2. Inject WebAPIs
-                    if (!window.webapis || !window.webapis.avplay) {
-                        ${webapisContent ? `
-                        try {
-                            ${webapisContent}
-                            console.log("[TizenBrew] WebAPI Injected via Code.");
-                        } catch(e) { console.error("Injection Error:", e); }
-                        ` : `
-                        var s = document.createElement("script");
-                        s.src = "http://127.0.0.1:8081/webapis.js";
-                        document.head.appendChild(s);
-                        console.log("[TizenBrew] WebAPI Injected via Script Tag.");
-                        `}
-                    }
-                })();
-                `;
+                const injectionCode = [
+                    '(function() {',
+                    'if (window.__tizentube_injected) return;',
+                    'window.__tizentube_injected = true;',
+                    'console.log("[TizenBrew] Starting API Injection...");',
+                    'if (!window.tizen && window.parent && window.parent.tizen) { window.tizen = window.parent.tizen; }',
+                    'if (!window.webapis || !window.webapis.avplay) {',
+                    webApisInjection,
+                    '}',
+                    '})();'
+                ].join('\n');
 
                 client.Runtime.evaluate({ expression: injectionCode, contextId: msg.context.id });
                 client.Page.addScriptToEvaluateOnNewDocument({ expression: injectionCode });

@@ -17,37 +17,18 @@ function startService(mdl, services) {
     sandbox['tizen'] = global.tizen;
     sandbox['module'] = { exports: {} };
 
-    // Strip jsDelivr prefixes to get clean GitHub user/repo
-    function getGitHubRepo(name) {
-        if (name.startsWith('gh/')) return name.substring(3);
-        if (name.startsWith('npm/')) return null;
-        return name;
-    }
-
-    // Construct Raw GitHub fetch URL
-    let fetchUrl;
+    // Fetch service script through local module proxy so URL resolution stays centralized.
     const cleanName = mdl.versionedFullName || mdl.fullName;
-    if (cleanName.includes('@')) {
-        const [rawRepo, tag] = cleanName.split('@');
-        const repo = getGitHubRepo(rawRepo);
-        if (repo) {
-            fetchUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${mdl.serviceFile}`;
-        } else {
-            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.serviceFile}`;
-        }
-    } else {
-        const repo = getGitHubRepo(cleanName);
-        if (repo) {
-            fetchUrl = `https://raw.githubusercontent.com/${repo}/main/${mdl.serviceFile}`;
-        } else {
-            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.serviceFile}`;
-        }
-    }
-    // Append cache buster
-    fetchUrl += `?v=${Date.now()}`;
+    const fetchUrl = `http://127.0.0.1:8081/module/${encodeURIComponent(cleanName)}/${mdl.serviceFile}?v=${Date.now()}`;
 
     fetch(fetchUrl)
-        .then(res => res.text())
+        .then(res => {
+            if (!res.ok) {
+                throw new Error('Failed to fetch service script: ' + fetchUrl + ' (status ' + res.status + ')');
+            }
+
+            return res.text();
+        })
         .then(script => {
             services.set(mdl.fullName, {
                 context: vm.createContext(sandbox),
