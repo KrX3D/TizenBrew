@@ -138,26 +138,6 @@ export default function ModuleManager() {
 
             </div>
 
-            {pendingDelete ? (
-                <div className='fixed inset-0 bg-black/70 flex items-center justify-center z-50'>
-                    <div className='bg-gray-900 rounded-3xl p-8 w-[50vw] text-center'>
-                        <h3 className='text-indigo-400 text-base/7 font-semibold'>
-                            {pendingDelete.appName}
-                        </h3>
-                        <p className='text-gray-300 mt-4 text-base/7'>
-                            {t('moduleManager.confirmDelete', { packageName: pendingDelete.appName })}
-                        </p>
-                        <div className='mt-6 flex justify-center gap-4'>
-                            <ItemBasic onClick={() => setPendingDelete(null)}>
-                                <h3 className='text-indigo-400 text-base/7 font-semibold'>Cancel</h3>
-                            </ItemBasic>
-                            <ItemBasic onClick={confirmDelete}>
-                                <h3 className='text-red-400 text-base/7 font-semibold'>Remove</h3>
-                            </ItemBasic>
-                        </div>
-                    </div>
-                </div>
-            ) : null}
         </div>
     )
 }
