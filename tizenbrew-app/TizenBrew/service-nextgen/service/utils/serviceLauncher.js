@@ -24,24 +24,15 @@ function startService(mdl, services) {
         return name;
     }
 
-    // Construct Raw GitHub fetch URL
+    // Construct module service URL
     let fetchUrl;
     const cleanName = mdl.versionedFullName || mdl.fullName;
-    if (cleanName.includes('@')) {
-        const [rawRepo, tag] = cleanName.split('@');
-        const repo = getGitHubRepo(rawRepo);
-        if (repo) {
-            fetchUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${mdl.serviceFile}`;
-        } else {
-            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.serviceFile}`;
-        }
+    const repo = getGitHubRepo(cleanName);
+    if (repo) {
+        fetchUrl = `https://raw.githubusercontent.com/${repo}/main/${mdl.serviceFile}`;
     } else {
-        const repo = getGitHubRepo(cleanName);
-        if (repo) {
-            fetchUrl = `https://raw.githubusercontent.com/${repo}/main/${mdl.serviceFile}`;
-        } else {
-            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.serviceFile}`;
-        }
+        const npmName = cleanName.startsWith('npm/') ? cleanName.substring(4) : cleanName;
+        fetchUrl = `https://cdn.jsdelivr.net/npm/${npmName}/${mdl.serviceFile}`;
     }
     // Append cache buster
     fetchUrl += `?v=${Date.now()}`;

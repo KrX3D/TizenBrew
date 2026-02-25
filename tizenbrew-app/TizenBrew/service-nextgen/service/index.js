@@ -52,23 +52,12 @@ module.exports.onStart = function () {
                 return name;
             }
 
-            // Check if versioned
-            if (moduleName.includes('@')) {
-                const [rawRepo, tag] = moduleName.split('@');
-                const repo = getGitHubRepo(rawRepo);
-                if (repo) {
-                    upstreamUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${filePath}`;
-                } else {
-                    // npm package, fallback to jsDelivr
-                    upstreamUrl = `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
-                }
+            const repo = getGitHubRepo(moduleName);
+            if (repo) {
+                upstreamUrl = `https://raw.githubusercontent.com/${repo}/main/${filePath}`;
             } else {
-                const repo = getGitHubRepo(moduleName);
-                if (repo) {
-                    upstreamUrl = `https://raw.githubusercontent.com/${repo}/main/${filePath}`;
-                } else {
-                    upstreamUrl = `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
-                }
+                const npmName = moduleName.startsWith('npm/') ? moduleName.substring(4) : moduleName;
+                upstreamUrl = `https://cdn.jsdelivr.net/npm/${npmName}/${filePath}`;
             }
 
             fetch(`${upstreamUrl}${cacheBuster}`)
