@@ -22,24 +22,24 @@ function parseModuleEntry(entry) {
     };
 }
 
-function buildPackageUrl(moduleName, sourceMode, cacheBuster) {
+function buildPackageUrl(moduleName, sourceMode) {
     if (moduleName.startsWith('gh/')) {
         const parts = moduleName.split('/');
         if (parts.length >= 3) {
             const user = parts[1];
             const repo = parts[2];
             if (sourceMode === 'direct') {
-                return `https://raw.githubusercontent.com/${user}/${repo}/main/package.json${cacheBuster}`;
+                return `https://raw.githubusercontent.com/${user}/${repo}/main/package.json`;
             }
-            return `https://cdn.jsdelivr.net/gh/${user}/${repo}/package.json${cacheBuster}`;
+            return `https://cdn.jsdelivr.net/gh/${user}/${repo}/package.json`;
         }
     }
 
     const npmName = moduleName.replace(/^npm\//, '');
     if (sourceMode === 'direct') {
-        return `https://unpkg.com/${npmName}/package.json${cacheBuster}`;
+        return `https://unpkg.com/${npmName}/package.json`;
     }
-    return `https://cdn.jsdelivr.net/${moduleName}/package.json${cacheBuster}`;
+    return `https://cdn.jsdelivr.net/${moduleName}/package.json`;
 }
 
 function loadModules() {
@@ -50,8 +50,7 @@ function loadModules() {
         const { moduleName: module, sourceMode } = parseModuleEntry(entry);
         if (!module) return null;
 
-        const cacheBuster = `?t=${Date.now()}`;
-        const url = buildPackageUrl(module, sourceMode, cacheBuster);
+        const url = buildPackageUrl(module, sourceMode);
 
         return fetch(url)
             .then(res => res.json())
