@@ -1,29 +1,61 @@
 const { readConfig } = require('./configuration.js');
 const fetch = require('node-fetch');
 
+function parseModuleEntry(entry) {
+    if (typeof entry === 'string') {
+        return {
+            moduleName: entry,
+            sourceMode: 'cdn'
+        };
+    }
+
+    if (entry && typeof entry === 'object') {
+        return {
+            moduleName: entry.name || entry.module || '',
+            sourceMode: entry.sourceMode === 'direct' ? 'direct' : 'cdn'
+        };
+    }
+
+    return {
+        moduleName: '',
+        sourceMode: 'cdn'
+    };
+}
+
+function buildPackageUrl(moduleName, sourceMode, cacheBuster) {
+    if (moduleName.startsWith('gh/')) {
+        const parts = moduleName.split('/');
+        if (parts.length >= 3) {
+            const user = parts[1];
+            const repo = parts[2];
+            if (sourceMode === 'direct') {
+                return `https://raw.githubusercontent.com/${user}/${repo}/main/package.json${cacheBuster}`;
+            }
+            return `https://cdn.jsdelivr.net/gh/${user}/${repo}/package.json${cacheBuster}`;
+        }
+    }
+
+    const npmName = moduleName.replace(/^npm\//, '');
+    if (sourceMode === 'direct') {
+        return `https://unpkg.com/${npmName}/package.json${cacheBuster}`;
+    }
+    return `https://cdn.jsdelivr.net/${moduleName}/package.json${cacheBuster}`;
+}
+
 function loadModules() {
     const config = readConfig();
     const modules = config.modules;
 
-    const modulePromises = modules.map(module => {
-        // Bypass jsDelivr cache for package.json to detect updates
-        const cacheBuster = `?t=${Date.now()}`;
-        let url = `https://cdn.jsdelivr.net/${module}/package.json${cacheBuster}`;
+    const modulePromises = modules.map(entry => {
+        const { moduleName: module, sourceMode } = parseModuleEntry(entry);
+        if (!module) return null;
 
-        // If it's a GitHub module, use raw.githubusercontent.com for instant updates
-        if (module.startsWith('gh/')) {
-            const parts = module.split('/');
-            if (parts.length >= 3) {
-                const user = parts[1];
-                const repo = parts[2];
-                url = `https://raw.githubusercontent.com/${user}/${repo}/main/package.json${cacheBuster}`;
-            }
-        }
+        const cacheBuster = `?t=${Date.now()}`;
+        const url = buildPackageUrl(module, sourceMode, cacheBuster);
 
         return fetch(url)
             .then(res => res.json())
             .then(moduleJson => {
-
                 let moduleData;
                 const splitData = [
                     module.substring(0, module.indexOf('/')),
@@ -37,6 +69,8 @@ function loadModules() {
                 // Some environments and module paths break when version suffixes are used.
                 const versionedModule = module;
 
+                const appProxyUrl = `http://127.0.0.1:8081/module/${encodeURIComponent(versionedModule)}/${moduleJson.appPath}?sourceMode=${sourceMode}`;
+
                 if (moduleJson.packageType === 'app') {
                     moduleData = {
                         fullName: module,
@@ -44,12 +78,13 @@ function loadModules() {
                         appName: moduleJson.appName,
                         version: moduleJson.version,
                         name: moduleMetadata.name,
-                        appPath: `http://127.0.0.1:8081/module/${encodeURIComponent(versionedModule)}/${moduleJson.appPath}`,
+                        appPath: appProxyUrl,
                         keys: moduleJson.keys ? moduleJson.keys : [],
                         moduleType: moduleMetadata.type,
                         packageType: moduleJson.packageType,
                         description: moduleJson.description,
-                        serviceFile: moduleJson.serviceFile
+                        serviceFile: moduleJson.serviceFile,
+                        sourceMode
                     }
                 } else if (moduleJson.packageType === 'mods') {
                     moduleData = {
@@ -66,7 +101,8 @@ function loadModules() {
                         serviceFile: moduleJson.serviceFile,
                         tizenAppId: moduleJson.tizenAppId,
                         mainFile: moduleJson.main,
-                        evaluateScriptOnDocumentStart: moduleJson.evaluateScriptOnDocumentStart
+                        evaluateScriptOnDocumentStart: moduleJson.evaluateScriptOnDocumentStart,
+                        sourceMode
                     }
                 } else return {
                     appName: 'Unknown Module',
@@ -76,6 +112,7 @@ function loadModules() {
                     keys: [],
                     moduleType: moduleMetadata.type,
                     packageType: 'app',
+                    sourceMode,
                     description: `Unknown module ${module}. Please check the module name and try again.`
                 }
 
@@ -102,10 +139,11 @@ function loadModules() {
                     keys: [],
                     moduleType: moduleMetadata.type,
                     packageType: 'app',
+                    sourceMode,
                     description: `Unknown module ${module}. Please check the module name and try again.`
                 }
             });
-    });
+    }).filter(Boolean);
 
     return Promise.all(modulePromises)
         .then(modules => {
