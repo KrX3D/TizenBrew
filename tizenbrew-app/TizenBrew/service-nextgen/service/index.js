@@ -56,9 +56,12 @@ module.exports.onStart = function () {
                 return name;
             }
 
-            // Check if versioned
-            if (moduleName.includes('@')) {
-                const [rawRepo, tag] = moduleName.split('@');
+            // Check if versioned (only when @ appears after the last /)
+            const versionSepIndex = moduleName.lastIndexOf('@');
+            const hasVersionSuffix = versionSepIndex > moduleName.lastIndexOf('/');
+            if (hasVersionSuffix) {
+                const rawRepo = moduleName.substring(0, versionSepIndex);
+                const tag = moduleName.substring(versionSepIndex + 1);
                 const repo = getGitHubRepo(rawRepo);
                 if (repo) {
                     upstreamUrl = sourceMode === 'direct'

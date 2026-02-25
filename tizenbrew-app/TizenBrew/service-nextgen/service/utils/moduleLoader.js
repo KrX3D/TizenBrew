@@ -65,12 +65,9 @@ function loadModules() {
                     name: splitData[1],
                     type: splitData[0]
                 }
-                let versionedModule = module;
-                if (module.startsWith('gh/')) {
-                    versionedModule = `${module}@main`;
-                } else if (moduleJson.version) {
-                    versionedModule = `${module}@${moduleJson.version}`;
-                }
+                // Do not append @version/@main to module identifiers.
+                // Some environments and module paths break when version suffixes are used.
+                const versionedModule = module;
 
                 const appProxyUrl = `http://127.0.0.1:8081/module/${encodeURIComponent(versionedModule)}/${moduleJson.appPath}?sourceMode=${sourceMode}`;
 
