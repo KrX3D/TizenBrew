@@ -36,61 +36,50 @@ module.exports.onStart = function () {
                 res.status(404).send('WebAPIs not bridged yet. Open TizenBrew UI first.');
             }
         } else if (req.url.startsWith('/module/')) {
-            const splittedUrl = req.url.split('/');
-            const encodedModuleName = splittedUrl[2];
+            const url = require('url');
+            const parsedUrl = url.parse(req.url, true);
+            const splittedPath = parsedUrl.pathname.split('/');
+            const encodedModuleName = splittedPath[2];
             const moduleName = decodeURIComponent(encodedModuleName);
+            const sourceMode = parsedUrl.query.sourceMode === 'direct' ? 'direct' : 'cdn';
+
             // Append timestamp to ensure we don't hit any intermediate caches for proxy requests
             const cacheBuster = `?t=${Date.now()}`;
 
             let upstreamUrl;
-            const filePathWithQuery = req.url.replace(`/module/${encodedModuleName}/`, '');
-            const queryIndex = filePathWithQuery.indexOf('?');
-            const filePath = queryIndex === -1 ? filePathWithQuery : filePathWithQuery.substring(0, queryIndex);
-            const queryString = queryIndex === -1 ? '' : filePathWithQuery.substring(queryIndex + 1);
-            const sourceMode = queryString.indexOf('sourceMode=direct') !== -1 ? 'direct' : 'cdn';
+            const filePath = parsedUrl.pathname.replace(`/module/${encodedModuleName}/`, '');
 
-            // Strip jsDelivr prefixes to get clean GitHub user/repo
-            function getGitHubRepo(name) {
-                if (name.startsWith('gh/')) return name.substring(3);
-                if (name.startsWith('npm/')) return null;
-                return name;
-            }
-
-            // Check if versioned
-            if (moduleName.includes('@')) {
-                const [rawRepo, tag] = moduleName.split('@');
-                const repo = getGitHubRepo(rawRepo);
-                if (repo) {
-                    upstreamUrl = sourceMode === 'direct'
-                        ? `https://raw.githubusercontent.com/${repo}/${tag}/${filePath}`
-                        : `https://cdn.jsdelivr.net/gh/${repo}@${tag}/${filePath}`;
+            if (moduleName.startsWith('gh/')) {
+                const repo = moduleName.substring(3);
+                if (sourceMode === 'direct') {
+                    upstreamUrl = `https://raw.githubusercontent.com/${repo}/main/${filePath}`;
                 } else {
-                    const npmName = moduleName.replace(/^npm\//, '');
-                    upstreamUrl = sourceMode === 'direct'
-                        ? `https://unpkg.com/${npmName}/${filePath}`
-                        : `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
+                    upstreamUrl = `https://cdn.jsdelivr.net/gh/${repo}/${filePath}`;
+                }
+            } else if (moduleName.startsWith('npm/')) {
+                const npmName = moduleName.substring(4);
+                if (sourceMode === 'direct') {
+                    upstreamUrl = `https://unpkg.com/${npmName}/${filePath}`;
+                } else {
+                    upstreamUrl = `https://cdn.jsdelivr.net/npm/${npmName}/${filePath}`;
                 }
             } else {
-                const repo = getGitHubRepo(moduleName);
-                if (repo) {
-                    upstreamUrl = sourceMode === 'direct'
-                        ? `https://raw.githubusercontent.com/${repo}/main/${filePath}`
-                        : `https://cdn.jsdelivr.net/gh/${repo}/${filePath}`;
-                } else {
-                    const npmName = moduleName.replace(/^npm\//, '');
-                    upstreamUrl = sourceMode === 'direct'
-                        ? `https://unpkg.com/${npmName}/${filePath}`
-                        : `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
-                }
+                upstreamUrl = `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
             }
 
             fetch(`${upstreamUrl}${cacheBuster}`)
                 .then(fetchRes => {
-                    return fetchRes.body.pipe(res);
-                })
-                .then(() => {
+                    if (!fetchRes.ok) {
+                        res.status(fetchRes.status).send(`Proxy fetch failed: ${upstreamUrl}`);
+                        return null;
+                    }
+
                     res.setHeader('Access-Control-Allow-Origin', '*');
                     res.type(path.basename(filePath).split('.').slice(-1)[0].split('?')[0]);
+                    return fetchRes.body.pipe(res);
+                })
+                .catch(() => {
+                    res.status(500).send(`Proxy fetch failed: ${upstreamUrl}`);
                 });
         } else {
             res.send(deviceIP);
@@ -124,7 +113,8 @@ module.exports.onStart = function () {
         appPath: '',
         moduleType: '',
         packageType: '',
-        serviceFile: ''
+        serviceFile: '',
+        sourceMode: 'cdn'
     };
 
     const appControlData = {
@@ -254,6 +244,7 @@ module.exports.onStart = function () {
                     currentModule.moduleType = mdl.moduleType;
                     currentModule.packageType = mdl.packageType;
                     currentModule.serviceFile = mdl.serviceFile;
+                    currentModule.sourceMode = mdl.sourceMode || 'cdn';
 
                     if (mdl.packageType === 'app') {
                         inDebug.webDebug = false;
@@ -315,18 +306,32 @@ module.exports.onStart = function () {
                     const config = readConfig();
                     switch (action) {
                         case 'add': {
-                            const normalizedMode = sourceMode === 'direct' ? 'direct' : 'cdn';
-                            const index = config.modules.findIndex(m => (typeof m === 'string' ? m : m.name || m.module) === module);
+                            const index = config.modules.findIndex(m => (typeof m === 'string' ? m : m.name) === module);
                             if (index === -1) {
-                                config.modules.push({ name: module, sourceMode: normalizedMode });
+                                config.modules.push({
+                                    name: module,
+                                    sourceMode: sourceMode === 'direct' ? 'direct' : 'cdn'
+                                });
                                 writeConfig(config);
                             }
                             break;
                         }
                         case 'remove': {
-                            const index = config.modules.findIndex(m => (typeof m === 'string' ? m : m.name || m.module) === module);
+                            const index = config.modules.findIndex(m => (typeof m === 'string' ? m : m.name) === module);
                             if (index !== -1) {
                                 config.modules.splice(index, 1);
+                                writeConfig(config);
+                            }
+                            break;
+                        }
+                        case 'setSourceMode': {
+                            const index = config.modules.findIndex(m => (typeof m === 'string' ? m : m.name) === module);
+                            if (index !== -1) {
+                                const name = typeof config.modules[index] === 'string' ? config.modules[index] : config.modules[index].name;
+                                config.modules[index] = {
+                                    name,
+                                    sourceMode: sourceMode === 'direct' ? 'direct' : 'cdn'
+                                };
                                 writeConfig(config);
                             }
                             break;

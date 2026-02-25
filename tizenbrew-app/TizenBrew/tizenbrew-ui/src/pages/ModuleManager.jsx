@@ -202,49 +202,52 @@ function AddModule() {
         ref.current.focus();
     }, [ref]);
 
-    const submit = () => {
-        if (submittedRef.current) return;
-        submittedRef.current = true;
-
-        const normalized = moduleType === 'gh' ? normalizeGitHubModule(name) : normalizeNpmModule(name);
-
-        if (normalized) {
-            state.client.send({
-                type: Events.ModuleAction,
-                payload: {
-                    action: 'add',
-                    module: normalized,
-                    sourceMode
-                }
-            });
+    useEffect(() => {
+        try {
+            tizen.tvinputdevice.registerKey('ColorF0Red');
+        } catch (e) {
+            // ignore on non-tv environments
         }
 
-        state.client.send({
-            type: Events.GetModules,
-            payload: true
-        });
-        loc.route('/tizenbrew-ui/dist/index.html/module-manager');
-        setFocus('sn:focusable-item-1');
-    };
+        const onKeyDown = (event) => {
+            if (event.keyCode === 403) {
+                setSourceMode(prev => prev === 'cdn' ? 'direct' : 'cdn');
+            }
+        };
 
-    const example = moduleType === 'gh' ? 'reisxd/TizenTube' : '@foxreis/tizentube';
-
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, []);
     return (
         <div className="relative isolate lg:px-8">
             <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
                 <ItemBasic>
-                    <h3 className='text-indigo-400 text-base/7 font-semibold mb-2'>
-                        {t('moduleManager.addModule')}
-                    </h3>
+                    <p className='text-gray-400 mb-3 text-sm'>
+                        {`${loc.query.type?.toUpperCase() || 'NPM'} ${sourceMode.toUpperCase()} (RED = TOGGLE)`}
+                    </p>
                     <input
                         type="text"
                         ref={ref}
                         value={name}
                         className="w-full p-2 rounded-lg bg-gray-800 text-gray-200"
                         onChange={(e) => setName(e.target.value)}
-                        onBlur={submit}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.keyCode === 13) submit();
+                        onBlur={(e) => {
+                            if (name) {
+                                state.client.send({
+                                    type: Events.ModuleAction,
+                                    payload: {
+                                        action: 'add',
+                                        module: `${loc.query.type}/${name}`,
+                                        sourceMode
+                                    }
+                                });
+                            }
+                            state.client.send({
+                                type: Events.GetModules,
+                                payload: true
+                            });
+                            loc.route('/tizenbrew-ui/dist/index.html/module-manager');
+                            setFocus('sn:focusable-item-1');
                         }}
                         placeholder={t('moduleManager.moduleName', { type: moduleType })}
                     />
