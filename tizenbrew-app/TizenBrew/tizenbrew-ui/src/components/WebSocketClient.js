@@ -27,6 +27,21 @@ class Client {
         this.modules = [];
     }
 
+    shouldRelaunchInDebug(payload) {
+        const alreadyDebugging = payload.rwiDebug || payload.webDebug || payload.appDebug || payload.tizenDebug;
+        if (alreadyDebugging) return false;
+
+        const relaunchKey = 'tizenbrew_debug_relaunch_attempt';
+        const lastAttempt = Number(sessionStorage.getItem(relaunchKey) || 0);
+        const now = Date.now();
+
+        // Avoid endless relaunch loops when debug attach fails on some platforms.
+        if (now - lastAttempt < 15000) return false;
+
+        sessionStorage.setItem(relaunchKey, String(now));
+        return true;
+    }
+
     onOpen() {
         const data = tizen.application.getCurrentApplication().getRequestedAppControl().appControl.data;
         if (data.length > 0 && data[0].value.length > 0) {
@@ -82,7 +97,7 @@ class Client {
                     payload: state.sharedData
                 });
 
-                if (!payload.rwiDebug && !payload.appDebug && !payload.tizenDebug) {
+                if (this.shouldRelaunchInDebug(payload)) {
                     this.send({
                         type: Events.CanLaunchInDebug
                     });
