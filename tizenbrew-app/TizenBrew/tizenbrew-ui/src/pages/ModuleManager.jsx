@@ -9,7 +9,7 @@ function classNames(...classes) {
     return classes.filter(Boolean).join(' ')
 }
 
-function Item({ children, module, id, state }) {
+function Item({ children, module, id, onRequestDelete }) {
     const { t } = useTranslation();
     const { ref, focused } = useFocusable();
       useEffect(() => {
@@ -23,23 +23,7 @@ function Item({ children, module, id, state }) {
     }, [focused, ref]);
 
     function handleOnClick() {
-        const deleteConfirm = confirm(t('moduleManager.confirmDelete', { packageName: module.appName }));
-        if (deleteConfirm) {
-            state.client.send({
-                type: Events.ModuleAction,
-                payload: {
-                    action: 'remove',
-                    module: module.fullName
-                }
-            });
-
-            state.client.send({
-                type: Events.GetModules,
-                payload: true
-            });
-
-            setFocus('sn:focusable-item-1');
-        }
+        onRequestDelete(module);
     }
 
     return (
@@ -87,12 +71,32 @@ export default function ModuleManager() {
     const { state } = useContext(GlobalStateContext);
     const loc = useLocation();
     const { t } = useTranslation();
+    const [pendingDelete, setPendingDelete] = useState(null);
+
+    function confirmDelete() {
+        if (!pendingDelete) return;
+        state.client.send({
+            type: Events.ModuleAction,
+            payload: {
+                action: 'remove',
+                module: pendingDelete.fullName
+            }
+        });
+
+        state.client.send({
+            type: Events.GetModules,
+            payload: true
+        });
+
+        setPendingDelete(null);
+        setFocus('sn:focusable-item-1');
+    }
 
     return (
         <div className="relative isolate lg:px-8">
             <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
                 {state?.sharedData?.modules?.map((module, moduleIdx) => (
-                    <Item module={module} id={moduleIdx} state={state}>
+                    <Item module={module} id={moduleIdx} onRequestDelete={setPendingDelete}>
                         <h3
                             className='text-indigo-400 text-base/7 font-semibold'
                         >
@@ -121,6 +125,27 @@ export default function ModuleManager() {
                 </ItemBasic>
 
             </div>
+
+            {pendingDelete ? (
+                <div className='fixed inset-0 bg-black/70 flex items-center justify-center z-50'>
+                    <div className='bg-gray-900 rounded-3xl p-8 w-[50vw] text-center'>
+                        <h3 className='text-indigo-400 text-base/7 font-semibold'>
+                            {pendingDelete.appName}
+                        </h3>
+                        <p className='text-gray-300 mt-4 text-base/7'>
+                            {t('moduleManager.confirmDelete', { packageName: pendingDelete.appName })}
+                        </p>
+                        <div className='mt-6 flex justify-center gap-4'>
+                            <ItemBasic onClick={() => setPendingDelete(null)}>
+                                <h3 className='text-indigo-400 text-base/7 font-semibold'>Cancel</h3>
+                            </ItemBasic>
+                            <ItemBasic onClick={confirmDelete}>
+                                <h3 className='text-red-400 text-base/7 font-semibold'>Remove</h3>
+                            </ItemBasic>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
         </div>
     )
 }

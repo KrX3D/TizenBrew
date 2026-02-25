@@ -5,6 +5,8 @@ on:
     tags:
       - 'v*.*.*'
     branches:
+      - main
+      - master
       - new
     paths-ignore:
       - 'tizenbrew-app/TizenBrew/config.xml'
@@ -60,7 +62,7 @@ jobs:
             exit 0
           fi
           git commit -m "chore: bump version to ${{ env.RELEASE_VERSION }}"
-          git push origin new
+          git push origin ${GITHUB_REF_NAME}
           git tag ${{ env.RELEASE_VERSION }}
           git push origin ${{ env.RELEASE_VERSION }}
 
