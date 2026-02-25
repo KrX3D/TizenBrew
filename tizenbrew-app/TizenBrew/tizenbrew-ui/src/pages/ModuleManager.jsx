@@ -22,28 +22,6 @@ function Item({ children, module, id, onRequestDelete }) {
         }
     }, [focused, ref]);
 
-    useEffect(() => {
-        if (!focused) return;
-
-        const onKeyDown = (e) => {
-            if (e.keyCode !== 403) return;
-
-            const nextMode = module.sourceMode === 'direct' ? 'cdn' : 'direct';
-            state.client.send({
-                type: Events.ModuleAction,
-                payload: {
-                    action: 'setSourceMode',
-                    module: module.fullName,
-                    sourceMode: nextMode
-                }
-            });
-            state.client.send({ type: Events.GetModules, payload: true });
-        };
-
-        window.addEventListener('keydown', onKeyDown);
-        return () => window.removeEventListener('keydown', onKeyDown);
-    }, [focused, module, state]);
-
     function handleOnClick() {
         onRequestDelete(module);
     }
