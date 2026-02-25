@@ -8,36 +8,13 @@ const WebSocket = require('ws');
 
 const modulesCache = new Map();
 
-let cachedWebApisPath = null;
-let bridgedWebApisCode = null;
-
-function setWebApisPath(path) {
-    if (!path) return;
-    console.log('[Debugger] Caching webapis.js path:', path);
-    if (path.startsWith('file://')) {
-        cachedWebApisPath = path.replace('file://', '');
-    } else {
-        cachedWebApisPath = path;
-    }
-}
-
-function setWebApisCode(code) {
-    if (!code) return;
-    console.log('[Debugger] Caching bridged webapis.js code (length: ' + code.length + ')');
-    bridgedWebApisCode = code;
-}
-
-function getWebApisCode() {
-    return bridgedWebApisCode;
-}
-
 function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts) {
     if (!attempts) attempts = 1;
     if (!isAnotherApp) inDebug.tizenDebug = true;
     try {
         CDP({ port, host: ip, local: true }, (client) => {
             client.Runtime.enable();
-            client.Page.enable();
+            client.Debugger.enable();
 
             client.on('Runtime.executionContextCreated', (msg) => {
                 let webapisContent = bridgedWebApisCode;
@@ -99,24 +76,86 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             });
 
             client.on('disconnect', () => {
-                if (!isAnotherApp) inDebug.tizenDebug = false;
+                if (isAnotherApp) return;
+
+                inDebug.tizenDebug = false;
+                inDebug.webDebug = false;
+                inDebug.rwiDebug = false;
+
+                mdl.fullName = '';
+                mdl.name = '';
+                mdl.appPath = '';
+                mdl.moduleType = '';
+                mdl.packageType = '';
+                mdl.serviceFile = '';
+                mdl.mainFile = '';
             });
 
-            // Signal Ready
-            const clientConnection = clientConn.get('wsConn');
-            if (clientConnection) {
-                const data = clientConnection.Event(Events.CanLaunchModules, appControlData.module ? {
-                    type: 'appControl',
-                    module: appControlData.module,
-                    args: appControlData.args
-                } : null);
-                clientConnection.send(data);
-            }
+            if (!isAnotherApp) {
+                const clientConnection = clientConn.get('wsConn');
+                if (appControlData.module) {
+                    const data = clientConnection.Event(Events.CanLaunchModules, {
+                        type: 'appControl',
+                        module: appControlData.module,
+                        args: appControlData.args
+                    });
+                    sendClientInformation(clientConn, data);
+                } else {
+                    const config = readConfig();
+                    if (config.autoLaunchModule) {
+                        const data = clientConnection.Event(Events.CanLaunchModules, {
+                            type: 'autolaunch',
+                            module: config.autoLaunchModule
+                        });
 
+                        sendClientInformation(clientConn, data);
+
+                    } else {
+                        const data = clientConnection.Event(Events.CanLaunchModules, null);
+                        sendClientInformation(clientConn, data);
+                    }
+                }
+            }
+            if (!isAnotherApp) inDebug.webDebug = true;
+            appControlData = null;
         }).on('error', (err) => {
-            if (attempts < 20) setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts + 1), 1000);
+            if (attempts >= 15) {
+                if (!isAnotherApp) {
+                    clientConn.send(clientConn.Event(Events.Error, 'Failed to connect to the debugger'));
+                    inDebug.tizenDebug = false;
+                    return;
+                } else return;
+            }
+            attempts++;
+            setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts), 750)
         });
-    } catch (e) { }
+    } catch (e) {
+        if (attempts >= 15) {
+            if (!isAnotherApp) {
+                clientConn.send(clientConn.Event(Events.Error, 'Failed to connect to the debugger'));
+                inDebug.tizenDebug = false;
+                return;
+            } else return;
+        }
+        attempts++;
+        setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts), 750)
+        return;
+    }
 }
+
+function sendClientInformation(clientConn, data) {
+    const clientConnection = clientConn.get('wsConn');
+    if ((clientConnection && clientConnection.connection && (clientConnection.connection.readyState !== WebSocket.OPEN && !clientConnection.isReady)) || !clientConnection) {
+        return setTimeout(() => sendClientInformation(clientConn, data), 50);
+    }
+    setTimeout(() => {
+        clientConnection.send(data);
+    }, 500);
+}
+
+// Backward-compatible no-op APIs for newer UI events.
+function setWebApisPath() {}
+function setWebApisCode() {}
+function getWebApisCode() { return null; }
 
 module.exports = { startDebugging, setWebApisPath, setWebApisCode, getWebApisCode };

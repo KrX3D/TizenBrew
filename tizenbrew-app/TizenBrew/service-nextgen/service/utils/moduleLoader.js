@@ -56,7 +56,6 @@ function loadModules() {
         return fetch(url)
             .then(res => res.json())
             .then(moduleJson => {
-
                 let moduleData;
                 const splitData = [
                     module.substring(0, module.indexOf('/')),
@@ -81,7 +80,8 @@ function loadModules() {
                         moduleType: moduleMetadata.type,
                         packageType: moduleJson.packageType,
                         description: moduleJson.description,
-                        serviceFile: moduleJson.serviceFile
+                        serviceFile: moduleJson.serviceFile,
+                        sourceMode
                     }
                 } else if (moduleJson.packageType === 'mods') {
                     moduleData = {
@@ -99,7 +99,8 @@ function loadModules() {
                         serviceFile: moduleJson.serviceFile,
                         tizenAppId: moduleJson.tizenAppId,
                         mainFile: moduleJson.main,
-                        evaluateScriptOnDocumentStart: moduleJson.evaluateScriptOnDocumentStart
+                        evaluateScriptOnDocumentStart: moduleJson.evaluateScriptOnDocumentStart,
+                        sourceMode
                     }
                 } else return {
                     appName: 'Unknown Module',
@@ -110,6 +111,7 @@ function loadModules() {
                     keys: [],
                     moduleType: moduleMetadata.type,
                     packageType: 'app',
+                    sourceMode,
                     description: `Unknown module ${module}. Please check the module name and try again.`
                 }
 
@@ -137,10 +139,11 @@ function loadModules() {
                     keys: [],
                     moduleType: moduleMetadata.type,
                     packageType: 'app',
+                    sourceMode,
                     description: `Unknown module ${module}. Please check the module name and try again.`
                 }
             });
-    });
+    }).filter(Boolean);
 
     return Promise.all(modulePromises)
         .then(modules => {
