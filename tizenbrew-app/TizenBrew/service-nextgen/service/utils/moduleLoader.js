@@ -1,24 +1,57 @@
 const { readConfig } = require('./configuration.js');
 const fetch = require('node-fetch');
 
+function parseModuleEntry(entry) {
+    if (typeof entry === 'string') {
+        return {
+            name: entry,
+            sourceMode: 'cdn'
+        };
+    }
+
+    if (entry && typeof entry === 'object') {
+        return {
+            name: entry.name || '',
+            sourceMode: entry.sourceMode === 'direct' ? 'direct' : 'cdn'
+        };
+    }
+
+    return { name: '', sourceMode: 'cdn' };
+}
+
+function buildPackageJsonUrl(moduleName, sourceMode) {
+    const cacheBuster = `?t=${Date.now()}`;
+
+    if (moduleName.startsWith('gh/')) {
+        const repo = moduleName.substring(3);
+        if (sourceMode === 'direct') {
+            return `https://raw.githubusercontent.com/${repo}/main/package.json${cacheBuster}`;
+        }
+
+        return `https://cdn.jsdelivr.net/gh/${repo}/package.json${cacheBuster}`;
+    }
+
+    if (moduleName.startsWith('npm/')) {
+        const npmName = moduleName.substring(4);
+        if (sourceMode === 'direct') {
+            return `https://unpkg.com/${npmName}/package.json${cacheBuster}`;
+        }
+
+        return `https://cdn.jsdelivr.net/npm/${npmName}/package.json${cacheBuster}`;
+    }
+
+    return `https://cdn.jsdelivr.net/${moduleName}/package.json${cacheBuster}`;
+}
+
 function loadModules() {
     const config = readConfig();
-    const modules = config.modules;
+    const modules = config.modules || [];
 
-    const modulePromises = modules.map(module => {
-        // Bypass jsDelivr cache for package.json to detect updates
-        const cacheBuster = `?t=${Date.now()}`;
-        let url = `https://cdn.jsdelivr.net/${module}/package.json${cacheBuster}`;
-
-        // If it's a GitHub module, use raw.githubusercontent.com for instant updates
-        if (module.startsWith('gh/')) {
-            const parts = module.split('/');
-            if (parts.length >= 3) {
-                const user = parts[1];
-                const repo = parts[2];
-                url = `https://raw.githubusercontent.com/${user}/${repo}/main/package.json${cacheBuster}`;
-            }
-        }
+    const modulePromises = modules.map(entry => {
+        const parsedEntry = parseModuleEntry(entry);
+        const module = parsedEntry.name;
+        const sourceMode = parsedEntry.sourceMode;
+        const url = buildPackageJsonUrl(module, sourceMode);
 
         return fetch(url)
             .then(res => res.json())
@@ -33,23 +66,17 @@ function loadModules() {
                     name: splitData[1],
                     type: splitData[0]
                 }
-                let versionedModule = module;
-                if (module.startsWith('gh/')) {
-                    // For GitHub modules, use @main to ensure we hit the latest code on the default branch 
-                    // and let the debugger's cache-buster handle the sync.
-                    versionedModule = `${module}@main`;
-                } else if (moduleJson.version) {
-                    versionedModule = `${module}@${moduleJson.version}`;
-                }
+                const versionedModule = module;
 
                 if (moduleJson.packageType === 'app') {
                     moduleData = {
                         fullName: module,
                         versionedFullName: versionedModule,
+                        sourceMode,
                         appName: moduleJson.appName,
                         version: moduleJson.version,
                         name: moduleMetadata.name,
-                        appPath: `http://127.0.0.1:8081/module/${encodeURIComponent(versionedModule)}/${moduleJson.appPath}`,
+                        appPath: `http://127.0.0.1:8081/module/${encodeURIComponent(versionedModule)}/${moduleJson.appPath}?sourceMode=${sourceMode}`,
                         keys: moduleJson.keys ? moduleJson.keys : [],
                         moduleType: moduleMetadata.type,
                         packageType: moduleJson.packageType,
@@ -60,6 +87,7 @@ function loadModules() {
                     moduleData = {
                         fullName: module,
                         versionedFullName: versionedModule,
+                        sourceMode,
                         appName: moduleJson.appName,
                         version: moduleJson.version,
                         name: moduleMetadata.name,
@@ -77,6 +105,7 @@ function loadModules() {
                     appName: 'Unknown Module',
                     name: moduleMetadata.name,
                     fullName: module,
+                    sourceMode,
                     appPath: '',
                     keys: [],
                     moduleType: moduleMetadata.type,
@@ -103,6 +132,7 @@ function loadModules() {
                     appName: 'Unknown Module',
                     name: moduleMetadata.name,
                     fullName: module,
+                    sourceMode,
                     appPath: '',
                     keys: [],
                     moduleType: moduleMetadata.type,
