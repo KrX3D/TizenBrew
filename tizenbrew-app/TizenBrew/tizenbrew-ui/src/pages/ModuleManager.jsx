@@ -9,10 +9,10 @@ function classNames(...classes) {
     return classes.filter(Boolean).join(' ')
 }
 
-function Item({ children, module, id, state }) {
+function Item({ children, module, id, onRequestDelete }) {
     const { t } = useTranslation();
     const { ref, focused } = useFocusable();
-      useEffect(() => {
+    useEffect(() => {
         if (focused) {
             ref.current.scrollIntoView({
                 behavior: 'smooth',
@@ -23,23 +23,7 @@ function Item({ children, module, id, state }) {
     }, [focused, ref]);
 
     function handleOnClick() {
-        const deleteConfirm = confirm(t('moduleManager.confirmDelete', { packageName: module.appName }));
-        if (deleteConfirm) {
-            state.client.send({
-                type: Events.ModuleAction,
-                payload: {
-                    action: 'remove',
-                    module: module.fullName
-                }
-            });
-
-            state.client.send({
-                type: Events.GetModules,
-                payload: true
-            });
-
-            setFocus('sn:focusable-item-1');
-        }
+        onRequestDelete(module);
     }
 
     return (
@@ -60,7 +44,7 @@ function Item({ children, module, id, state }) {
 
 function ItemBasic({ children, onClick }) {
     const { ref, focused } = useFocusable();
-      useEffect(() => {
+    useEffect(() => {
         if (focused) {
             ref.current.scrollIntoView({
                 behavior: 'smooth',
@@ -87,35 +71,67 @@ export default function ModuleManager() {
     const { state } = useContext(GlobalStateContext);
     const loc = useLocation();
     const { t } = useTranslation();
+    const [pendingDelete, setPendingDelete] = useState(null);
+
+    function confirmDelete() {
+        if (!pendingDelete) return;
+        state.client.send({
+            type: Events.ModuleAction,
+            payload: {
+                action: 'remove',
+                module: pendingDelete.fullName
+            }
+        });
+
+        state.client.send({
+            type: Events.GetModules,
+            payload: true
+        });
+
+        setPendingDelete(null);
+        setFocus('sn:focusable-item-1');
+    }
 
     return (
         <div className="relative isolate lg:px-8">
             <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
                 {state?.sharedData?.modules?.map((module, moduleIdx) => (
-                    <Item module={module} id={moduleIdx} state={state}>
+                    <Item module={module} id={moduleIdx} onRequestDelete={setPendingDelete}>
                         <h3
                             className='text-indigo-400 text-base/7 font-semibold'
                         >
                             {module.appName} ({module.version})
                         </h3>
-                        <p className='text-gray-300 mt-6 text-base/7'>
+                        <p className='text-gray-400 mt-2 text-sm'>
+                            {`${(module.moduleType || '').toUpperCase()} ${(module.sourceMode || 'cdn').toUpperCase()}`}
+                        </p>
+                        <p className='text-gray-400 mt-1 text-xs break-all'>
+                            {(module.fullName || '').replace(/^(npm|gh)\//, '')}
+                        </p>
+                        <p className='text-gray-300 mt-3 text-base/7'>
                             {module.description}
                         </p>
                     </Item>
                 ))}
-                <ItemBasic onClick={() => loc.route('/tizenbrew-ui/dist/index.html/module-manager/add?type=npm')}>
+                <ItemBasic onClick={() => loc.route(`/tizenbrew-ui/dist/index.html/module-manager/add?type=npm&sourceMode=${addSourceMode}`)}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>
                         {t('moduleManager.addNPM')}
                     </h3>
-                    <p className='text-gray-300 mt-6 text-base/7'>
+                    <p className='text-gray-300 mt-3 text-base/7'>
+                        {`NPM ${addSourceMode.toUpperCase()} (RED=CDN, GREEN=DIRECT)`}
+                    </p>
+                    <p className='text-gray-300 mt-3 text-base/7'>
                         {t('moduleManager.addNPMDesc')}
                     </p>
                 </ItemBasic>
-                <ItemBasic onClick={() => loc.route('/tizenbrew-ui/dist/index.html/module-manager/add?type=gh')}>
+                <ItemBasic onClick={() => loc.route(`/tizenbrew-ui/dist/index.html/module-manager/add?type=gh&sourceMode=${addSourceMode}`)}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>
                         {t('moduleManager.addGH')}
                     </h3>
-                    <p className='text-gray-300 mt-6 text-base/7'>
+                    <p className='text-gray-300 mt-3 text-base/7'>
+                        {`GH ${addSourceMode.toUpperCase()} (RED=CDN, GREEN=DIRECT)`}
+                    </p>
+                    <p className='text-gray-300 mt-3 text-base/7'>
                         {t('moduleManager.addGHDesc')}
                     </p>
                 </ItemBasic>
@@ -126,45 +142,102 @@ export default function ModuleManager() {
     )
 }
 
+function normalizeGitHubModule(input) {
+    let value = (input || '').trim();
+    if (!value) return '';
+
+    value = value.replace(/^https?:\/\/github\.com\//i, '');
+    value = value.replace(/^gh\//i, '');
+    value = value.replace(/\.git$/i, '');
+    value = value.replace(/^\/+|\/+$/g, '');
+
+    return value ? `gh/${value}` : '';
+}
+
+function normalizeNpmModule(input) {
+    let value = (input || '').trim();
+    if (!value) return '';
+
+    value = value.replace(/^https?:\/\/(www\.)?npmjs\.com\/package\//i, '');
+    value = value.replace(/^npm\//i, '');
+    value = value.replace(/^\/+|\/+$/g, '');
+
+    return value ? `npm/${value}` : '';
+}
+
 function AddModule() {
     const [name, setName] = useState('');
+    const [sourceMode, setSourceMode] = useState('cdn');
     const loc = useLocation();
     const { state } = useContext(GlobalStateContext);
     const ref = useRef(null);
+    const submittedRef = useRef(false);
     const { t } = useTranslation();
+
+    const moduleType = loc.query.type === 'gh' ? 'gh' : 'npm';
+
+    useEffect(() => {
+        const mode = loc.query.sourceMode === 'direct' ? 'direct' : 'cdn';
+        setSourceMode(mode);
+        localStorage.setItem('addModuleSourceMode', mode);
+    }, [loc.query.sourceMode]);
 
     useEffect(() => {
         ref.current.focus();
     }, [ref]);
+
+    const submit = () => {
+        if (submittedRef.current) return;
+        submittedRef.current = true;
+
+        const normalized = moduleType === 'gh' ? normalizeGitHubModule(name) : normalizeNpmModule(name);
+
+        if (normalized) {
+            state.client.send({
+                type: Events.ModuleAction,
+                payload: {
+                    action: 'add',
+                    module: normalized,
+                    sourceMode
+                }
+            });
+        }
+
+        state.client.send({
+            type: Events.GetModules,
+            payload: true
+        });
+        loc.route('/tizenbrew-ui/dist/index.html/module-manager');
+        setFocus('sn:focusable-item-1');
+    };
+
+    const example = moduleType === 'gh' ? 'reisxd/TizenTube' : '@foxreis/tizentube';
+
     return (
         <div className="relative isolate lg:px-8">
             <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
                 <ItemBasic>
+                    <h3 className='text-indigo-400 text-base/7 font-semibold mb-2'>
+                        {t('moduleManager.addModule')}
+                    </h3>
                     <input
                         type="text"
                         ref={ref}
                         value={name}
                         className="w-full p-2 rounded-lg bg-gray-800 text-gray-200"
                         onChange={(e) => setName(e.target.value)}
-                        onBlur={(e) => {
-                            if (name) {
-                                state.client.send({
-                                    type: Events.ModuleAction,
-                                    payload: {
-                                        action: 'add',
-                                        module: `${loc.query.type}/${name}`
-                                    }
-                                });
-                            }
-                            state.client.send({
-                                type: Events.GetModules,
-                                payload: true
-                            });
-                            loc.route('/tizenbrew-ui/dist/index.html/module-manager');
-                            setFocus('sn:focusable-item-1');
+                        onBlur={submit}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.keyCode === 13) submit();
                         }}
-                        placeholder={t('moduleManager.moduleName', { type: loc.query.type })}
+                        placeholder={t('moduleManager.moduleName', { type: moduleType })}
                     />
+                    <p className='text-gray-400 mt-2 text-sm'>
+                        {moduleType === 'gh' ? `GH example: ${example}` : `NPM example: ${example}`}
+                    </p>
+                    <p className='text-gray-400 mt-2 text-sm'>
+                        {`Source: ${sourceMode.toUpperCase()}`}
+                    </p>
                 </ItemBasic>
             </div>
         </div>
