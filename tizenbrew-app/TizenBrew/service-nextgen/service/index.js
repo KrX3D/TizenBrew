@@ -331,19 +331,6 @@ module.exports.onStart = function () {
                             }
                             break;
                         }
-                        case 'setSourceMode': {
-                            const normalizedMode = sourceMode === 'direct' ? 'direct' : 'cdn';
-                            const index = config.modules.findIndex(m => (typeof m === 'string' ? m : m.name || m.module) === module);
-                            if (index !== -1) {
-                                if (typeof config.modules[index] === 'string') {
-                                    config.modules[index] = { name: config.modules[index], sourceMode: normalizedMode };
-                                } else {
-                                    config.modules[index].sourceMode = normalizedMode;
-                                }
-                                writeConfig(config);
-                            }
-                            break;
-                        }
                         case 'autolaunch': {
                             config.autoLaunchModule = module;
                             writeConfig(config);
