@@ -4,54 +4,54 @@ const fetch = require('node-fetch');
 function parseModuleEntry(entry) {
     if (typeof entry === 'string') {
         return {
-            name: entry,
+            moduleName: entry,
             sourceMode: 'cdn'
         };
     }
 
     if (entry && typeof entry === 'object') {
         return {
-            name: entry.name || '',
+            moduleName: entry.name || entry.module || '',
             sourceMode: entry.sourceMode === 'direct' ? 'direct' : 'cdn'
         };
     }
 
-    return { name: '', sourceMode: 'cdn' };
+    return {
+        moduleName: '',
+        sourceMode: 'cdn'
+    };
 }
 
-function buildPackageJsonUrl(moduleName, sourceMode) {
-    const cacheBuster = `?t=${Date.now()}`;
-
+function buildPackageUrl(moduleName, sourceMode, cacheBuster) {
     if (moduleName.startsWith('gh/')) {
-        const repo = moduleName.substring(3);
-        if (sourceMode === 'direct') {
-            return `https://raw.githubusercontent.com/${repo}/main/package.json${cacheBuster}`;
+        const parts = moduleName.split('/');
+        if (parts.length >= 3) {
+            const user = parts[1];
+            const repo = parts[2];
+            if (sourceMode === 'direct') {
+                return `https://raw.githubusercontent.com/${user}/${repo}/main/package.json${cacheBuster}`;
+            }
+            return `https://cdn.jsdelivr.net/gh/${user}/${repo}/package.json${cacheBuster}`;
         }
-
-        return `https://cdn.jsdelivr.net/gh/${repo}/package.json${cacheBuster}`;
     }
 
-    if (moduleName.startsWith('npm/')) {
-        const npmName = moduleName.substring(4);
-        if (sourceMode === 'direct') {
-            return `https://unpkg.com/${npmName}/package.json${cacheBuster}`;
-        }
-
-        return `https://cdn.jsdelivr.net/npm/${npmName}/package.json${cacheBuster}`;
+    const npmName = moduleName.replace(/^npm\//, '');
+    if (sourceMode === 'direct') {
+        return `https://unpkg.com/${npmName}/package.json${cacheBuster}`;
     }
-
     return `https://cdn.jsdelivr.net/${moduleName}/package.json${cacheBuster}`;
 }
 
 function loadModules() {
     const config = readConfig();
-    const modules = config.modules || [];
+    const modules = config.modules;
 
     const modulePromises = modules.map(entry => {
-        const parsedEntry = parseModuleEntry(entry);
-        const module = parsedEntry.name;
-        const sourceMode = parsedEntry.sourceMode;
-        const url = buildPackageJsonUrl(module, sourceMode);
+        const { moduleName: module, sourceMode } = parseModuleEntry(entry);
+        if (!module) return null;
+
+        const cacheBuster = `?t=${Date.now()}`;
+        const url = buildPackageUrl(module, sourceMode, cacheBuster);
 
         return fetch(url)
             .then(res => res.json())
@@ -65,7 +65,12 @@ function loadModules() {
                     name: splitData[1],
                     type: splitData[0]
                 }
-                const versionedModule = module;
+                let versionedModule = module;
+                if (module.startsWith('gh/')) {
+                    versionedModule = `${module}@main`;
+                } else if (moduleJson.version) {
+                    versionedModule = `${module}@${moduleJson.version}`;
+                }
 
                 const appProxyUrl = `http://127.0.0.1:8081/module/${encodeURIComponent(versionedModule)}/${moduleJson.appPath}?sourceMode=${sourceMode}`;
 
@@ -73,11 +78,10 @@ function loadModules() {
                     moduleData = {
                         fullName: module,
                         versionedFullName: versionedModule,
-                        sourceMode,
                         appName: moduleJson.appName,
                         version: moduleJson.version,
                         name: moduleMetadata.name,
-                        appPath: `http://127.0.0.1:8081/module/${encodeURIComponent(versionedModule)}/${moduleJson.appPath}?sourceMode=${sourceMode}`,
+                        appPath: appProxyUrl,
                         keys: moduleJson.keys ? moduleJson.keys : [],
                         moduleType: moduleMetadata.type,
                         packageType: moduleJson.packageType,
@@ -89,7 +93,6 @@ function loadModules() {
                     moduleData = {
                         fullName: module,
                         versionedFullName: versionedModule,
-                        sourceMode,
                         appName: moduleJson.appName,
                         version: moduleJson.version,
                         name: moduleMetadata.name,
@@ -108,7 +111,6 @@ function loadModules() {
                     appName: 'Unknown Module',
                     name: moduleMetadata.name,
                     fullName: module,
-                    sourceMode,
                     appPath: '',
                     keys: [],
                     moduleType: moduleMetadata.type,
@@ -136,7 +138,6 @@ function loadModules() {
                     appName: 'Unknown Module',
                     name: moduleMetadata.name,
                     fullName: module,
-                    sourceMode,
                     appPath: '',
                     keys: [],
                     moduleType: moduleMetadata.type,
