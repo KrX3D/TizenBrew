@@ -238,16 +238,6 @@ function AddModule() {
         setFocus('sn:focusable-item-1');
     };
 
-    useEffect(() => {
-        const timer = setInterval(() => {
-            if (submittedRef.current) return;
-            if (!name || !ref.current) return;
-            if (document.activeElement !== ref.current) submit();
-        }, 300);
-
-        return () => clearInterval(timer);
-    }, [name]);
-
     const example = moduleType === 'gh' ? 'reisxd/TizenTube' : '@foxreis/tizentube';
 
     return (
