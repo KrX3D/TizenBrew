@@ -9,6 +9,14 @@ function classNames(...classes) {
     return classes.filter(Boolean).join(' ')
 }
 
+function getModuleTypeLabel(module) {
+    if (module?.moduleType) {
+        return String(module.moduleType).toUpperCase();
+    }
+
+    return module?.fullName?.startsWith('gh/') ? 'GH' : 'NPM';
+}
+
 function Item({ children, module, id, state }) {
     const { t } = useTranslation();
     const { ref, focused } = useFocusable();
@@ -112,12 +120,12 @@ export default function ModuleManager() {
                             {module.appName} ({module.version})
                         </h3>
                         <p className='text-gray-400 mt-2 text-sm'>
-                            {`${(module.moduleType || '').toUpperCase()} ${(module.sourceMode || 'cdn').toUpperCase()}`}
+                            {`${getModuleTypeLabel(module)} ${(module.sourceMode || 'cdn').toUpperCase()}`}
                         </p>
                         <p className='text-gray-400 mt-1 text-xs break-all'>
                             {(module.fullName || '').replace(/^(npm|gh)\//, '')}
                         </p>
-                        <p className='text-gray-300 mt-3 text-base/7'>
+                        <p className='text-gray-300 mt-6 text-base/7'>
                             {module.description}
                         </p>
                     </Item>
