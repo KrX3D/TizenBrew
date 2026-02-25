@@ -67,8 +67,6 @@ function loadModules() {
                 }
                 const versionedModule = module;
 
-                const appProxyUrl = `http://127.0.0.1:8081/module/${encodeURIComponent(versionedModule)}/${moduleJson.appPath}?sourceMode=${sourceMode}`;
-
                 if (moduleJson.packageType === 'app') {
                     moduleData = {
                         fullName: module,

@@ -17,46 +17,50 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             client.Debugger.enable();
 
             client.on('Runtime.executionContextCreated', (msg) => {
-                if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
-                    const expression = `
-                    const script = document.createElement('script');
-                    script.src = 'https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.mainFile}?v=${Date.now()}';
-                    document.head.appendChild(script);
-                    `;
-                    client.Runtime.evaluate({ expression, contextId: msg.context.id });
-                } else if (mdl.name !== '' && mdl.evaluateScriptOnDocumentStart) {
-                    const cache = modulesCache.get(mdl.fullName);
-                    const clientConnection = clientConn.get('wsConn');
-                    if (cache) {
-                        client.Page.addScriptToEvaluateOnNewDocument({ expression: cache });
-                        sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
-                    } else {
-                        fetch(`https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.mainFile}`).then(res => res.text()).then(modFile => {
-                            modulesCache.set(mdl.fullName, modFile);
-                            sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
-                            client.Page.addScriptToEvaluateOnNewDocument({ expression: modFile });
-                        }).catch(e => {
-                            sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
-                            client.Page.addScriptToEvaluateOnNewDocument({ expression: `alert("Failed to load module: '${mdl.fullName}'. Please relaunch TizenBrew to try again.")` });
-                        });
-                    }
+                let webapisContent = bridgedWebApisCode;
+                const fs = require('fs');
 
-                    // 2. Inject WebAPIs
-                    if (!window.webapis || !window.webapis.avplay) {
-                        ${webapisContent ? `
+                if (!webapisContent) {
+                    const possiblePaths = [
+                        cachedWebApisPath,
+                        '/usr/share/nginx/html/webapis/webapis.js',
+                        '/usr/tv/webapis/webapis.js',
+                        '/usr/share/webapis/webapis.js',
+                        '/usr/bin/webapis/webapis.js',
+                        '/opt/share/webapp/webapis/webapis.js',
+                        '/usr/lib/tizen-webapis/webapis.js'
+                    ].filter(p => p);
+
+                    for (const p of possiblePaths) {
                         try {
-                            ${webapisContent}
-                            console.log("[TizenBrew] WebAPI Injected via Code.");
-                        } catch(e) { console.error("Injection Error:", e); }
-                        ` : `
-                        var s = document.createElement("script");
-                        s.src = "http://127.0.0.1:8081/webapis.js";
-                        document.head.appendChild(s);
-                        console.log("[TizenBrew] WebAPI Injected via Script Tag.");
-                        `}
+                            if (fs.existsSync(p)) {
+                                console.log('[Debugger] Found webapis.js at ' + p);
+                                webapisContent = fs.readFileSync(p, 'utf8');
+                                break;
+                            }
+                        } catch (e) { }
                     }
-                })();
-                `;
+                }
+
+                // THE INJECTION
+                let webApisInjection = '';
+                if (webapisContent) {
+                    webApisInjection = 'try { eval(' + JSON.stringify(webapisContent) + '); console.log("[TizenBrew] WebAPI Injected via Code."); } catch(e) { console.error("Injection Error:", e); }';
+                } else {
+                    webApisInjection = 'var s = document.createElement("script"); s.src = "http://127.0.0.1:8081/webapis.js"; document.head.appendChild(s); console.log("[TizenBrew] WebAPI Injected via Script Tag.");';
+                }
+
+                const injectionCode = [
+                    '(function() {',
+                    'if (window.__tizentube_injected) return;',
+                    'window.__tizentube_injected = true;',
+                    'console.log("[TizenBrew] Starting API Injection...");',
+                    'if (!window.tizen && window.parent && window.parent.tizen) { window.tizen = window.parent.tizen; }',
+                    'if (!window.webapis || !window.webapis.avplay) {',
+                    webApisInjection,
+                    '}',
+                    '})();'
+                ].join('\n');
 
                 client.Runtime.evaluate({ expression: injectionCode, contextId: msg.context.id });
                 client.Page.addScriptToEvaluateOnNewDocument({ expression: injectionCode });
