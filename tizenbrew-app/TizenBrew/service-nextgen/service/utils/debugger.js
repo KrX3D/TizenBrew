@@ -40,6 +40,11 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             client.Page.enable();
 
             client.on('Runtime.executionContextCreated', (msg) => {
+                // Ensure we only inject into the main YouTube TV frame, not iframes or workers
+                const origin = msg.context.origin || '';
+                const isMainFrame = (origin.includes('youtube.com') || origin.includes('googlevideo.com')) && !msg.context.name;
+                if (!isMainFrame) return;
+
                 let webapisContent = bridgedWebApisCode;
                 const fs = require('fs');
 
@@ -85,10 +90,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                             console.log("[TizenBrew] WebAPI Injected via Code.");
                         } catch(e) { console.error("Injection Error:", e); }
                         ` : `
-                        var s = document.createElement("script");
-                        s.src = "http://127.0.0.1:8081/webapis.js";
-                        document.head.appendChild(s);
-                        console.log("[TizenBrew] WebAPI Injected via Script Tag.");
+                        console.warn("[TizenBrew] WebAPIs not available on disk, bridged code not ready. Cannot inject WebAPIs without a valid script source.");
                         `}
                     }
                 })();
