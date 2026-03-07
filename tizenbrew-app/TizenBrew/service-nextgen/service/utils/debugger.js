@@ -101,8 +101,12 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                 if (mdl.name !== '') {
                     const proxyModule = encodeURIComponent(mdl.versionedFullName || mdl.fullName);
                     const modUrl = 'http://127.0.0.1:8081/module/' + proxyModule + '/' + mdl.mainFile + '?v=' + Date.now();
-                    const modExpression = 'var s = document.createElement("script"); s.src = "' + modUrl + '"; (document.head || document.documentElement).appendChild(s);';
-                    client.Runtime.evaluate({ expression: modExpression, contextId: msg.context.id });
+                    fetch(modUrl).then(res => res.text()).then(scriptContent => {
+                        client.Runtime.evaluate({ expression: scriptContent, contextId: msg.context.id });
+                        console.log("[Debugger] Module Injected via Code.");
+                    }).catch(err => {
+                        console.log('[Debugger] Failed to fetch module script: ' + err);
+                    });
                 }
             });
 
