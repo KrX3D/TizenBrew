@@ -96,6 +96,81 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                 })();
                 `;
 
+                if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
+                    const cache = modulesCache.get(mdl.fullName);
+                    if (cache) {
+                        client.Runtime.evaluate({ expression: cache, contextId: msg.context.id });
+                    } else {
+                        fetch(`https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.mainFile}`).then(res => res.text()).then(modFile => {
+                            modulesCache.set(mdl.fullName, modFile);
+                            client.Runtime.evaluate({ expression: modFile, contextId: msg.context.id });
+                        }).catch(e => {
+                            client.Runtime.evaluate({ expression: `alert("Failed to load module: '${mdl.fullName}'. Please relaunch TizenBrew to try again.")`, contextId: msg.context.id });
+                        });
+                    }
+                } else if (mdl.name !== '' && mdl.evaluateScriptOnDocumentStart) {
+                    const cacheKey = mdl.versionedFullName || mdl.fullName;
+                    const clientConnection = clientConn.get('wsConn');
+
+                    // Construct Raw GitHub URL for server-side fetch
+                    // Strip jsDelivr prefixes (gh/, npm/) to get clean user/repo
+                    function getGitHubRepo(name) {
+                        if (name.startsWith('gh/')) return name.substring(3);
+                        if (name.startsWith('npm/')) return null; // npm packages can't use raw GitHub
+                        return name;
+                    }
+
+                    let fetchUrl;
+                    const cleanName = mdl.versionedFullName || mdl.fullName;
+                    if (cleanName.includes('@')) {
+                        const [rawRepo, tag] = cleanName.split('@');
+                        const repo = getGitHubRepo(rawRepo);
+                        if (repo) {
+                            fetchUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${mdl.mainFile}`;
+                        } else {
+                            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.mainFile}`;
+                        }
+                    } else {
+                        const repo = getGitHubRepo(cleanName);
+                        if (repo) {
+                            fetchUrl = `https://raw.githubusercontent.com/${repo}/main/${mdl.mainFile}`;
+                        } else {
+                            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.mainFile}`;
+                        }
+                    }
+                    // Append cache buster
+                    fetchUrl += `?v=${Date.now()}`;
+
+                    const cache = modulesCache.get(cacheKey);
+
+                    if (cache) {
+                        client.Page.addScriptToEvaluateOnNewDocument({ expression: cache });
+                        sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
+                    } else {
+                        fetch(fetchUrl).then(res => res.text()).then(modFile => {
+                            modulesCache.set(cacheKey, modFile);
+                            sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
+                            client.Page.addScriptToEvaluateOnNewDocument({ expression: modFile });
+                        }).catch(e => {
+                            sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
+                            client.Page.addScriptToEvaluateOnNewDocument({ expression: `alert("Failed to load module: '${mdl.fullName}'. Please relaunch TizenBrew to try again.")` });
+                        });
+                    }
+
+                    // 2. Inject WebAPIs
+                    if (!window.webapis || !window.webapis.avplay) {
+                        ${webapisContent ? `
+                        try {
+                            ${webapisContent}
+                            console.log("[TizenBrew] WebAPI Injected via Code.");
+                        } catch(e) { console.error("Injection Error:", e); }
+                        ` : `
+                        console.warn("[TizenBrew] WebAPIs not available on disk, bridged code not ready. Cannot inject WebAPIs without a valid script source.");
+                        `}
+                    }
+                })();
+                `;
+
                 client.Runtime.evaluate({ expression: injectionCode, contextId: msg.context.id });
                 client.Page.addScriptToEvaluateOnNewDocument({ source: injectionCode });
 
