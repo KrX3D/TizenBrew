@@ -156,6 +156,34 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                             client.Page.addScriptToEvaluateOnNewDocument({ expression: `alert("Failed to load module: '${mdl.fullName}'. Please relaunch TizenBrew to try again.")` });
                         });
                     }
+
+                    // 2. Inject WebAPIs
+                    if (!window.webapis || !window.webapis.avplay) {
+                        ${webapisContent ? `
+                        try {
+                            ${webapisContent}
+                            console.log("[TizenBrew] WebAPI Injected via Code.");
+                        } catch(e) { console.error("Injection Error:", e); }
+                        ` : `
+                        console.warn("[TizenBrew] WebAPIs not available on disk, bridged code not ready. Cannot inject WebAPIs without a valid script source.");
+                        `}
+                    }
+                })();
+                `;
+
+                client.Runtime.evaluate({ expression: injectionCode, contextId: msg.context.id });
+                client.Page.addScriptToEvaluateOnNewDocument({ source: injectionCode });
+
+                // Module Injection
+                if (mdl.name !== '') {
+                    const proxyModule = encodeURIComponent(mdl.versionedFullName || mdl.fullName);
+                    const modUrl = 'http://127.0.0.1:8081/module/' + proxyModule + '/' + mdl.mainFile + '?v=' + Date.now();
+                    fetch(modUrl).then(res => res.text()).then(scriptContent => {
+                        client.Runtime.evaluate({ expression: scriptContent, contextId: msg.context.id });
+                        console.log("[Debugger] Module Injected via Code.");
+                    }).catch(err => {
+                        console.log('[Debugger] Failed to fetch module script: ' + err);
+                    });
                 }
             });
 
