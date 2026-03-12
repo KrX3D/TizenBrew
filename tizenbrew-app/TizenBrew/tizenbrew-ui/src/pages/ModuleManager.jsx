@@ -28,17 +28,12 @@ function Item({ children, module, id, state, onRemove }) {
         if (deleteConfirm) {
             state.client.send({
                 type: Events.ModuleAction,
-                payload: {
-                    action: 'remove',
-                    module: module.fullName
-                }
+                payload: { action: 'remove', module: module.fullName }
             });
-
             state.client.send({
                 type: Events.GetModules,
                 payload: true
             });
-
             onRemove(module.appName);
             setFocus('sn:focusable-item-1');
         }
@@ -92,51 +87,6 @@ export default function ModuleManager() {
     const { t } = useTranslation();
     const { toasts, toast } = useToast();
 
-    // When navigating back from AddModule, a `?added=npm/foo` param signals
-    // we should watch the next module reload and report success or failure.
-    const pendingAdd = loc.query.added ? decodeURIComponent(loc.query.added) : null;
-    const pendingAddHandled = useRef(false);
-    const pendingToastId = useRef(null);
-
-    useEffect(() => {
-        if (!pendingAdd || pendingAddHandled.current) return;
-        if (!state?.sharedData?.modules) return;
-
-        pendingAddHandled.current = true;
-
-        // Dismiss the "adding" loading toast if it's still showing
-        if (pendingToastId.current !== null) {
-            toast.dismiss(pendingToastId.current);
-            pendingToastId.current = null;
-        }
-
-        const shortName = pendingAdd.split('/').slice(1).join('/');
-        const found = state.sharedData.modules.find(m => m.fullName === pendingAdd);
-
-        if (found && found.appName !== 'Unknown Module') {
-            toast.success(`✓ "${found.appName}" added successfully!`);
-        } else if (found && found.appName === 'Unknown Module') {
-            toast.error(`Could not find module "${shortName}". Check the name and try again.`);
-        } else {
-            // Module list refreshed but module isn't there — add didn't persist
-            toast.error(`Failed to add "${shortName}". It may not exist.`);
-        }
-
-        // Clean up query param from URL without re-render loop
-        loc.route('/tizenbrew-ui/dist/index.html/module-manager', true);
-    }, [state?.sharedData?.modules, pendingAdd]);
-
-    // Show a persistent loading toast while waiting for modules to reload
-    // after navigating back from AddModule
-    useEffect(() => {
-        if (!pendingAdd || pendingAddHandled.current) return;
-        const shortName = pendingAdd.split('/').slice(1).join('/');
-        pendingToastId.current = toast.loading(`Adding "${shortName}"…`);
-        return () => {
-            if (pendingToastId.current !== null) toast.dismiss(pendingToastId.current);
-        };
-    }, [pendingAdd]);
-
     function handleRemove(appName) {
         toast.info(`"${appName}" removed.`);
     }
@@ -185,41 +135,105 @@ function AddModule() {
     const ref = useRef(null);
     const { t } = useTranslation();
     const { toasts, toast } = useToast();
-    const submitted = useRef(false);
+
+    // Whether we're actively waiting for a GetModules response
+    const [waiting, setWaiting] = useState(false);
+    const waitingFor = useRef(null);  // full module name, e.g. "npm/tizentube"
+    const toastId = useRef(null);
+    // Snapshot of the modules array reference at submit time so we can
+    // detect when the list has actually been refreshed by the service
+    const moduleSnapshot = useRef(null);
 
     useEffect(() => {
-        ref.current.focus();
+        ref.current?.focus();
     }, [ref]);
 
+    // Watch for the modules list to update AFTER we submitted.
+    // We compare by reference: a new array means GetModules responded.
+    useEffect(() => {
+        if (!waiting || !waitingFor.current) return;
+        const modules = state?.sharedData?.modules;
+        if (!modules) return;
+        // Same reference as before submit → response hasn't arrived yet
+        if (modules === moduleSnapshot.current) return;
+
+        const fullName = waitingFor.current;
+        const shortName = fullName.split('/').slice(1).join('/');
+        const found = modules.find(m => m.fullName === fullName);
+
+        if (found && found.appName !== 'Unknown Module') {
+            toast.resolve(toastId.current, 'success',
+                `✓ "${found.appName}" (${found.version}) added!`
+            );
+            setTimeout(() => {
+                loc.route('/tizenbrew-ui/dist/index.html/module-manager');
+                setFocus('sn:focusable-item-1');
+            }, 1500);
+        } else if (found && found.appName === 'Unknown Module') {
+            // Service fetched but got no valid package.json
+            toast.resolve(toastId.current, 'error',
+                loc.query.type === 'npm'
+                    ? `"${shortName}" not found on jsDelivr. New npm packages can take up to 24h to appear — try the gh/ type instead.`
+                    : `"${shortName}" not found on GitHub. Check the user/repo name.`
+            );
+        } else {
+            // Module wasn't saved at all
+            toast.resolve(toastId.current, 'error',
+                `"${shortName}" could not be added. Check the name and try again.`
+            );
+        }
+
+        setWaiting(false);
+        waitingFor.current = null;
+        toastId.current = null;
+        moduleSnapshot.current = null;
+    }, [state?.sharedData?.modules, waiting]);
+
+    // 15s safety net in case the service never responds
+    useEffect(() => {
+        if (!waiting) return;
+        const timeout = setTimeout(() => {
+            if (!waiting) return;
+            toast.resolve(toastId.current, 'error',
+                'No response from the service after 15s. Is it still running?'
+            );
+            setWaiting(false);
+            waitingFor.current = null;
+            toastId.current = null;
+            moduleSnapshot.current = null;
+        }, 15000);
+        return () => clearTimeout(timeout);
+    }, [waiting]);
+
     function handleSubmit() {
-        if (submitted.current) return;
+        if (waiting) return;
 
         const trimmed = name.trim();
         if (!trimmed) {
-            // Empty — just go back quietly
             loc.route('/tizenbrew-ui/dist/index.html/module-manager');
             setFocus('sn:focusable-item-1');
             return;
         }
 
-        submitted.current = true;
-        const fullName = `${loc.query.type}/${trimmed}`;
-
-        // Validate basic format
-        if (!trimmed.match(/^[a-zA-Z0-9@._/-]+$/)) {
-            toast.error('Invalid module name. Use letters, numbers, @, ., -, / only.');
-            submitted.current = false;
+        if (!trimmed.match(/^[a-zA-Z0-9@._\-\/]+$/)) {
+            toast.error('Invalid module name — use letters, numbers, @, ., -, / only.');
             return;
         }
 
-        toast.loading(`Adding "${trimmed}"…`);
+        const fullName = `${loc.query.type}/${trimmed}`;
+
+        // Snapshot current modules reference before triggering reload
+        moduleSnapshot.current = state?.sharedData?.modules ?? null;
+
+        toastId.current = toast.loading(
+            loc.query.type === 'gh'
+                ? `Fetching "${trimmed}" from raw.githubusercontent.com…`
+                : `Fetching "${trimmed}" from cdn.jsdelivr.net…`
+        );
 
         state.client.send({
             type: Events.ModuleAction,
-            payload: {
-                action: 'add',
-                module: fullName
-            }
+            payload: { action: 'add', module: fullName }
         });
 
         state.client.send({
@@ -227,14 +241,8 @@ function AddModule() {
             payload: true
         });
 
-        // Navigate back; ModuleManager will watch for the result via ?added=
-        setTimeout(() => {
-            loc.route(
-                `/tizenbrew-ui/dist/index.html/module-manager?added=${encodeURIComponent(fullName)}`,
-                true
-            );
-            setFocus('sn:focusable-item-1');
-        }, 200);
+        waitingFor.current = fullName;
+        setWaiting(true);
     }
 
     return (
@@ -250,18 +258,38 @@ function AddModule() {
                             type="text"
                             ref={ref}
                             value={name}
-                            className="w-full p-2 rounded-lg bg-gray-800 text-gray-200"
+                            disabled={waiting}
+                            className={classNames(
+                                'w-full p-2 rounded-lg bg-gray-800 text-gray-200 transition-opacity',
+                                waiting ? 'opacity-50 cursor-not-allowed' : ''
+                            )}
                             onChange={(e) => setName(e.target.value)}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') handleSubmit();
-                                if (e.key === 'Escape') {
+                                if (e.key === 'Escape' && !waiting) {
                                     loc.route('/tizenbrew-ui/dist/index.html/module-manager');
                                     setFocus('sn:focusable-item-1');
                                 }
                             }}
-                            onBlur={handleSubmit}
+                            onBlur={() => {
+                                if (waiting) return;
+                                if (name.trim()) {
+                                    handleSubmit();
+                                } else {
+                                    loc.route('/tizenbrew-ui/dist/index.html/module-manager');
+                                    setFocus('sn:focusable-item-1');
+                                }
+                            }}
                             placeholder={t('moduleManager.moduleName', { type: loc.query.type })}
                         />
+                        {waiting && (
+                            <p className='text-slate-400 text-lg mt-4 animate-pulse'>
+                                {loc.query.type === 'gh'
+                                    ? 'Checking raw.githubusercontent.com…'
+                                    : 'Checking cdn.jsdelivr.net…'
+                                }
+                            </p>
+                        )}
                     </div>
                 </div>
             </div>
