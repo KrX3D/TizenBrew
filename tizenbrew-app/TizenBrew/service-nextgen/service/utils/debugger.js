@@ -156,25 +156,13 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                             client.Page.addScriptToEvaluateOnNewDocument({ expression: `alert("Failed to load module: '${mdl.fullName}'. Please relaunch TizenBrew to try again.")` });
                         });
                     }
+                }
 
-                    // 2. Inject WebAPIs
-                    if (!window.webapis || !window.webapis.avplay) {
-                        ${webapisContent ? `
-                        try {
-                            ${webapisContent}
-                            console.log("[TizenBrew] WebAPI Injected via Code.");
-                        } catch(e) { console.error("Injection Error:", e); }
-                        ` : `
-                        console.warn("[TizenBrew] WebAPIs not available on disk, bridged code not ready. Cannot inject WebAPIs without a valid script source.");
-                        `}
-                    }
-                })();
-                `;
-
+                // Always evaluate injectionCode and register it for new documents
                 client.Runtime.evaluate({ expression: injectionCode, contextId: msg.context.id });
                 client.Page.addScriptToEvaluateOnNewDocument({ source: injectionCode });
 
-                // Module Injection
+                // Module Injection via proxy
                 if (mdl.name !== '') {
                     const proxyModule = encodeURIComponent(mdl.versionedFullName || mdl.fullName);
                     const modUrl = 'http://127.0.0.1:8081/module/' + proxyModule + '/' + mdl.mainFile + '?v=' + Date.now();
