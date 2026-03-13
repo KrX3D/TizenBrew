@@ -6,6 +6,11 @@ import { useLocation } from 'preact-iso';
 import { useTranslation } from 'react-i18next';
 import { ToastContainer, useToast } from '../components/Toast.jsx';
 
+const DEFAULTS = {
+    npm: '@krx3d/tizentube2',
+    gh: 'krx3d/tizentube',
+};
+
 function classNames(...classes) {
     return classes.filter(Boolean).join(' ')
 }
@@ -15,25 +20,15 @@ function Item({ children, module, id, state, onRemove }) {
     const { ref, focused } = useFocusable();
     useEffect(() => {
         if (focused) {
-            ref.current.scrollIntoView({
-                behavior: 'smooth',
-                block: 'center',
-                inline: 'center',
-            });
+            ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
         }
     }, [focused, ref]);
 
     function handleOnClick() {
         const deleteConfirm = confirm(t('moduleManager.confirmDelete', { packageName: module.appName }));
         if (deleteConfirm) {
-            state.client.send({
-                type: Events.ModuleAction,
-                payload: { action: 'remove', module: module.fullName }
-            });
-            state.client.send({
-                type: Events.GetModules,
-                payload: true
-            });
+            state.client.send({ type: Events.ModuleAction, payload: { action: 'remove', module: module.fullName } });
+            state.client.send({ type: Events.GetModules, payload: true });
             onRemove(module.appName);
             setFocus('sn:focusable-item-1');
         }
@@ -59,11 +54,7 @@ function ItemBasic({ children, onClick }) {
     const { ref, focused } = useFocusable();
     useEffect(() => {
         if (focused) {
-            ref.current.scrollIntoView({
-                behavior: 'smooth',
-                block: 'center',
-                inline: 'center',
-            });
+            ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
         }
     }, [focused, ref]);
 
@@ -129,32 +120,34 @@ export default function ModuleManager() {
 }
 
 function AddModule() {
-    const [name, setName] = useState('');
     const loc = useLocation();
     const { state } = useContext(GlobalStateContext);
-    const ref = useRef(null);
     const { t } = useTranslation();
     const { toasts, toast } = useToast();
 
-    // Whether we're actively waiting for a GetModules response
-    const [waiting, setWaiting] = useState(false);
-    const waitingFor = useRef(null);  // full module name, e.g. "npm/tizentube"
+    const type = loc.query.type || 'npm';
+    const [name, setName] = useState(DEFAULTS[type] || '');
+
+    const inputRef = useRef(null);
+    // Use a ref for the in-flight guard so it's synchronous — no closure stale-value issues
+    const submittingRef = useRef(false);
+    const waitingFor = useRef(null);
     const toastId = useRef(null);
-    // Snapshot of the modules array reference at submit time so we can
-    // detect when the list has actually been refreshed by the service
     const moduleSnapshot = useRef(null);
+    const [waiting, setWaiting] = useState(false);
 
     useEffect(() => {
-        ref.current?.focus();
-    }, [ref]);
+        // Small delay so spatial navigation doesn't immediately steal focus back
+        const t = setTimeout(() => inputRef.current?.focus(), 100);
+        return () => clearTimeout(t);
+    }, []);
 
-    // Watch for the modules list to update AFTER we submitted.
-    // We compare by reference: a new array means GetModules responded.
+    // Watch for modules list to change reference (= service responded to GetModules)
     useEffect(() => {
-        if (!waiting || !waitingFor.current) return;
+        if (!submittingRef.current) return;
         const modules = state?.sharedData?.modules;
         if (!modules) return;
-        // Same reference as before submit → response hasn't arrived yet
+        // Not changed yet — wait for the real response
         if (modules === moduleSnapshot.current) return;
 
         const fullName = waitingFor.current;
@@ -162,51 +155,46 @@ function AddModule() {
         const found = modules.find(m => m.fullName === fullName);
 
         if (found && found.appName !== 'Unknown Module') {
-            toast.resolve(toastId.current, 'success',
-                `✓ "${found.appName}" (${found.version}) added!`
-            );
+            toast.resolve(toastId.current, 'success', `✓ "${found.appName}" (${found.version}) added!`);
             setTimeout(() => {
                 loc.route('/tizenbrew-ui/dist/index.html/module-manager');
                 setFocus('sn:focusable-item-1');
             }, 1500);
-        } else if (found && found.appName === 'Unknown Module') {
-            // Service fetched but got no valid package.json
-            toast.resolve(toastId.current, 'error',
-                loc.query.type === 'npm'
-                    ? `"${shortName}" not found on jsDelivr. New npm packages can take up to 24h to appear — try the gh/ type instead.`
-                    : `"${shortName}" not found on GitHub. Check the user/repo name.`
-            );
+        } else if (found) {
+            // Came back as Unknown Module — CDN miss
+            const hint = type === 'npm'
+                ? `Not found on jsDelivr. New npm packages can take up to 24h — try "gh" type for instant GitHub access.`
+                : `Not found on GitHub. Double-check the user/repo name.`;
+            toast.resolve(toastId.current, 'error', `"${shortName}" — ${hint}`);
         } else {
-            // Module wasn't saved at all
-            toast.resolve(toastId.current, 'error',
-                `"${shortName}" could not be added. Check the name and try again.`
-            );
+            toast.resolve(toastId.current, 'error', `"${shortName}" could not be added. Check the name and try again.`);
         }
 
-        setWaiting(false);
+        submittingRef.current = false;
         waitingFor.current = null;
         toastId.current = null;
         moduleSnapshot.current = null;
-    }, [state?.sharedData?.modules, waiting]);
+        setWaiting(false);
+    }, [state?.sharedData?.modules]);
 
-    // 15s safety net in case the service never responds
+    // 15s timeout safety net
     useEffect(() => {
         if (!waiting) return;
-        const timeout = setTimeout(() => {
-            if (!waiting) return;
-            toast.resolve(toastId.current, 'error',
-                'No response from the service after 15s. Is it still running?'
-            );
-            setWaiting(false);
+        const timer = setTimeout(() => {
+            if (!submittingRef.current) return;
+            toast.resolve(toastId.current, 'error', 'No response from service after 15s. Is it still running?');
+            submittingRef.current = false;
             waitingFor.current = null;
             toastId.current = null;
             moduleSnapshot.current = null;
+            setWaiting(false);
         }, 15000);
-        return () => clearTimeout(timeout);
+        return () => clearTimeout(timer);
     }, [waiting]);
 
     function handleSubmit() {
-        if (waiting) return;
+        // Synchronous guard — prevents double-fire from Enter + blur both triggering
+        if (submittingRef.current) return;
 
         const trimmed = name.trim();
         if (!trimmed) {
@@ -220,29 +208,28 @@ function AddModule() {
             return;
         }
 
-        const fullName = `${loc.query.type}/${trimmed}`;
+        const fullName = `${type}/${trimmed}`;
 
-        // Snapshot current modules reference before triggering reload
+        submittingRef.current = true;
         moduleSnapshot.current = state?.sharedData?.modules ?? null;
 
         toastId.current = toast.loading(
-            loc.query.type === 'gh'
+            type === 'gh'
                 ? `Fetching "${trimmed}" from raw.githubusercontent.com…`
                 : `Fetching "${trimmed}" from cdn.jsdelivr.net…`
         );
 
-        state.client.send({
-            type: Events.ModuleAction,
-            payload: { action: 'add', module: fullName }
-        });
-
-        state.client.send({
-            type: Events.GetModules,
-            payload: true
-        });
+        state.client.send({ type: Events.ModuleAction, payload: { action: 'add', module: fullName } });
+        state.client.send({ type: Events.GetModules, payload: true });
 
         waitingFor.current = fullName;
         setWaiting(true);
+    }
+
+    function handleCancel() {
+        if (submittingRef.current) return;
+        loc.route('/tizenbrew-ui/dist/index.html/module-manager');
+        setFocus('sn:focusable-item-1');
     }
 
     return (
@@ -250,13 +237,13 @@ function AddModule() {
             <ToastContainer toasts={toasts} onDismiss={toast.dismiss} />
             <div className="relative isolate lg:px-8">
                 <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
-                    <div className='relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw]'>
+                    <div className='relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 w-[30vw]'>
                         <p className='text-gray-400 text-xl mb-3'>
-                            {t('moduleManager.moduleName', { type: loc.query.type })}
+                            {t('moduleManager.moduleName', { type })}
                         </p>
                         <input
                             type="text"
-                            ref={ref}
+                            ref={inputRef}
                             value={name}
                             disabled={waiting}
                             className={classNames(
@@ -266,29 +253,33 @@ function AddModule() {
                             onChange={(e) => setName(e.target.value)}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') handleSubmit();
-                                if (e.key === 'Escape' && !waiting) {
-                                    loc.route('/tizenbrew-ui/dist/index.html/module-manager');
-                                    setFocus('sn:focusable-item-1');
-                                }
+                                if (e.key === 'Escape') handleCancel();
                             }}
-                            onBlur={() => {
-                                if (waiting) return;
-                                if (name.trim()) {
-                                    handleSubmit();
-                                } else {
-                                    loc.route('/tizenbrew-ui/dist/index.html/module-manager');
-                                    setFocus('sn:focusable-item-1');
-                                }
-                            }}
-                            placeholder={t('moduleManager.moduleName', { type: loc.query.type })}
+                            placeholder={DEFAULTS[type] || ''}
                         />
-                        {waiting && (
+
+                        {waiting ? (
                             <p className='text-slate-400 text-lg mt-4 animate-pulse'>
-                                {loc.query.type === 'gh'
+                                {type === 'gh'
                                     ? 'Checking raw.githubusercontent.com…'
                                     : 'Checking cdn.jsdelivr.net…'
                                 }
                             </p>
+                        ) : (
+                            <div className='flex gap-3 mt-4'>
+                                <button
+                                    onClick={handleSubmit}
+                                    className='flex-1 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xl font-semibold transition-colors'
+                                >
+                                    {t('moduleManager.addModule')}
+                                </button>
+                                <button
+                                    onClick={handleCancel}
+                                    className='py-2 px-4 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-xl transition-colors'
+                                >
+                                    Cancel
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>
