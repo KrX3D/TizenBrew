@@ -5,6 +5,7 @@ const initialState = {
     sharedData: {
         debugStatus: {
             rwiDebug: false,
+            webDebug: false,   // PR #209: added — service sends this field
             appDebug: false,
             tizenDebug: false
         },

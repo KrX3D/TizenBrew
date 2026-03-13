@@ -22,10 +22,7 @@ class Client {
         this.socket = new WebSocket('ws://localhost:8081');
         this.socket.onopen = this.onOpen.bind(this);
         this.socket.onmessage = this.onMessage.bind(this);
-        // Reload on error so the service reconnect flow in app.jsx runs
         this.socket.onerror = () => location.reload();
-        // NOTE: no onclose handler — a transient close during service startup
-        // would cause an infinite reload loop if we reload here.
         this.pendingEvents = [];
         this.modulesLoaded = false;
         this.modules = [];
@@ -67,11 +64,19 @@ class Client {
             }
 
             case Events.GetDebugStatus: {
+                // PR #209: normalize webDebug/appDebug — service may use either field name
+                const normalizedPayload = {
+                    rwiDebug:   Boolean(payload && payload.rwiDebug),
+                    webDebug:   Boolean(payload && (payload.webDebug || payload.appDebug)),
+                    appDebug:   Boolean(payload && (payload.webDebug || payload.appDebug)),
+                    tizenDebug: Boolean(payload && payload.tizenDebug),
+                };
+
                 const state = this.context.state;
-                state.sharedData.debugStatus = payload;
+                state.sharedData.debugStatus = normalizedPayload;
                 this.context.dispatch({ type: 'SET_SHARED_DATA', payload: state.sharedData });
 
-                if (!payload.rwiDebug && !payload.appDebug && !payload.tizenDebug) {
+                if (!normalizedPayload.rwiDebug && !normalizedPayload.webDebug && !normalizedPayload.tizenDebug) {
                     this.send({ type: Events.CanLaunchInDebug });
                 } else {
                     this.send({ type: Events.GetModules });
@@ -85,6 +90,7 @@ class Client {
                     this.send({ type: Events.ReLaunchInDebug, payload: { tvIP } });
                     tizen.application.getCurrentApplication().exit();
                 } else if (payload === null) {
+                    // Should no longer happen with PR #208 fix, but kept as safety net
                     this.send({ type: Events.CanLaunchInDebug });
                 } else {
                     this.context.dispatch({
@@ -146,14 +152,11 @@ class Client {
             }
 
             case Events.ResetModules: {
-                // payload: { success, deleted, notFound, dirListings }
                 this.context.dispatch({ type: 'SET_RESET_MODULES_RESULT', payload });
                 break;
             }
 
             case Events.Error: {
-                // Service sent an error — log it. The 10s safety timeout in Settings.jsx
-                // will surface it to the user if it was triggered by ResetModules.
                 console.error('[WebSocketClient] Service error:', payload);
                 break;
             }
@@ -162,7 +165,9 @@ class Client {
 
     handleCanLaunchModules(payload) {
         const debugStatus = this.context.state.sharedData.debugStatus;
+        // PR #209: set both aliases
         debugStatus.webDebug = true;
+        debugStatus.appDebug = true;
         this.context.dispatch({ type: 'SET_DEBUG_STATUS', payload: debugStatus });
 
         if (payload) {

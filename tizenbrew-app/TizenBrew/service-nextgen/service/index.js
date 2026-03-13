@@ -18,12 +18,11 @@ module.exports.onStart = function () {
         WebSocket = require('ws-new');
     }
 
-
     const app = express();
     let deviceIP;
     const isTizen3 = tizen.systeminfo.getCapability('http://tizen.org/feature/platform.version').startsWith('3.0');
 
-    // HTTP Proxy for modules 
+    // HTTP Proxy for modules
     app.all('*', (req, res) => {
         if (req.url === '/webapis.js') {
             const { getWebApisCode } = require('./utils/debugger.js');
@@ -39,27 +38,23 @@ module.exports.onStart = function () {
             const splittedUrl = req.url.split('/');
             const encodedModuleName = splittedUrl[2];
             const moduleName = decodeURIComponent(encodedModuleName);
-            // Append timestamp to ensure we don't hit any intermediate caches for proxy requests
             const cacheBuster = `?t=${Date.now()}`;
 
             let upstreamUrl;
             const filePath = req.url.replace(`/module/${encodedModuleName}/`, '');
 
-            // Strip jsDelivr prefixes to get clean GitHub user/repo
             function getGitHubRepo(name) {
                 if (name.startsWith('gh/')) return name.substring(3);
                 if (name.startsWith('npm/')) return null;
                 return name;
             }
 
-            // Check if versioned
             if (moduleName.includes('@')) {
                 const [rawRepo, tag] = moduleName.split('@');
                 const repo = getGitHubRepo(rawRepo);
                 if (repo) {
                     upstreamUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${filePath}`;
                 } else {
-                    // npm package, fallback to jsDelivr
                     upstreamUrl = `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
                 }
             } else {
@@ -88,13 +83,28 @@ module.exports.onStart = function () {
 
     let adbClient;
     let canLaunchInDebug = null;
-    fetch('http://127.0.0.1:8001/api/v2/').then(res => res.json())
-        .then(json => {
-            canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
-        });
+
+    // PR #208: fetch THEN respond — never return null/stale value
+    function refreshCanLaunchInDebugStatus() {
+        return fetch('http://127.0.0.1:8001/api/v2/')
+            .then(res => res.json())
+            .then(json => {
+                canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
+                return canLaunchInDebug;
+            })
+            .catch(() => {
+                canLaunchInDebug = false;
+                return canLaunchInDebug;
+            });
+    }
+
+    refreshCanLaunchInDebugStatus();
+
+    // PR #209: include appDebug alias alongside webDebug
     const inDebug = {
         tizenDebug: false,
         webDebug: false,
+        appDebug: false,
         rwiDebug: false
     };
 
@@ -119,7 +129,13 @@ module.exports.onStart = function () {
 
     loadModules().then(modules => {
         modulesCache = modules;
-        const serviceModuleList = readConfig().autoLaunchServiceList;
+        const config = readConfig();
+        // PR #207: normalize autoLaunchServiceList — may be stored as string or array
+        const rawList = config.autoLaunchServiceList;
+        const serviceModuleList = Array.isArray(rawList)
+            ? rawList.filter(Boolean)
+            : (rawList ? [rawList] : []);
+
         if (serviceModuleList.length > 0) {
             serviceModuleList.forEach(module => {
                 const service = modules.find(m => m.name === module);
@@ -143,7 +159,6 @@ module.exports.onStart = function () {
 
         adbClient._stream.on('connect', () => {
             console.log('ADB connection established');
-            //Launch app
             const tbPackageId = tizen.application.getAppInfo().packageId;
             const shellCmd = adbClient.createStream(`shell:0 debug ${tbPackageId}.TizenBrewStandalone${isTizen3 ? ' 0' : ''}`);
             shellCmd.on('data', function dataIncoming(data) {
@@ -205,11 +220,10 @@ module.exports.onStart = function () {
                     break;
                 }
                 case Events.CanLaunchInDebug: {
-                    fetch('http://127.0.0.1:8001/api/v2/').then(res => res.json())
-                        .then(json => {
-                            canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
-                        });
-                    wsConn.send(wsConn.Event(Events.CanLaunchInDebug, canLaunchInDebug));
+                    // PR #208: wait for fresh status before responding — never returns stale null
+                    refreshCanLaunchInDebugStatus().then((status) => {
+                        wsConn.send(wsConn.Event(Events.CanLaunchInDebug, status));
+                    });
                     break;
                 }
                 case Events.ReLaunchInDebug: {
@@ -241,7 +255,9 @@ module.exports.onStart = function () {
                     currentModule.serviceFile = mdl.serviceFile;
 
                     if (mdl.packageType === 'app') {
+                        // PR #209: reset both aliases
                         inDebug.webDebug = false;
+                        inDebug.appDebug = false;
                         inDebug.tizenDebug = false;
                     } else {
                         currentModule.mainFile = mdl.mainFile;
@@ -321,7 +337,8 @@ module.exports.onStart = function () {
                             break;
                         }
                         case 'autolaunchService': {
-                            config.autoLaunchServiceList = module;
+                            // PR #207: always store as array
+                            config.autoLaunchServiceList = module ? [module] : [];
                             writeConfig(config);
                             break;
                         }
@@ -335,9 +352,7 @@ module.exports.onStart = function () {
                 }
                 case Events.ResetModules: {
                     const fs = require('fs');
-                    const path = require('path');
- 
-                    // Candidate config paths
+
                     const configPaths = [
                         '/home/owner/share/tizenbrewConfig.json',
                         '/home/owner/apps_rw/tizenbrewConfig.json',
@@ -345,7 +360,7 @@ module.exports.onStart = function () {
                         '/opt/share/tizenbrewConfig.json',
                         '/tmp/tizenbrewConfig.json',
                     ];
- 
+
                     const deleted = [];
                     const notFound = [];
                     for (const p of configPaths) {
@@ -360,11 +375,9 @@ module.exports.onStart = function () {
                             notFound.push(p + ' (err: ' + e.message + ')');
                         }
                     }
- 
-                    // Reset in-memory cache
+
                     modulesCache = [];
- 
-                    // Collect directory listings to help diagnose where config lives
+
                     const dirsToList = [
                         '/home/owner/share',
                         '/home/owner/apps_rw',
@@ -380,10 +393,9 @@ module.exports.onStart = function () {
                             dirListings[dir] = '(err: ' + e.message + ')';
                         }
                     }
- 
-                    const success = deleted.length > 0;
+
                     wsConn.send(wsConn.Event(Events.ResetModules, {
-                        success,
+                        success: deleted.length > 0,
                         deleted,
                         notFound,
                         dirListings,
