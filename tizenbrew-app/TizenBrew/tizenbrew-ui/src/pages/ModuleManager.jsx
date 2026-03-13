@@ -4,7 +4,7 @@ import { GlobalStateContext } from '../components/ClientContext.jsx';
 import { Events } from '../components/WebSocketClient.js';
 import { useLocation } from 'preact-iso';
 import { useTranslation } from 'react-i18next';
-import { getGlobalToast, setPendingAdd } from '../components/Toast.jsx';
+import { getGlobalToast } from '../components/Toast.jsx';
 
 const DEFAULTS = {
     npm: '@krx3d/tizentube2',
@@ -101,7 +101,8 @@ export default function ModuleManager() {
 
 function AddModule() {
     const loc = useLocation();
-    const { state } = useContext(GlobalStateContext);
+    const context = useContext(GlobalStateContext);
+    const { state } = context;
     const { t } = useTranslation();
 
     const type = loc.query.type || 'npm';
@@ -110,37 +111,32 @@ function AddModule() {
     const inputRef = useRef(null);
     const didSubmitRef = useRef(false);
 
-    // Keep a ref to the current name so the window keydown closure is never stale
+    // Refs so the window keydown closure always reads the freshest values
     const nameRef = useRef(name);
     useEffect(() => { nameRef.current = name; }, [name]);
 
-    // Keep a ref to current modules for the snapshot
-    const stateRef = useRef(state);
-    useEffect(() => { stateRef.current = state; }, [state]);
+    const contextRef = useRef(context);
+    useEffect(() => { contextRef.current = context; }, [context]);
 
     useEffect(() => {
         inputRef.current?.focus();
     }, []);
 
     useEffect(() => {
-        // Capture Back (10009) BEFORE main.jsx's handler so we can intercept it.
-        // { capture: true } means this fires in the capture phase, before bubble-phase
-        // listeners like the one in main.jsx.
         function onBackKey(e) {
             if (e.keyCode !== 10009) return;
 
-            // Stop main.jsx from calling history.back() — we handle navigation ourselves
+            // Take control of Back — stop main.jsx from calling history.back()
             e.stopImmediatePropagation();
 
             if (didSubmitRef.current) return;
             didSubmitRef.current = true;
 
             const trimmed = nameRef.current.trim();
+            const ctx = contextRef.current;
             const toast = getGlobalToast();
-            const currentState = stateRef.current;
 
             if (!trimmed) {
-                // Nothing entered — just go back without submitting
                 loc.route('/tizenbrew-ui/dist/index.html/module-manager');
                 setFocus('sn:focusable-item-1');
                 return;
@@ -148,22 +144,24 @@ function AddModule() {
 
             const fullName = `${type}/${trimmed}`;
 
+            // Snapshot the version NUMBER at this exact moment
+            const snapshotVersion = ctx.state.sharedData.modulesVersion;
+
             const toastId = toast
                 ? toast.loading(type === 'gh'
                     ? `Fetching "${trimmed}" from GitHub…`
                     : `Fetching "${trimmed}" from jsDelivr CDN…`)
                 : null;
 
-            // Write pending record before navigating — App.jsx watcher resolves it
-            setPendingAdd({
-                fullName,
-                type,
-                toastId,
-                snapshot: currentState?.sharedData?.modules ?? null,
+            // Write pendingAdd into context — App.jsx watcher reads it from there.
+            // No module-scope variables, no bundler splitting risk.
+            ctx.dispatch({
+                type: 'SET_PENDING_ADD',
+                payload: { fullName, type, toastId, snapshotVersion }
             });
 
-            currentState.client.send({ type: Events.ModuleAction, payload: { action: 'add', module: fullName } });
-            currentState.client.send({ type: Events.GetModules, payload: true });
+            ctx.state.client.send({ type: Events.ModuleAction, payload: { action: 'add', module: fullName } });
+            ctx.state.client.send({ type: Events.GetModules, payload: true });
 
             loc.route('/tizenbrew-ui/dist/index.html/module-manager');
             setFocus('sn:focusable-item-1');
@@ -172,19 +170,13 @@ function AddModule() {
         window.addEventListener('keydown', onBackKey, { capture: true });
         return () => window.removeEventListener('keydown', onBackKey, { capture: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [type]); // type never changes mid-session; name/state accessed via refs
+    }, [type]);
 
     function handleInputKeyDown(e) {
-        // Keep arrow keys for cursor movement inside the input
-        if (e.keyCode === 37 || e.keyCode === 39) {
+        // Keep arrow keys for cursor movement, stop spatial nav eating them
+        if (e.keyCode === 37 || e.keyCode === 38 || e.keyCode === 39 || e.keyCode === 40) {
             e.stopPropagation();
         }
-        // Swallow up/down so spatial nav doesn't steal them
-        if (e.keyCode === 38 || e.keyCode === 40) {
-            e.stopPropagation();
-        }
-        // Remote OK / Enter inside the input — do nothing special,
-        // user is expected to press Fertig to close keyboard then Back to confirm
     }
 
     return (

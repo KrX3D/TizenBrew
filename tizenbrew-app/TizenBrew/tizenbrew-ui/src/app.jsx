@@ -12,7 +12,7 @@ import './components/i18n.js';
 import UserAgentSettings from './pages/UserAgentSettings.jsx';
 import { ExclamationCircleIcon } from '@heroicons/react/16/solid';
 import { useTranslation } from 'react-i18next';
-import { useToast, ToastContainer, setGlobalToast, getPendingAdd, clearPendingAdd } from './components/Toast.jsx';
+import { useToast, ToastContainer, setGlobalToast } from './components/Toast.jsx';
 
 export default function App() {
   const headerRef = useRef(null);
@@ -21,58 +21,66 @@ export default function App() {
   const { t } = useTranslation();
   const { toasts, toast } = useToast();
 
-  // Register toast globally so any component can use it across navigations
+  // Register toast globally so AddModule can call it from a window keydown handler
   useEffect(() => {
     setGlobalToast(toast);
   }, [toast]);
 
-  // ── Global pending-add watcher ──────────────────────────────────────────
-  // Lives here so it NEVER unmounts regardless of which route the user is on.
-  // AddModule writes a pending record via setPendingAdd() before navigating away;
-  // this effect detects the GetModules response and resolves the toast.
-  const prevModulesRef = useRef(null);
-  useEffect(() => {
-    const modules = context.state.sharedData.modules;
-    const p = getPendingAdd();
+  // ── Pending-add watcher ────────────────────────────────────────────────────
+  // pendingAdd lives in context state so it's guaranteed to be the same object
+  // across every component — no module bundling / import splitting concerns.
+  // We watch modulesVersion (increments on every SET_MODULES) so this fires
+  // exactly once per GetModules response.
+  const timeoutRef = useRef(null);
 
-    if (!p || !modules) {
-      prevModulesRef.current = modules;
-      return;
+  useEffect(() => {
+    const { pendingAdd, modulesVersion, modules } = context.state.sharedData;
+    if (!pendingAdd) return;
+
+    // modulesVersion hasn't advanced past what was captured at submit time
+    if (modulesVersion <= pendingAdd.snapshotVersion) return;
+
+    // A new GetModules response arrived — resolve the toast
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
     }
 
-    // Only act when the list reference actually changed (= server responded)
-    if (modules === prevModulesRef.current) return;
-    prevModulesRef.current = modules;
-
-    const shortName = p.fullName.split('/').slice(1).join('/');
-    const found = modules.find(m => m.fullName === p.fullName);
+    const shortName = pendingAdd.fullName.split('/').slice(1).join('/');
+    const found = modules ? modules.find(m => m.fullName === pendingAdd.fullName) : null;
 
     if (found && found.appName !== 'Unknown Module') {
-      toast.resolve(p.toastId, 'success', `✓ "${found.appName}" (${found.version}) added!`);
+      toast.resolve(pendingAdd.toastId, 'success', `✓ "${found.appName}" (${found.version}) added!`);
     } else if (found) {
-      const hint = p.type === 'npm'
+      const hint = pendingAdd.type === 'npm'
         ? 'Not found on jsDelivr. New npm packages can take up to 24h — use "gh" for instant GitHub access.'
         : 'Not found on GitHub. Double-check the user/repo name.';
-      toast.resolve(p.toastId, 'error', `"${shortName}" — ${hint}`);
+      toast.resolve(pendingAdd.toastId, 'error', `"${shortName}" — ${hint}`);
     } else {
-      toast.resolve(p.toastId, 'error', `"${shortName}" could not be added. Check the name and try again.`);
+      toast.resolve(pendingAdd.toastId, 'error', `"${shortName}" could not be added. Check the name and try again.`);
     }
 
-    clearPendingAdd();
-  }, [context.state.sharedData.modules]);
+    context.dispatch({ type: 'SET_PENDING_ADD', payload: null });
+  }, [context.state.sharedData.modulesVersion]);
 
-  // 15s timeout for pending add
+  // Start 15s timeout whenever a new pendingAdd is registered
   useEffect(() => {
-    const p = getPendingAdd();
-    if (!p) return;
-    const timer = setTimeout(() => {
-      const stillPending = getPendingAdd();
-      if (!stillPending) return;
-      toast.resolve(stillPending.toastId, 'error', 'No response from service after 15s. Is it still running?');
-      clearPendingAdd();
+    const { pendingAdd } = context.state.sharedData;
+    if (!pendingAdd) return;
+
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      const p = context.state.sharedData.pendingAdd;
+      if (!p) return;
+      toast.resolve(p.toastId, 'error', 'No response from service after 15s. Is it still running?');
+      context.dispatch({ type: 'SET_PENDING_ADD', payload: null });
+      timeoutRef.current = null;
     }, 15000);
-    return () => clearTimeout(timer);
-  }, [context.state.sharedData.modules]);
+
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [context.state.sharedData.pendingAdd]);
 
   useEffect(() => {
     if (context.state.sharedData.error.disappear) {
@@ -96,7 +104,6 @@ export default function App() {
   return (
     <ErrorBoundary>
       <LocationProvider>
-        {/* Global toast container — always visible regardless of route */}
         <ToastContainer toasts={toasts} onDismiss={toast.dismiss} />
         <Header ref={headerRef} />
         <div className="bg-slate-800 text-white overflow-hidden" style={{ height: `calc(100vh - ${headerHeight}px)` }}>
