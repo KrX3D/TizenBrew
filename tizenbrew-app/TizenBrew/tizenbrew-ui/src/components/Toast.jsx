@@ -40,17 +40,8 @@ const ICON_STYLES = {
 
 function ToastItem({ id, variant, message, onDismiss }) {
     const [visible, setVisible] = useState(false);
-
-    useEffect(() => {
-        // Trigger enter animation
-        requestAnimationFrame(() => setVisible(true));
-    }, []);
-
-    function dismiss() {
-        setVisible(false);
-        setTimeout(() => onDismiss(id), 300);
-    }
-
+    useEffect(() => { requestAnimationFrame(() => setVisible(true)); }, []);
+    function dismiss() { setVisible(false); setTimeout(() => onDismiss(id), 300); }
     return (
         <div
             style={{
@@ -60,15 +51,10 @@ function ToastItem({ id, variant, message, onDismiss }) {
             }}
             className={`flex items-start gap-3 px-4 py-3 rounded-xl border shadow-2xl min-w-[22vw] max-w-[40vw] ${STYLES[variant]}`}
         >
-            <span className={`mt-0.5 flex-shrink-0 ${ICON_STYLES[variant]}`}>
-                {ICONS[variant]}
-            </span>
+            <span className={`mt-0.5 flex-shrink-0 ${ICON_STYLES[variant]}`}>{ICONS[variant]}</span>
             <span className="text-xl leading-snug flex-1">{message}</span>
             {variant !== 'loading' && (
-                <button
-                    onClick={dismiss}
-                    className="flex-shrink-0 opacity-50 hover:opacity-100 transition-opacity ml-1 mt-0.5"
-                >
+                <button onClick={dismiss} className="flex-shrink-0 opacity-50 hover:opacity-100 transition-opacity ml-1 mt-0.5">
                     <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                     </svg>
@@ -78,24 +64,11 @@ function ToastItem({ id, variant, message, onDismiss }) {
     );
 }
 
-/**
- * Renders toasts in the bottom-right corner.
- * `toasts` is an array of { id, variant, message } objects.
- */
 export function ToastContainer({ toasts, onDismiss }) {
     return (
-        <div
-            style={{ position: 'fixed', bottom: '4vh', right: '3vw', zIndex: 9999 }}
-            className="flex flex-col gap-3 items-end"
-        >
+        <div style={{ position: 'fixed', bottom: '4vh', right: '3vw', zIndex: 9999 }} className="flex flex-col gap-3 items-end">
             {toasts.map(t => (
-                <ToastItem
-                    key={t.id}
-                    id={t.id}
-                    variant={t.variant}
-                    message={t.message}
-                    onDismiss={onDismiss}
-                />
+                <ToastItem key={t.id} id={t.id} variant={t.variant} message={t.message} onDismiss={onDismiss} />
             ))}
         </div>
     );
@@ -103,31 +76,19 @@ export function ToastContainer({ toasts, onDismiss }) {
 
 let _nextId = 1;
 
-/**
- * useToast() — returns { toasts, toast }
- *
- * toast.loading(msg)  → id  (persists until dismissed or replaced)
- * toast.success(msg, duration?)
- * toast.error(msg, duration?)
- * toast.info(msg, duration?)
- * toast.dismiss(id)
- * toast.resolve(id, variant, msg, duration?) — replace a loading toast with a result
- */
 export function useToast() {
     const [toasts, setToasts] = useState([]);
 
     function add(variant, message, duration) {
         const id = _nextId++;
         setToasts(prev => [...prev, { id, variant, message }]);
-        if (duration !== 0 && variant !== 'loading') {
+        if (variant !== 'loading' && duration !== 0) {
             setTimeout(() => dismiss(id), duration ?? 4000);
         }
         return id;
     }
 
-    function dismiss(id) {
-        setToasts(prev => prev.filter(t => t.id !== id));
-    }
+    function dismiss(id) { setToasts(prev => prev.filter(t => t.id !== id)); }
 
     function resolve(id, variant, message, duration) {
         setToasts(prev => prev.map(t => t.id === id ? { ...t, variant, message } : t));
@@ -145,3 +106,9 @@ export function useToast() {
 
     return { toasts, toast };
 }
+
+// Global singleton — App.jsx registers its toast instance here so any component
+// can fire toasts that survive route changes (because the state lives in App).
+let _globalToast = null;
+export function setGlobalToast(t) { _globalToast = t; }
+export function getGlobalToast() { return _globalToast; }

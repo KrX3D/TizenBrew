@@ -12,28 +12,33 @@ import './components/i18n.js';
 import UserAgentSettings from './pages/UserAgentSettings.jsx';
 import { ExclamationCircleIcon } from '@heroicons/react/16/solid';
 import { useTranslation } from 'react-i18next';
+import { useToast, ToastContainer, setGlobalToast } from './components/Toast.jsx';
 
 export default function App() {
   const headerRef = useRef(null);
   const [headerHeight, setHeaderHeight] = useState(0);
   const context = useContext(GlobalStateContext);
   const { t } = useTranslation();
+  const { toasts, toast } = useToast();
   window.dispatch = context.dispatch;
   window.state = context.state;
+
+  // Register the global toast instance so pages can use it across navigation
+  useEffect(() => {
+    setGlobalToast(toast);
+  }, [toast]);
 
   useEffect(() => {
     if (context.state.sharedData.error.disappear) {
       setTimeout(() => {
         context.dispatch({
           type: 'SET_ERROR',
-          payload: {
-            message: null,
-            disappear: false
-          }
+          payload: { message: null, disappear: false }
         });
       }, 5000);
     }
   }, [context.state.sharedData.error.disappear]);
+
   useEffect(() => {
     setHeaderHeight(headerRef.current.base.clientHeight);
   }, [headerRef]);
@@ -45,10 +50,11 @@ export default function App() {
     }
   }, []);
 
-
   return (
     <ErrorBoundary>
       <LocationProvider>
+        {/* Global toast container — lives here so toasts survive route changes */}
+        <ToastContainer toasts={toasts} onDismiss={toast.dismiss} />
         <Header ref={headerRef} />
         <div className="bg-slate-800 text-white overflow-hidden" style={{ height: `calc(100vh - ${headerHeight}px)` }}>
           <div className={`flex justify-center ${!context.state.sharedData.error.message ? 'hidden' : ''}`}>
@@ -74,42 +80,25 @@ export default function App() {
   );
 }
 
-
 function startService(context) {
   const testWS = new WebSocket('ws://localhost:8081');
 
   testWS.onerror = () => {
     const pkgId = tizen.application.getCurrentApplication().appInfo.packageId;
-
     const serviceId = pkgId + ".StandaloneService";
-
     tizen.application.launchAppControl(
       new tizen.ApplicationControl("http://tizen.org/appcontrol/operation/service"),
       serviceId,
       function () {
-        context.dispatch({
-          type: 'SET_STATE',
-          payload: 'service.started'
-        });
-
+        context.dispatch({ type: 'SET_STATE', payload: 'service.started' });
         window.location.reload();
       },
-      function (e) {
-        alert("Launch Service failed: " + e.message);
-      }
+      function (e) { alert("Launch Service failed: " + e.message); }
     );
   }
 
   testWS.onopen = () => {
-    context.dispatch({
-      type: 'SET_STATE',
-      payload: 'service.alreadyRunning'
-    });
-
-    context.dispatch({
-      type: 'SET_CLIENT',
-      payload: new Client(context)
-    });
-
+    context.dispatch({ type: 'SET_STATE', payload: 'service.alreadyRunning' });
+    context.dispatch({ type: 'SET_CLIENT', payload: new Client(context) });
   }
 }
