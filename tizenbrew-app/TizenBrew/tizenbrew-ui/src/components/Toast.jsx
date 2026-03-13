@@ -107,8 +107,15 @@ export function useToast() {
     return { toasts, toast };
 }
 
-// Global singleton — App.jsx registers its toast instance here so any component
-// can fire toasts that survive route changes (because the state lives in App).
+// ── Global singletons ─────────────────────────────────────────────────────────
+// App.jsx registers its toast instance; other components call getGlobalToast().
 let _globalToast = null;
 export function setGlobalToast(t) { _globalToast = t; }
 export function getGlobalToast() { return _globalToast; }
+
+// pendingAdd is written by AddModule and read by the App-level watcher.
+// Kept here (module scope) so it survives any component unmounting.
+let _pendingAdd = null;
+export function setPendingAdd(p) { _pendingAdd = p; }
+export function getPendingAdd()  { return _pendingAdd; }
+export function clearPendingAdd() { _pendingAdd = null; }

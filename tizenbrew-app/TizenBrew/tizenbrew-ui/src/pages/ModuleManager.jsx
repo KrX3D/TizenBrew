@@ -4,16 +4,12 @@ import { GlobalStateContext } from '../components/ClientContext.jsx';
 import { Events } from '../components/WebSocketClient.js';
 import { useLocation } from 'preact-iso';
 import { useTranslation } from 'react-i18next';
-import { getGlobalToast } from '../components/Toast.jsx';
+import { getGlobalToast, setPendingAdd } from '../components/Toast.jsx';
 
 const DEFAULTS = {
     npm: '@krx3d/tizentube2',
     gh: 'krx3d/tizentube',
 };
-
-// Module-level — survives route changes within the same session.
-// AddModule writes here before navigating away; ModuleManager reads on mount.
-let pendingAdd = null; // { fullName, type, toastId, snapshot }
 
 function classNames(...classes) {
     return classes.filter(Boolean).join(' ')
@@ -76,47 +72,6 @@ export default function ModuleManager() {
     const { state } = useContext(GlobalStateContext);
     const loc = useLocation();
     const { t } = useTranslation();
-    const pendingRef = useRef(pendingAdd);
-
-    // Watch for module list to refresh after a pending add
-    useEffect(() => {
-        const p = pendingRef.current;
-        if (!p) return;
-        const modules = state?.sharedData?.modules;
-        if (!modules || modules === p.snapshot) return;
-
-        const toast = getGlobalToast();
-        const shortName = p.fullName.split('/').slice(1).join('/');
-        const found = modules.find(m => m.fullName === p.fullName);
-
-        if (found && found.appName !== 'Unknown Module') {
-            if (toast) toast.resolve(p.toastId, 'success', `✓ "${found.appName}" (${found.version}) added!`);
-        } else if (found) {
-            const hint = p.type === 'npm'
-                ? 'Not found on jsDelivr. New npm packages can take up to 24h — use "gh" for instant GitHub access.'
-                : 'Not found on GitHub. Double-check the user/repo name.';
-            if (toast) toast.resolve(p.toastId, 'error', `"${shortName}" — ${hint}`);
-        } else {
-            if (toast) toast.resolve(p.toastId, 'error', `"${shortName}" could not be added. Check the name and try again.`);
-        }
-
-        pendingAdd = null;
-        pendingRef.current = null;
-    }, [state?.sharedData?.modules]);
-
-    // 15s timeout if we arrived with a pending add
-    useEffect(() => {
-        const p = pendingRef.current;
-        if (!p) return;
-        const timer = setTimeout(() => {
-            if (!pendingRef.current) return;
-            const toast = getGlobalToast();
-            if (toast) toast.resolve(p.toastId, 'error', 'No response from service after 15s. Is it still running?');
-            pendingAdd = null;
-            pendingRef.current = null;
-        }, 15000);
-        return () => clearTimeout(timer);
-    }, []);
 
     return (
         <div className="relative isolate lg:px-8">
@@ -154,65 +109,82 @@ function AddModule() {
 
     const inputRef = useRef(null);
     const didSubmitRef = useRef(false);
-    // Time-based guard: ignore any blur that fires within 400ms of mount.
-    // This covers the Samsung TV / spatial nav focus-steal on mount.
-    // Does NOT require the user to type anything — works with pre-filled defaults too.
-    const blurReadyRef = useRef(false);
+
+    // Keep a ref to the current name so the window keydown closure is never stale
+    const nameRef = useRef(name);
+    useEffect(() => { nameRef.current = name; }, [name]);
+
+    // Keep a ref to current modules for the snapshot
+    const stateRef = useRef(state);
+    useEffect(() => { stateRef.current = state; }, [state]);
 
     useEffect(() => {
         inputRef.current?.focus();
-        const t = setTimeout(() => { blurReadyRef.current = true; }, 400);
-        return () => clearTimeout(t);
     }, []);
 
-    function handleSubmit() {
-        if (didSubmitRef.current) return;
-        didSubmitRef.current = true;
+    useEffect(() => {
+        // Capture Back (10009) BEFORE main.jsx's handler so we can intercept it.
+        // { capture: true } means this fires in the capture phase, before bubble-phase
+        // listeners like the one in main.jsx.
+        function onBackKey(e) {
+            if (e.keyCode !== 10009) return;
 
-        const trimmed = name.trim();
+            // Stop main.jsx from calling history.back() — we handle navigation ourselves
+            e.stopImmediatePropagation();
 
-        if (!trimmed) {
-            // Empty — just go back
+            if (didSubmitRef.current) return;
+            didSubmitRef.current = true;
+
+            const trimmed = nameRef.current.trim();
+            const toast = getGlobalToast();
+            const currentState = stateRef.current;
+
+            if (!trimmed) {
+                // Nothing entered — just go back without submitting
+                loc.route('/tizenbrew-ui/dist/index.html/module-manager');
+                setFocus('sn:focusable-item-1');
+                return;
+            }
+
+            const fullName = `${type}/${trimmed}`;
+
+            const toastId = toast
+                ? toast.loading(type === 'gh'
+                    ? `Fetching "${trimmed}" from GitHub…`
+                    : `Fetching "${trimmed}" from jsDelivr CDN…`)
+                : null;
+
+            // Write pending record before navigating — App.jsx watcher resolves it
+            setPendingAdd({
+                fullName,
+                type,
+                toastId,
+                snapshot: currentState?.sharedData?.modules ?? null,
+            });
+
+            currentState.client.send({ type: Events.ModuleAction, payload: { action: 'add', module: fullName } });
+            currentState.client.send({ type: Events.GetModules, payload: true });
+
             loc.route('/tizenbrew-ui/dist/index.html/module-manager');
             setFocus('sn:focusable-item-1');
-            return;
         }
 
-        const fullName = `${type}/${trimmed}`;
-        const snapshot = state?.sharedData?.modules ?? null;
+        window.addEventListener('keydown', onBackKey, { capture: true });
+        return () => window.removeEventListener('keydown', onBackKey, { capture: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [type]); // type never changes mid-session; name/state accessed via refs
 
-        const toast = getGlobalToast();
-        const toastId = toast
-            ? toast.loading(type === 'gh'
-                ? `Fetching "${trimmed}" from GitHub…`
-                : `Fetching "${trimmed}" from jsDelivr CDN…`)
-            : null;
-
-        state.client.send({ type: Events.ModuleAction, payload: { action: 'add', module: fullName } });
-        state.client.send({ type: Events.GetModules, payload: true });
-
-        // Hand off to ModuleManager via module-level variable before navigating
-        pendingAdd = { fullName, type, toastId, snapshot };
-
-        loc.route('/tizenbrew-ui/dist/index.html/module-manager');
-        setFocus('sn:focusable-item-1');
-    }
-
-    function handleBlur() {
-        if (!blurReadyRef.current) return; // too soon after mount, ignore
-        handleSubmit();
-    }
-
-    function handleKeyDown(e) {
-        // Prevent spatial nav from eating arrow keys inside the input
-        if (e.keyCode === 37 || e.keyCode === 38 || e.keyCode === 39 || e.keyCode === 40) {
+    function handleInputKeyDown(e) {
+        // Keep arrow keys for cursor movement inside the input
+        if (e.keyCode === 37 || e.keyCode === 39) {
             e.stopPropagation();
         }
-        // Remote "OK" / keyboard Enter
-        if (e.keyCode === 13) {
+        // Swallow up/down so spatial nav doesn't steal them
+        if (e.keyCode === 38 || e.keyCode === 40) {
             e.stopPropagation();
-            handleSubmit();
         }
+        // Remote OK / Enter inside the input — do nothing special,
+        // user is expected to press Fertig to close keyboard then Back to confirm
     }
 
     return (
@@ -228,10 +200,12 @@ function AddModule() {
                         value={name}
                         className="w-full p-2 rounded-lg bg-gray-800 text-gray-200"
                         onChange={(e) => setName(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        onBlur={handleBlur}
+                        onKeyDown={handleInputKeyDown}
                         placeholder={DEFAULTS[type] || ''}
                     />
+                    <p className='text-slate-500 text-lg mt-3'>
+                        Press Fertig to close keyboard, then Back to add
+                    </p>
                 </div>
             </div>
         </div>
