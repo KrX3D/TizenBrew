@@ -43,59 +43,91 @@ export default function Settings() {
     const { state, dispatch } = useContext(GlobalStateContext);
     const loc = useLocation();
     const { t } = useTranslation();
+
+    // null  = idle
+    // -1    = in-flight but no toast (toast unavailable)
+    // N > 0 = toast ID currently showing "loading"
     const resetToastRef = useRef(null);
     const resetTimeoutRef = useRef(null);
 
-    // Watch for ResetModules response and resolve the toast
+    // Watch for service response to ResetModules
     useEffect(() => {
         const result = state.sharedData.resetModulesResult;
-        if (!result || resetToastRef.current === null) return;
+        if (!result) return;
 
-        const toast = getGlobalToast();
-        if (!toast) return;
-
+        // Clear the safety timeout — service responded in time
         if (resetTimeoutRef.current) {
             clearTimeout(resetTimeoutRef.current);
             resetTimeoutRef.current = null;
         }
 
-        const deletedMsg = result.deleted.length > 0
-            ? `Deleted: ${result.deleted.join(', ')}`
-            : 'No config file found.';
+        const toast = getGlobalToast();
 
-        const dirInfo = Object.entries(result.dirListings || {})
-            .map(([dir, files]) => `${dir}: ${Array.isArray(files) ? files.join(', ') : files}`)
-            .join(' | ');
+        // Build a concise but informative message
+        let msg;
+        if (result.success) {
+            // Show which file was deleted
+            msg = '✓ Config deleted: ' + result.deleted.join(', ');
+        } else {
+            // Show what was found in the candidate dirs so we know where config actually lives
+            const dirLines = Object.keys(result.dirListings || {}).map(function(dir) {
+                var files = result.dirListings[dir];
+                var shortDir = dir.split('/').slice(-2).join('/');
+                var fileStr = Array.isArray(files)
+                    ? (files.length > 0 ? files.join(', ') : '(empty)')
+                    : files;
+                return shortDir + ': ' + fileStr;
+            });
+            msg = 'No config found. Dirs checked: ' + dirLines.join(' | ');
+        }
 
-        const msg = result.success
-            ? `✓ Reset complete. ${deletedMsg}`
-            : `No config deleted. ${dirInfo}`;
+        // Resolve the loading toast if we have one
+        if (toast && resetToastRef.current !== null && resetToastRef.current !== -1) {
+            toast.resolve(
+                resetToastRef.current,
+                result.success ? 'success' : 'info',
+                msg,
+                8000
+            );
+        } else if (toast) {
+            // Fallback: show a fresh toast if the loading one was lost
+            toast[result.success ? 'success' : 'info'](msg, 8000);
+        }
 
-        toast.resolve(resetToastRef.current, result.success ? 'success' : 'info', msg, 8000);
+        // Mark as idle BEFORE dispatching null (prevents a second useEffect run from acting)
         resetToastRef.current = null;
 
+        // Clear result from state
         dispatch({ type: 'SET_RESET_MODULES_RESULT', payload: null });
 
-        // Reload so the default module list is re-fetched
-        setTimeout(() => window.location.reload(), 8500);
+        // Reload after the toast has been read
+        setTimeout(function() { window.location.reload(); }, 8500);
     }, [state.sharedData.resetModulesResult]);
 
     function handleResetModules() {
+        // ── GUARD: Samsung TV fires double-click (spatial nav + main.jsx Enter handler) ──
+        // Ignore any invocation while a reset is already in flight.
+        if (resetToastRef.current !== null) return;
+
         if (!confirm('Reset all module data? This will delete your saved module list and restore defaults. The app will reload afterwards.')) return;
 
         const toast = getGlobalToast();
         if (toast) {
             resetToastRef.current = toast.loading('Resetting module data…');
+        } else {
+            resetToastRef.current = -1; // in-flight but no toast handle
         }
 
         state.client.send({ type: Events.ResetModules, payload: null });
 
-        // 10s safety timeout if service never responds
-        resetTimeoutRef.current = setTimeout(() => {
-            if (resetToastRef.current !== null && toast) {
-                toast.resolve(resetToastRef.current, 'error', 'No response from service after 10s.');
-                resetToastRef.current = null;
+        // 10s safety timeout — fires only if service never responds
+        resetTimeoutRef.current = setTimeout(function() {
+            const t2 = getGlobalToast();
+            if (t2 && resetToastRef.current !== null && resetToastRef.current !== -1) {
+                t2.resolve(resetToastRef.current, 'error', 'No response from service after 10s. Is the service still running?');
             }
+            resetToastRef.current = null;
+            resetTimeoutRef.current = null;
         }, 10000);
     }
 
@@ -137,7 +169,7 @@ export default function Settings() {
                         Reset Module Data
                     </h3>
                     <p className='text-red-300/70 mt-6 text-base/7'>
-                        Deletes your saved module list and resets to defaults. Use this if modules won't load or the config is corrupted.
+                        Deletes your saved module list and resets to defaults. Shows diagnostic info about where config lives on your TV.
                     </p>
                 </ItemBasic>
             </div>

@@ -102,80 +102,65 @@ export default function ModuleManager() {
 function AddModule() {
     const loc = useLocation();
     const context = useContext(GlobalStateContext);
-    const { state } = context;
     const { t } = useTranslation();
 
     const type = loc.query.type || 'npm';
     const [name, setName] = useState(DEFAULTS[type] || '');
 
     const inputRef = useRef(null);
+    // Prevents double-submit if Back blurs the input AND history.back() both fire
     const didSubmitRef = useRef(false);
 
-    // Refs so the window keydown closure always reads the freshest values
-    const nameRef = useRef(name);
-    useEffect(() => { nameRef.current = name; }, [name]);
-
-    const contextRef = useRef(context);
-    useEffect(() => { contextRef.current = context; }, [context]);
-
+    // Auto-open the Samsung virtual keyboard
     useEffect(() => {
         inputRef.current?.focus();
     }, []);
 
-    useEffect(() => {
-        function onBackKey(e) {
-            if (e.keyCode !== 10009) return;
+    function handleSubmit() {
+        if (didSubmitRef.current) return;
+        didSubmitRef.current = true;
 
-            // Take control of Back — stop main.jsx from calling history.back()
-            e.stopImmediatePropagation();
+        const trimmed = name.trim();
 
-            if (didSubmitRef.current) return;
-            didSubmitRef.current = true;
-
-            const trimmed = nameRef.current.trim();
-            const ctx = contextRef.current;
-            const toast = getGlobalToast();
-
-            if (!trimmed) {
-                loc.route('/tizenbrew-ui/dist/index.html/module-manager');
-                setFocus('sn:focusable-item-1');
-                return;
-            }
-
-            const fullName = `${type}/${trimmed}`;
-
-            // Snapshot the version NUMBER at this exact moment
-            const snapshotVersion = ctx.state.sharedData.modulesVersion;
-
-            const toastId = toast
-                ? toast.loading(type === 'gh'
-                    ? `Fetching "${trimmed}" from GitHub…`
-                    : `Fetching "${trimmed}" from jsDelivr CDN…`)
-                : null;
-
-            // Write pendingAdd into context — App.jsx watcher reads it from there.
-            // No module-scope variables, no bundler splitting risk.
-            ctx.dispatch({
-                type: 'SET_PENDING_ADD',
-                payload: { fullName, type, toastId, snapshotVersion }
-            });
-
-            ctx.state.client.send({ type: Events.ModuleAction, payload: { action: 'add', module: fullName } });
-            ctx.state.client.send({ type: Events.GetModules, payload: true });
-
+        // Empty → just go back, no toast
+        if (!trimmed) {
             loc.route('/tizenbrew-ui/dist/index.html/module-manager');
             setFocus('sn:focusable-item-1');
+            return;
         }
 
-        window.addEventListener('keydown', onBackKey, { capture: true });
-        return () => window.removeEventListener('keydown', onBackKey, { capture: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [type]);
+        const fullName = type + '/' + trimmed;
+        const snapshotVersion = context.state.sharedData.modulesVersion;
+        const toast = getGlobalToast();
 
-    function handleInputKeyDown(e) {
-        // Keep arrow keys for cursor movement, stop spatial nav eating them
+        const toastId = toast
+            ? toast.loading(type === 'gh'
+                ? 'Fetching "' + trimmed + '" from GitHub\u2026'
+                : 'Fetching "' + trimmed + '" from jsDelivr CDN\u2026')
+            : null;
+
+        // Store pending in context — App.jsx watcher resolves it when GetModules responds
+        context.dispatch({
+            type: 'SET_PENDING_ADD',
+            payload: { fullName, type, toastId, snapshotVersion }
+        });
+
+        context.state.client.send({ type: Events.ModuleAction, payload: { action: 'add', module: fullName } });
+        context.state.client.send({ type: Events.GetModules, payload: true });
+
+        loc.route('/tizenbrew-ui/dist/index.html/module-manager');
+        setFocus('sn:focusable-item-1');
+    }
+
+    function handleKeyDown(e) {
+        // Arrow keys: let the cursor move, don't let spatial nav steal them
         if (e.keyCode === 37 || e.keyCode === 38 || e.keyCode === 39 || e.keyCode === 40) {
             e.stopPropagation();
+        }
+        // Fertig (65376) on Samsung TV closes keyboard and blurs → onBlur fires → submit
+        // Enter (13) same behaviour for convenience
+        if (e.keyCode === 65376 || e.keyCode === 13) {
+            inputRef.current.blur();
         }
     }
 
@@ -192,11 +177,12 @@ function AddModule() {
                         value={name}
                         className="w-full p-2 rounded-lg bg-gray-800 text-gray-200"
                         onChange={(e) => setName(e.target.value)}
-                        onKeyDown={handleInputKeyDown}
+                        onKeyDown={handleKeyDown}
+                        onBlur={handleSubmit}
                         placeholder={DEFAULTS[type] || ''}
                     />
                     <p className='text-slate-500 text-lg mt-3'>
-                        Press Fertig to close keyboard, then Back to add
+                        Press Fertig to add
                     </p>
                 </div>
             </div>
