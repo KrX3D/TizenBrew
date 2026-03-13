@@ -129,7 +129,10 @@ function AddModule() {
     const [name, setName] = useState(DEFAULTS[type] || '');
 
     const inputRef = useRef(null);
-    // Use a ref for the in-flight guard so it's synchronous — no closure stale-value issues
+    // Prevent onBlur from firing as a submit on initial mount —
+    // the Samsung keyboard / spatial nav can blur the input right away
+    const blurGuard = useRef(false);
+
     const submittingRef = useRef(false);
     const waitingFor = useRef(null);
     const toastId = useRef(null);
@@ -137,18 +140,18 @@ function AddModule() {
     const [waiting, setWaiting] = useState(false);
 
     useEffect(() => {
-        // Small delay so spatial navigation doesn't immediately steal focus back
-        const t = setTimeout(() => inputRef.current?.focus(), 100);
+        // Focus the input so the Samsung keyboard opens automatically
+        inputRef.current?.focus();
+        // Allow onBlur to submit only after a short settle period
+        const t = setTimeout(() => { blurGuard.current = true; }, 600);
         return () => clearTimeout(t);
     }, []);
 
-    // Watch for modules list to change reference (= service responded to GetModules)
+    // Watch for modules list reference to change = service responded
     useEffect(() => {
         if (!submittingRef.current) return;
         const modules = state?.sharedData?.modules;
-        if (!modules) return;
-        // Not changed yet — wait for the real response
-        if (modules === moduleSnapshot.current) return;
+        if (!modules || modules === moduleSnapshot.current) return;
 
         const fullName = waitingFor.current;
         const shortName = fullName.split('/').slice(1).join('/');
@@ -156,15 +159,10 @@ function AddModule() {
 
         if (found && found.appName !== 'Unknown Module') {
             toast.resolve(toastId.current, 'success', `✓ "${found.appName}" (${found.version}) added!`);
-            setTimeout(() => {
-                loc.route('/tizenbrew-ui/dist/index.html/module-manager');
-                setFocus('sn:focusable-item-1');
-            }, 1500);
         } else if (found) {
-            // Came back as Unknown Module — CDN miss
             const hint = type === 'npm'
-                ? `Not found on jsDelivr. New npm packages can take up to 24h — try "gh" type for instant GitHub access.`
-                : `Not found on GitHub. Double-check the user/repo name.`;
+                ? 'Not found on jsDelivr. New npm packages can take up to 24h — use "gh" type for instant GitHub access.'
+                : 'Not found on GitHub. Double-check the user/repo name.';
             toast.resolve(toastId.current, 'error', `"${shortName}" — ${hint}`);
         } else {
             toast.resolve(toastId.current, 'error', `"${shortName}" could not be added. Check the name and try again.`);
@@ -193,15 +191,10 @@ function AddModule() {
     }, [waiting]);
 
     function handleSubmit() {
-        // Synchronous guard — prevents double-fire from Enter + blur both triggering
         if (submittingRef.current) return;
 
         const trimmed = name.trim();
-        if (!trimmed) {
-            loc.route('/tizenbrew-ui/dist/index.html/module-manager');
-            setFocus('sn:focusable-item-1');
-            return;
-        }
+        if (!trimmed) return;
 
         if (!trimmed.match(/^[a-zA-Z0-9@._\-\/]+$/)) {
             toast.error('Invalid module name — use letters, numbers, @, ., -, / only.');
@@ -226,10 +219,24 @@ function AddModule() {
         setWaiting(true);
     }
 
-    function handleCancel() {
+    function handleBlur() {
+        // Skip the blur that fires immediately on mount before the user has done anything
+        if (!blurGuard.current) return;
+        // Skip if we're already waiting for a result
         if (submittingRef.current) return;
-        loc.route('/tizenbrew-ui/dist/index.html/module-manager');
-        setFocus('sn:focusable-item-1');
+        handleSubmit();
+    }
+
+    function handleKeyDown(e) {
+        // Stop arrow keys from being swallowed by spatial navigation —
+        // the TV remote and Samsung keyboard both need left/right to move
+        // the text cursor inside the input field.
+        if (e.keyCode === 37 || e.keyCode === 38 || e.keyCode === 39 || e.keyCode === 40) {
+            e.stopPropagation();
+        }
+        if (e.key === 'Enter') {
+            handleSubmit();
+        }
     }
 
     return (
@@ -251,35 +258,17 @@ function AddModule() {
                                 waiting ? 'opacity-50 cursor-not-allowed' : ''
                             )}
                             onChange={(e) => setName(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSubmit();
-                                if (e.key === 'Escape') handleCancel();
-                            }}
+                            onKeyDown={handleKeyDown}
+                            onBlur={handleBlur}
                             placeholder={DEFAULTS[type] || ''}
                         />
-
-                        {waiting ? (
+                        {waiting && (
                             <p className='text-slate-400 text-lg mt-4 animate-pulse'>
                                 {type === 'gh'
                                     ? 'Checking raw.githubusercontent.com…'
                                     : 'Checking cdn.jsdelivr.net…'
                                 }
                             </p>
-                        ) : (
-                            <div className='flex gap-3 mt-4'>
-                                <button
-                                    onClick={handleSubmit}
-                                    className='flex-1 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xl font-semibold transition-colors'
-                                >
-                                    {t('moduleManager.addModule')}
-                                </button>
-                                <button
-                                    onClick={handleCancel}
-                                    className='py-2 px-4 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-xl transition-colors'
-                                >
-                                    Cancel
-                                </button>
-                            </div>
                         )}
                     </div>
                 </div>
