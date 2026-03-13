@@ -17,36 +17,7 @@ function startService(mdl, services) {
     sandbox['tizen'] = global.tizen;
     sandbox['module'] = { exports: {} };
 
-    // Strip jsDelivr prefixes to get clean GitHub user/repo
-    function getGitHubRepo(name) {
-        if (name.startsWith('gh/')) return name.substring(3);
-        if (name.startsWith('npm/')) return null;
-        return name;
-    }
-
-    // Construct Raw GitHub fetch URL
-    let fetchUrl;
-    const cleanName = mdl.versionedFullName || mdl.fullName;
-    if (cleanName.includes('@')) {
-        const [rawRepo, tag] = cleanName.split('@');
-        const repo = getGitHubRepo(rawRepo);
-        if (repo) {
-            fetchUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${mdl.serviceFile}`;
-        } else {
-            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.serviceFile}`;
-        }
-    } else {
-        const repo = getGitHubRepo(cleanName);
-        if (repo) {
-            fetchUrl = `https://raw.githubusercontent.com/${repo}/main/${mdl.serviceFile}`;
-        } else {
-            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.serviceFile}`;
-        }
-    }
-    // Append cache buster
-    fetchUrl += `?v=${Date.now()}`;
-
-    fetch(fetchUrl)
+    fetch(`https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.serviceFile}`)
         .then(res => res.text())
         .then(script => {
             services.set(mdl.fullName, {
