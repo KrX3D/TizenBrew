@@ -11,7 +11,7 @@ const DEFAULTS = {
     gh: 'krx3d/tizentube',
 };
 
-// Module-level (survives route changes within the same page session).
+// Module-level — survives route changes within the same session.
 // AddModule writes here before navigating away; ModuleManager reads on mount.
 let pendingAdd = null; // { fullName, type, toastId, snapshot }
 
@@ -76,18 +76,14 @@ export default function ModuleManager() {
     const { state } = useContext(GlobalStateContext);
     const loc = useLocation();
     const { t } = useTranslation();
-    // Ref to the snapshot so the effect closure stays fresh
     const pendingRef = useRef(pendingAdd);
 
-    // When the module list updates, check if it's a response to our pending add
+    // Watch for module list to refresh after a pending add
     useEffect(() => {
         const p = pendingRef.current;
         if (!p) return;
-
         const modules = state?.sharedData?.modules;
-        if (!modules) return;
-        // Not a new list yet — same reference as when we submitted
-        if (modules === p.snapshot) return;
+        if (!modules || modules === p.snapshot) return;
 
         const toast = getGlobalToast();
         const shortName = p.fullName.split('/').slice(1).join('/');
@@ -157,32 +153,31 @@ function AddModule() {
     const [name, setName] = useState(DEFAULTS[type] || '');
 
     const inputRef = useRef(null);
-    // Only allow blur-submit after the user has actually changed the input
-    // (guards against spatial nav or Samsung keyboard stealing focus on mount)
-    const hasChangedRef = useRef(false);
     const didSubmitRef = useRef(false);
+    // Time-based guard: ignore any blur that fires within 400ms of mount.
+    // This covers the Samsung TV / spatial nav focus-steal on mount.
+    // Does NOT require the user to type anything — works with pre-filled defaults too.
+    const blurReadyRef = useRef(false);
 
     useEffect(() => {
         inputRef.current?.focus();
+        const t = setTimeout(() => { blurReadyRef.current = true; }, 400);
+        return () => clearTimeout(t);
     }, []);
 
     function handleSubmit() {
         if (didSubmitRef.current) return;
+        didSubmitRef.current = true;
 
         const trimmed = name.trim();
+
         if (!trimmed) {
+            // Empty — just go back
             loc.route('/tizenbrew-ui/dist/index.html/module-manager');
             setFocus('sn:focusable-item-1');
             return;
         }
 
-        if (!trimmed.match(/^[a-zA-Z0-9@._\-\/]+$/)) {
-            const toast = getGlobalToast();
-            if (toast) toast.error('Invalid module name — use letters, numbers, @, ., -, / only.');
-            return;
-        }
-
-        didSubmitRef.current = true;
         const fullName = `${type}/${trimmed}`;
         const snapshot = state?.sharedData?.modules ?? null;
 
@@ -196,31 +191,28 @@ function AddModule() {
         state.client.send({ type: Events.ModuleAction, payload: { action: 'add', module: fullName } });
         state.client.send({ type: Events.GetModules, payload: true });
 
-        // Hand off to ModuleManager via module-level variable
+        // Hand off to ModuleManager via module-level variable before navigating
         pendingAdd = { fullName, type, toastId, snapshot };
 
-        // Navigate back — ModuleManager mounts and picks up pendingAdd
         loc.route('/tizenbrew-ui/dist/index.html/module-manager');
         setFocus('sn:focusable-item-1');
     }
 
+    function handleBlur() {
+        if (!blurReadyRef.current) return; // too soon after mount, ignore
+        handleSubmit();
+    }
+
     function handleKeyDown(e) {
-        // Stop arrow keys reaching spatial nav so cursor moves inside the input
+        // Prevent spatial nav from eating arrow keys inside the input
         if (e.keyCode === 37 || e.keyCode === 38 || e.keyCode === 39 || e.keyCode === 40) {
             e.stopPropagation();
         }
-        // Enter / Done
+        // Remote "OK" / keyboard Enter
         if (e.keyCode === 13) {
-            e.stopPropagation(); // prevent global main.jsx handler from also firing
+            e.stopPropagation();
             handleSubmit();
         }
-    }
-
-    function handleBlur() {
-        // Only submit on blur if the user actually changed the field.
-        // This prevents the mount-time focus steal from triggering a submit.
-        if (!hasChangedRef.current) return;
-        handleSubmit();
     }
 
     return (
@@ -235,10 +227,7 @@ function AddModule() {
                         ref={inputRef}
                         value={name}
                         className="w-full p-2 rounded-lg bg-gray-800 text-gray-200"
-                        onChange={(e) => {
-                            hasChangedRef.current = true;
-                            setName(e.target.value);
-                        }}
+                        onChange={(e) => setName(e.target.value)}
                         onKeyDown={handleKeyDown}
                         onBlur={handleBlur}
                         placeholder={DEFAULTS[type] || ''}
