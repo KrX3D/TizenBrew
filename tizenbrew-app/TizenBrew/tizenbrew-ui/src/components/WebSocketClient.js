@@ -22,10 +22,7 @@ class Client {
         this.socket = new WebSocket('ws://localhost:8081');
         this.socket.onopen = this.onOpen.bind(this);
         this.socket.onmessage = this.onMessage.bind(this);
-        // Reload on error so the service reconnect flow runs cleanly
         this.socket.onerror = () => location.reload();
-        // Also reload on close — service may have restarted
-        this.socket.onclose = () => location.reload();
         this.pendingEvents = [];
         this.modulesLoaded = false;
         this.modules = [];
@@ -150,19 +147,6 @@ class Client {
                 this.context.dispatch({ type: 'SET_RESET_MODULES_RESULT', payload });
                 break;
             }
-
-            case Events.Error: {
-                // Service sent an error string — surface it as a toast if one is pending
-                console.error('[WebSocketClient] Service error:', payload);
-                // If the service doesn't know ResetModules (old build), payload will be
-                // "Invalid event type." — show it so the user knows to reinstall
-                try {
-                    const { getGlobalToast } = require ? (() => { throw 0 })() : {};
-                } catch (_) {}
-                // Dynamic import isn't available here; Settings.jsx has its own 10s timeout
-                // which will fire with a clearer message.
-                break;
-            }
         }
     }
 
@@ -211,11 +195,6 @@ class Client {
     }
 
     send(data) {
-        if (this.socket.readyState !== WebSocket.OPEN) {
-            console.error('[Client] send() called but socket state is', this.socket.readyState, '— reloading');
-            location.reload();
-            return;
-        }
         this.socket.send(JSON.stringify(data));
     }
 }
