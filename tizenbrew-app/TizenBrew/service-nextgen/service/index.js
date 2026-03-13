@@ -333,6 +333,63 @@ module.exports.onStart = function () {
                     services.set('wsConn', wsConn);
                     break;
                 }
+                case Events.ResetModules: {
+                    const fs = require('fs');
+                    const path = require('path');
+ 
+                    // Candidate config paths
+                    const configPaths = [
+                        '/home/owner/share/tizenbrewConfig.json',
+                        '/home/owner/apps_rw/tizenbrewConfig.json',
+                        '/opt/usr/home/owner/share/tizenbrewConfig.json',
+                        '/opt/share/tizenbrewConfig.json',
+                        '/tmp/tizenbrewConfig.json',
+                    ];
+ 
+                    const deleted = [];
+                    const notFound = [];
+                    for (const p of configPaths) {
+                        try {
+                            if (fs.existsSync(p)) {
+                                fs.unlinkSync(p);
+                                deleted.push(p);
+                            } else {
+                                notFound.push(p);
+                            }
+                        } catch (e) {
+                            notFound.push(p + ' (err: ' + e.message + ')');
+                        }
+                    }
+ 
+                    // Reset in-memory cache
+                    modulesCache = [];
+ 
+                    // Collect directory listings to help diagnose where config lives
+                    const dirsToList = [
+                        '/home/owner/share',
+                        '/home/owner/apps_rw',
+                        '/opt/usr/home/owner/share',
+                    ];
+                    const dirListings = {};
+                    for (const dir of dirsToList) {
+                        try {
+                            dirListings[dir] = fs.existsSync(dir)
+                                ? fs.readdirSync(dir)
+                                : '(not found)';
+                        } catch (e) {
+                            dirListings[dir] = '(err: ' + e.message + ')';
+                        }
+                    }
+ 
+                    const success = deleted.length > 0;
+                    wsConn.send(wsConn.Event(Events.ResetModules, {
+                        success,
+                        deleted,
+                        notFound,
+                        dirListings,
+                    }));
+                    break;
+                }
                 default: {
                     wsConn.send(wsConn.Event(Events.Error, 'Invalid event type.'));
                     break;

@@ -15,7 +15,8 @@ const initialState = {
             message: null,
             dissapear: false
         },
-        pendingAdd: null  // { fullName, type, toastId, snapshotVersion }
+        pendingAdd: null,           // { fullName, type, toastId, snapshotVersion }
+        resetModulesResult: null,   // { success, deleted, notFound, dirListings }
     },
     client: null
 };
@@ -38,6 +39,8 @@ function reducer(state, action) {
             };
         case 'SET_PENDING_ADD':
             return { ...state, sharedData: { ...state.sharedData, pendingAdd: action.payload } };
+        case 'SET_RESET_MODULES_RESULT':
+            return { ...state, sharedData: { ...state.sharedData, resetModulesResult: action.payload } };
         case 'SET_DEBUG_STATUS':
             return { ...state, sharedData: { ...state.sharedData, debugStatus: action.payload } };
         case 'SET_STATE':

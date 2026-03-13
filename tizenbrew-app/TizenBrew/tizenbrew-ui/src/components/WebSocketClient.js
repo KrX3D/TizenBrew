@@ -10,9 +10,10 @@ const Events = {
     GetServiceStatuses: 7,
     Error: 8,
     CanLaunchModules: 9,
+    ModuleAction: 10,
+    ResetModules: 11,
     WebApisPath: 20,
     WebApisCode: 21,
-    ModuleAction: 10
 };
 
 class Client {
@@ -30,7 +31,6 @@ class Client {
     onOpen() {
         const data = tizen.application.getCurrentApplication().getRequestedAppControl().appControl.data;
         if (data.length > 0 && data[0].value.length > 0) {
-            // TizenBrew allows other apps to launch a specific module outside of the TizenBrew app.
             try {
                 const parsedData = JSON.parse(data[0].value[0]);
                 const moduleName = parsedData.moduleName;
@@ -38,27 +38,18 @@ class Client {
                 const args = parsedData.args;
 
                 if (!moduleName || !moduleType) {
-                    return this.send({
-                        type: Events.GetDebugStatus
-                    });
+                    return this.send({ type: Events.GetDebugStatus });
                 }
 
                 this.send({
                     type: Events.AppControlData,
-                    payload: {
-                        package: `${moduleType}/${moduleName}`,
-                        args
-                    }
+                    payload: { package: `${moduleType}/${moduleName}`, args }
                 });
             } catch (e) {
-                this.send({
-                    type: Events.GetDebugStatus
-                });
+                this.send({ type: Events.GetDebugStatus });
             }
         } else {
-            this.send({
-                type: Events.GetDebugStatus
-            });
+            this.send({ type: Events.GetDebugStatus });
         }
     }
 
@@ -68,59 +59,36 @@ class Client {
 
         switch (type) {
             case Events.AppControlData: {
-                this.send({
-                    type: Events.GetDebugStatus
-                });
+                this.send({ type: Events.GetDebugStatus });
                 break;
             }
 
             case Events.GetDebugStatus: {
                 const state = this.context.state;
                 state.sharedData.debugStatus = payload;
-                this.context.dispatch({
-                    type: 'SET_SHARED_DATA',
-                    payload: state.sharedData
-                });
+                this.context.dispatch({ type: 'SET_SHARED_DATA', payload: state.sharedData });
 
                 if (!payload.rwiDebug && !payload.appDebug && !payload.tizenDebug) {
-                    this.send({
-                        type: Events.CanLaunchInDebug
-                    });
+                    this.send({ type: Events.CanLaunchInDebug });
                 } else {
-                    this.send({
-                        type: Events.GetModules
-                    });
+                    this.send({ type: Events.GetModules });
                 }
-
                 break;
             }
 
             case Events.CanLaunchInDebug: {
                 if (payload) {
                     const tvIP = webapis.network.getIp();
-                    this.send({
-                        type: Events.ReLaunchInDebug,
-                        payload: {
-                            tvIP
-                        }
-                    });
-
+                    this.send({ type: Events.ReLaunchInDebug, payload: { tvIP } });
                     tizen.application.getCurrentApplication().exit();
                 } else if (payload === null) {
-                    this.send({
-                        type: Events.CanLaunchInDebug
-                    });
-                }
-                else {
+                    this.send({ type: Events.CanLaunchInDebug });
+                } else {
                     this.context.dispatch({
                         type: 'SET_ERROR',
-                        payload: {
-                            message: 'errors.debuggingNotEnabled',
-                            disappear: false
-                        }
+                        payload: { message: 'errors.debuggingNotEnabled', disappear: false }
                     });
                 }
-
                 break;
             }
 
@@ -129,71 +97,54 @@ class Client {
                     return setTimeout(() => this.send({ type: Events.GetModules }), 500);
                 }
 
-                this.context.dispatch({
-                    type: 'SET_MODULES',
-                    payload
-                });
-
+                this.context.dispatch({ type: 'SET_MODULES', payload });
                 this.modules = payload;
                 this.modulesLoaded = true;
 
-                this.send({
-                    type: Events.Ready
-                });
+                this.send({ type: Events.Ready });
 
-                // Send resolved webapis path
                 if (window.TIZEN_WEBAPIS_PATH) {
                     console.log('[WebSocketClient] Sending webapis path:', window.TIZEN_WEBAPIS_PATH);
-                    this.send({
-                        type: Events.WebApisPath,
-                        payload: window.TIZEN_WEBAPIS_PATH
-                    });
+                    this.send({ type: Events.WebApisPath, payload: window.TIZEN_WEBAPIS_PATH });
 
-                    // Fetch the actual code and send it to the service
                     fetch(window.TIZEN_WEBAPIS_PATH)
                         .then(res => res.text())
                         .then(code => {
                             console.log('[WebSocketClient] Sending webapis code (length: ' + code.length + ')');
-                            this.send({
-                                type: Events.WebApisCode,
-                                payload: code
-                            });
+                            this.send({ type: Events.WebApisCode, payload: code });
                         })
                         .catch(err => console.error('[WebSocketClient] Failed to fetch webapis code:', err));
                 }
 
-
                 this.processPendingEvents();
-
                 break;
             }
 
             case Events.CanLaunchModules: {
-                this.context.dispatch({
-                    type: 'SET_STATE',
-                    payload: 'service.connected'
-                });
+                this.context.dispatch({ type: 'SET_STATE', payload: 'service.connected' });
 
                 if (!this.modulesLoaded) {
                     this.pendingEvents.push({ type, payload });
                 } else {
                     this.handleCanLaunchModules(payload);
                 }
-
                 break;
             }
 
             case Events.LaunchModule: {
                 const module = this.modules.find(mdl => mdl.fullName === payload);
-
                 if (module) {
                     for (const key of module.keys) {
                         tizen.tvinputdevice.registerKey(key);
                     }
-
                     location.href = module.appPath;
                 }
+                break;
+            }
 
+            case Events.ResetModules: {
+                // payload: { success, deleted, notFound, dirListings }
+                this.context.dispatch({ type: 'SET_RESET_MODULES_RESULT', payload });
                 break;
             }
         }
@@ -202,10 +153,7 @@ class Client {
     handleCanLaunchModules(payload) {
         const debugStatus = this.context.state.sharedData.debugStatus;
         debugStatus.webDebug = true;
-        this.context.dispatch({
-            type: 'SET_DEBUG_STATUS',
-            payload: debugStatus
-        });
+        this.context.dispatch({ type: 'SET_DEBUG_STATUS', payload: debugStatus });
 
         if (payload) {
             if (payload.type === 'autolaunch' && !window.shouldDisableAutoLaunch) {
@@ -213,41 +161,26 @@ class Client {
                 if (!module) {
                     this.context.dispatch({
                         type: 'SET_ERROR',
-                        payload: {
-                            message: 'errors.moduleNotFound',
-                            args: {
-                                moduleName: payload.module
-                            },
-                            disappear: true
-                        }
+                        payload: { message: 'errors.moduleNotFound', args: { moduleName: payload.module }, disappear: true }
                     });
                     return;
                 }
                 for (const key of module.keys) {
                     tizen.tvinputdevice.registerKey(key);
                 }
-
-                this.send({
-                    type: Events.LaunchModule,
-                    payload: module
-                });
-
+                this.send({ type: Events.LaunchModule, payload: module });
                 if (!module.evaluateScriptOnDocumentStart) {
                     location.href = module.appPath;
                 }
-            }
-            else if (payload.type === 'appControl') {
+            } else if (payload.type === 'appControl') {
                 const module = payload.module;
                 for (const key of module.keys) {
                     tizen.tvinputdevice.registerKey(key);
                 }
-
-                this.send({
-                    type: Events.LaunchModule,
-                    payload: module
-                });
-
-                module.appPath.includes('?') ? location.href = `${module.appPath}&${payload.args}` : location.href = `${module.appPath}?${payload.args}`;
+                this.send({ type: Events.LaunchModule, payload: module });
+                module.appPath.includes('?')
+                    ? location.href = `${module.appPath}&${payload.args}`
+                    : location.href = `${module.appPath}?${payload.args}`;
             }
         }
     }
