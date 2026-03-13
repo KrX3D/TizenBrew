@@ -22,7 +22,10 @@ class Client {
         this.socket = new WebSocket('ws://localhost:8081');
         this.socket.onopen = this.onOpen.bind(this);
         this.socket.onmessage = this.onMessage.bind(this);
+        // Reload on error so the service reconnect flow in app.jsx runs
         this.socket.onerror = () => location.reload();
+        // NOTE: no onclose handler — a transient close during service startup
+        // would cause an infinite reload loop if we reload here.
         this.pendingEvents = [];
         this.modulesLoaded = false;
         this.modules = [];
@@ -147,6 +150,13 @@ class Client {
                 this.context.dispatch({ type: 'SET_RESET_MODULES_RESULT', payload });
                 break;
             }
+
+            case Events.Error: {
+                // Service sent an error — log it. The 10s safety timeout in Settings.jsx
+                // will surface it to the user if it was triggered by ResetModules.
+                console.error('[WebSocketClient] Service error:', payload);
+                break;
+            }
         }
     }
 
@@ -195,6 +205,10 @@ class Client {
     }
 
     send(data) {
+        if (this.socket.readyState !== WebSocket.OPEN) {
+            console.warn('[Client] send() skipped — socket not open, state:', this.socket.readyState);
+            return;
+        }
         this.socket.send(JSON.stringify(data));
     }
 }
