@@ -38,6 +38,14 @@ const ICON_STYLES = {
     info:    'text-sky-400',
 };
 
+// How long each variant stays visible by default (ms).
+// Errors and info stay much longer so they can be read on a TV from the couch.
+const DEFAULT_DURATION = {
+    success: 5000,
+    error:   12000,
+    info:    8000,
+};
+
 function ToastItem({ id, variant, message, onDismiss }) {
     const [visible, setVisible] = useState(false);
     useEffect(() => { requestAnimationFrame(() => setVisible(true)); }, []);
@@ -83,7 +91,9 @@ export function useToast() {
         const id = _nextId++;
         setToasts(prev => [...prev, { id, variant, message }]);
         if (variant !== 'loading' && duration !== 0) {
-            setTimeout(() => dismiss(id), duration ?? 4000);
+            // Use caller-supplied duration, then variant default, then 5s fallback
+            const ms = duration != null ? duration : (DEFAULT_DURATION[variant] != null ? DEFAULT_DURATION[variant] : 5000);
+            setTimeout(() => dismiss(id), ms);
         }
         return id;
     }
@@ -92,7 +102,8 @@ export function useToast() {
 
     function resolve(id, variant, message, duration) {
         setToasts(prev => prev.map(t => t.id === id ? { ...t, variant, message } : t));
-        setTimeout(() => dismiss(id), duration ?? 4000);
+        const ms = duration != null ? duration : (DEFAULT_DURATION[variant] != null ? DEFAULT_DURATION[variant] : 5000);
+        setTimeout(() => dismiss(id), ms);
     }
 
     const toast = {
