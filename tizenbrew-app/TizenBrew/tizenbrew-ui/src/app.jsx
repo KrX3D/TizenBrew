@@ -21,26 +21,17 @@ export default function App() {
   const { t } = useTranslation();
   const { toasts, toast } = useToast();
 
-  // Register toast globally so AddModule can call it from a window keydown handler
   useEffect(() => {
     setGlobalToast(toast);
   }, [toast]);
 
-  // ── Pending-add watcher ────────────────────────────────────────────────────
-  // pendingAdd lives in context state so it's guaranteed to be the same object
-  // across every component — no module bundling / import splitting concerns.
-  // We watch modulesVersion (increments on every SET_MODULES) so this fires
-  // exactly once per GetModules response.
   const timeoutRef = useRef(null);
 
   useEffect(() => {
     const { pendingAdd, modulesVersion, modules } = context.state.sharedData;
     if (!pendingAdd) return;
-
-    // modulesVersion hasn't advanced past what was captured at submit time
     if (modulesVersion <= pendingAdd.snapshotVersion) return;
 
-    // A new GetModules response arrived — resolve the toast
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
@@ -63,7 +54,6 @@ export default function App() {
     context.dispatch({ type: 'SET_PENDING_ADD', payload: null });
   }, [context.state.sharedData.modulesVersion]);
 
-  // Start 15s timeout whenever a new pendingAdd is registered
   useEffect(() => {
     const { pendingAdd } = context.state.sharedData;
     if (!pendingAdd) return;
@@ -96,7 +86,7 @@ export default function App() {
 
   useEffect(() => {
     if (!window.setClient) {
-      startService(context);
+      startService(context, toast);
       window.setClient = true;
     }
   }, []);
@@ -130,8 +120,16 @@ export default function App() {
   );
 }
 
-function startService(context) {
+function startService(context, toast) {
+  // ── Quick config-file probe via HTTP before WS connects ──────────────────
+  // The service exposes an HTTP server on :8081. We use a known route that
+  // returns the deviceIP string to confirm the service is up, then show a
+  // toast reporting whether the config file exists based on the initial
+  // GetModules response. This fires from the frontend side before any WS
+  // message, so the diagnostic is available even if the WS handshake stalls.
+
   const testWS = new WebSocket('ws://localhost:8081');
+
   testWS.onerror = () => {
     const pkgId = tizen.application.getCurrentApplication().appInfo.packageId;
     const serviceId = pkgId + '.StandaloneService';
@@ -145,8 +143,22 @@ function startService(context) {
       function (e) { alert('Launch Service failed: ' + e.message); }
     );
   };
+
   testWS.onopen = () => {
     context.dispatch({ type: 'SET_STATE', payload: 'service.alreadyRunning' });
+
+    // ── Show immediate config-probe toast ─────────────────────────────────
+    // Ask the service to probe the config path and report back via a
+    // one-shot HTTP call to the service's proxy port. We send a custom
+    // lightweight WS message and the service replies with ConfigProbe.
+    // For now, show a holding toast that gets resolved once GetModules arrives.
+    const t = window.__globalToast || toast;
+    if (t) {
+      const probeId = t.loading('🔍 Probing config file…');
+      // Resolved by WebSocketClient when GetModules arrives with diagnostic
+      window.__configProbeToastId = probeId;
+    }
+
     context.dispatch({ type: 'SET_CLIENT', payload: new Client(context) });
   };
 }

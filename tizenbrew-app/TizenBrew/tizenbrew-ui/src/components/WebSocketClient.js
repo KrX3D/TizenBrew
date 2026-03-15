@@ -115,7 +115,36 @@ class Client {
                 if (!this.startupDiagShown && diagnostic) {
                     this.startupDiagShown = true;
                     const toast = window.__globalToast;
-                    if (toast) toast.info('🗂 Startup fs check:\n' + diagnostic, 15000);
+                    if (toast) {
+                        // Resolve the "Probing config file…" toast from app.jsx
+                        if (window.__configProbeToastId != null) {
+                            const isPresent = diagnostic.includes('File exists: YES');
+                            const isWritable = diagnostic.includes('File writable: YES');
+                            let summary;
+                            if (isPresent && isWritable) {
+                                summary = '✅ Config file found and writable';
+                            } else if (isPresent) {
+                                summary = '⚠️ Config file found but NOT writable!';
+                            } else {
+                                summary = '⚠️ Config file NOT found (will be created on first write)';
+                            }
+                            toast.resolve(window.__configProbeToastId, isPresent && isWritable ? 'success' : 'info',
+                                summary + '\n\n' + diagnostic, 12000);
+                            window.__configProbeToastId = null;
+                        } else {
+                            toast.info('🗂 Startup fs check:\n' + diagnostic, 12000);
+                        }
+                    }
+                } else if (!this.startupDiagShown) {
+                    // No diagnostic (old service build) — resolve probe toast with warning
+                    this.startupDiagShown = true;
+                    const toast = window.__globalToast;
+                    if (toast && window.__configProbeToastId != null) {
+                        toast.resolve(window.__configProbeToastId, 'error',
+                            '❌ Service sent no diagnostic.\nYou are probably still running the old dist/index.js bundle.\nDeploy the new index.js and configuration.js, then rebuild.',
+                            15000);
+                        window.__configProbeToastId = null;
+                    }
                 }
 
                 this.context.dispatch({ type: 'SET_MODULES', payload: modules });
