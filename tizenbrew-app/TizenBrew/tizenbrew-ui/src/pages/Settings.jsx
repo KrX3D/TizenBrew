@@ -12,6 +12,9 @@ function classNames(...classes) {
 
 function ItemBasic({ children, onClick, shouldFocus, danger }) {
     const { ref, focused, focusSelf } = useFocusable();
+    // Debounce: remote fires keydown→click AND a native click simultaneously.
+    // Setting the guard BEFORE any blocking call (confirm) is critical —
+    // if confirm() is called first, the second event queues and fires after.
     const lastClickRef = useRef(0);
 
     useEffect(() => {
@@ -26,7 +29,7 @@ function ItemBasic({ children, onClick, shouldFocus, danger }) {
 
     function handleClick(e) {
         const now = Date.now();
-        if (now - lastClickRef.current < 500) return;
+        if (now - lastClickRef.current < 800) return; // guard must be set FIRST
         lastClickRef.current = now;
         onClick && onClick(e);
     }
@@ -83,26 +86,33 @@ export default function Settings() {
     }, [state.sharedData.resetModulesResult]);
 
     function handleResetModules() {
+        // ── Guard MUST be set before confirm() ──────────────────────────────────
+        // confirm() is a blocking call. If a second click arrives while confirm
+        // is open (remote fires 2 events), it queues and fires a 2nd confirm
+        // after the first closes — UNLESS we block it here first.
         if (resettingRef.current) return;
-
-        if (!confirm(
-            'Reset module data?\n\n' +
-            'This overwrites tizenbrewConfig.json at /home/owner/share with defaults.\n' +
-            'The app will reload afterwards.'
-        )) return;
-
         resettingRef.current = true;
 
         const toast = getGlobalToast();
+
+        if (!confirm(
+            'Reset module data?\n\n' +
+            'Overwrites tizenbrewConfig.json with defaults.\n' +
+            'The app will reload afterwards.'
+        )) {
+            resettingRef.current = false;
+            return;
+        }
+
         if (!toast) { resettingRef.current = false; return; }
 
-        // Check service is alive
-        if (!state.client?.socket || state.client.socket.readyState !== WebSocket.OPEN) {
+        // ── Don't check WebSocket.OPEN — unreliable on old Tizen ────────────────
+        // If the service is dead the 10s timeout will catch it.
+        // If state.client itself is null, show a helpful toast and bail.
+        if (!state.client) {
             resettingRef.current = false;
             toast.error(
-                '❌ Service not connected.\n\n' +
-                'The service writes the config file — it must be running to reset it.\n' +
-                'Try restarting the app first.',
+                '❌ No client — app is not connected to service.\nTry closing and reopening TizenBrew.',
                 10000
             );
             return;
@@ -110,15 +120,28 @@ export default function Settings() {
 
         resetToastRef.current = toast.loading(
             '⏳ Sending reset to service…\n' +
-            'Target: /home/owner/share/tizenbrewConfig.json'
+            'Will overwrite: /home/owner/share/tizenbrewConfig.json'
         );
 
-        state.client.send({ type: Events.ResetModules, payload: null });
+        try {
+            state.client.send({ type: Events.ResetModules, payload: null });
+        } catch (e) {
+            toast.resolve(
+                resetToastRef.current,
+                'error',
+                '❌ Send failed: ' + e.message + '\nService may have crashed.',
+                10000
+            );
+            resetToastRef.current = null;
+            resettingRef.current = false;
+            return;
+        }
 
-        // 10s safety timeout
+        // 10s safety timeout if service never responds
         resetTimeoutRef.current = setTimeout(() => {
-            if (resetToastRef.current !== null && toast) {
-                toast.resolve(
+            if (resetToastRef.current !== null) {
+                const t2 = getGlobalToast();
+                if (t2) t2.resolve(
                     resetToastRef.current,
                     'error',
                     '❌ No response from service after 10s.\nIs it still running?',
@@ -169,7 +192,7 @@ export default function Settings() {
                     </h3>
                     <p className='text-red-300/70 mt-6 text-base/7'>
                         Overwrites tizenbrewConfig.json with defaults via the service.
-                        Shows directory listing so you can see what's on disk.
+                        Shows dir listing so you can see what's on disk.
                     </p>
                 </ItemBasic>
             </div>
