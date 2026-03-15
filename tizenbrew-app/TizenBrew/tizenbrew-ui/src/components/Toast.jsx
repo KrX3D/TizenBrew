@@ -38,14 +38,6 @@ const ICON_STYLES = {
     info:    'text-sky-400',
 };
 
-// How long each variant stays visible by default (ms).
-// Errors and info stay much longer so they can be read on a TV from the couch.
-const DEFAULT_DURATION = {
-    success: 5000,
-    error:   12000,
-    info:    8000,
-};
-
 function ToastItem({ id, variant, message, onDismiss }) {
     const [visible, setVisible] = useState(false);
     useEffect(() => { requestAnimationFrame(() => setVisible(true)); }, []);
@@ -57,10 +49,10 @@ function ToastItem({ id, variant, message, onDismiss }) {
                 opacity: visible ? 1 : 0,
                 transform: visible ? 'translateY(0)' : 'translateY(12px)',
             }}
-            className={`flex items-start gap-3 px-4 py-3 rounded-xl border shadow-2xl min-w-[22vw] max-w-[40vw] ${STYLES[variant]}`}
+            className={`flex items-start gap-3 px-4 py-3 rounded-xl border shadow-2xl min-w-[22vw] max-w-[50vw] ${STYLES[variant]}`}
         >
             <span className={`mt-0.5 flex-shrink-0 ${ICON_STYLES[variant]}`}>{ICONS[variant]}</span>
-            <span className="text-xl leading-snug flex-1">{message}</span>
+            <span className="text-xl leading-snug flex-1 whitespace-pre-wrap break-words">{message}</span>
             {variant !== 'loading' && (
                 <button onClick={dismiss} className="flex-shrink-0 opacity-50 hover:opacity-100 transition-opacity ml-1 mt-0.5">
                     <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -91,19 +83,21 @@ export function useToast() {
         const id = _nextId++;
         setToasts(prev => [...prev, { id, variant, message }]);
         if (variant !== 'loading' && duration !== 0) {
-            // Use caller-supplied duration, then variant default, then 5s fallback
-            const ms = duration != null ? duration : (DEFAULT_DURATION[variant] != null ? DEFAULT_DURATION[variant] : 5000);
-            setTimeout(() => dismiss(id), ms);
+            setTimeout(() => dismiss(id), duration ?? 4000);
         }
         return id;
     }
 
     function dismiss(id) { setToasts(prev => prev.filter(t => t.id !== id)); }
 
+    // Update the message of any toast (keeps current variant)
+    function update(id, message) {
+        setToasts(prev => prev.map(t => t.id === id ? { ...t, message } : t));
+    }
+
     function resolve(id, variant, message, duration) {
         setToasts(prev => prev.map(t => t.id === id ? { ...t, variant, message } : t));
-        const ms = duration != null ? duration : (DEFAULT_DURATION[variant] != null ? DEFAULT_DURATION[variant] : 5000);
-        setTimeout(() => dismiss(id), ms);
+        setTimeout(() => dismiss(id), duration ?? 4000);
     }
 
     const toast = {
@@ -111,6 +105,7 @@ export function useToast() {
         success: (msg, dur) => add('success', msg, dur),
         error:   (msg, dur) => add('error', msg, dur),
         info:    (msg, dur) => add('info', msg, dur),
+        update,
         dismiss,
         resolve,
     };

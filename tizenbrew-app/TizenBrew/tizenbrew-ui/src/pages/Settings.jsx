@@ -1,5 +1,5 @@
 import { setFocus, useFocusable } from '@noriginmedia/norigin-spatial-navigation'
-import { useEffect, useContext, useRef } from 'react';
+import { useEffect, useContext } from 'react';
 import { GlobalStateContext } from '../components/ClientContext.jsx';
 import { Events } from '../components/WebSocketClient.js';
 import { useLocation } from 'preact-iso';
@@ -39,96 +39,158 @@ function ItemBasic({ children, onClick, shouldFocus, danger }) {
     );
 }
 
+// ─── Config reset ─────────────────────────────────────────────────────────────
+// configuration.js hardcodes this single path — no need to guess.
+const CONFIG_PATH = 'documents/tizenbrewConfig.json'; // Tizen virtual path for /home/owner/share
+const CONFIG_FILENAME = 'tizenbrewConfig.json';
+
+const DEFAULT_CONFIG = JSON.stringify({
+    modules: ['npm/@foxreis/tizentube'],
+    autoLaunchServiceList: [],
+    autoLaunchModule: '',
+}, null, 4);
+
+function fsResolve(path, mode) {
+    return new Promise((resolve, reject) => {
+        try {
+            tizen.filesystem.resolve(path, resolve, reject, mode);
+        } catch (e) { reject(e); }
+    });
+}
+
+function fsList(dir) {
+    return new Promise((resolve) => {
+        try {
+            dir.listFiles(
+                (files) => resolve(files.map(f => f.name)),
+                () => resolve([])
+            );
+        } catch (e) { resolve([]); }
+    });
+}
+
+function fsWriteFile(dir, filename, content) {
+    return new Promise((resolve) => {
+        try {
+            let fileObj;
+            try {
+                fileObj = dir.createFile(filename);
+            } catch (e) {
+                // Already exists — resolve it
+                try { fileObj = dir.resolve(filename); }
+                catch (e2) { return resolve({ ok: false, err: 'Cannot create or resolve file: ' + e2.message }); }
+            }
+            fileObj.openStream('w', (stream) => {
+                try {
+                    stream.write(content);
+                    stream.close();
+                    resolve({ ok: true });
+                } catch (e) { resolve({ ok: false, err: 'stream.write: ' + e.message }); }
+            }, (e) => resolve({ ok: false, err: 'openStream: ' + e.message }), 'UTF-8');
+        } catch (e) { resolve({ ok: false, err: 'fsWriteFile threw: ' + e.message }); }
+    });
+}
+
+// Tizen virtual filesystem paths for /home/owner/share
+// 'documents' is the standard Tizen virtual root that maps to /home/owner/share
+const VIRTUAL_ROOTS_TO_TRY = [
+    'documents',    // → /home/owner/share  (standard Tizen)
+    'wgt-private',  // → app's private storage (fallback)
+];
+
+async function doDirectReset(toastId, toast) {
+    const log = [];
+    function step(msg) {
+        log.push(msg);
+        toast.update(toastId, log.join('\n'));
+    }
+
+    step('📋 Target: /home/owner/share/tizenbrewConfig.json');
+    step('🔍 Resolving Tizen virtual path...');
+
+    let resetDone = false;
+
+    for (const virtualRoot of VIRTUAL_ROOTS_TO_TRY) {
+        let dir;
+        try {
+            dir = await fsResolve(virtualRoot, 'rw');
+            step(`✓ Resolved "${virtualRoot}"`);
+        } catch (e) {
+            step(`✗ "${virtualRoot}" not accessible: ${e.message || e}`);
+            continue;
+        }
+
+        // List so we can confirm the config file is there
+        const files = await fsList(dir);
+        step(`  Contents: ${files.length > 0 ? files.join(', ') : '(empty or listing unavailable)'}`);
+
+        const hasConfig = files.includes(CONFIG_FILENAME);
+        step(hasConfig ? `  ⚠️ ${CONFIG_FILENAME} found` : `  ℹ️ ${CONFIG_FILENAME} not present — will create fresh`);
+
+        step(`  ✏️ Writing default config...`);
+        const result = await fsWriteFile(dir, CONFIG_FILENAME, DEFAULT_CONFIG);
+
+        if (result.ok) {
+            step(`  ✅ Write succeeded!`);
+            resetDone = true;
+            break;
+        } else {
+            step(`  ❌ Write failed: ${result.err}`);
+        }
+    }
+
+    return { resetDone, log };
+}
+
+function tryServiceReset(state) {
+    try {
+        if (state.client && state.client.socket && state.client.socket.readyState === WebSocket.OPEN) {
+            state.client.send({ type: Events.ResetModules, payload: null });
+            return true;
+        }
+    } catch (e) { /* service dead, fine */ }
+    return false;
+}
+
 export default function Settings() {
-    const { state, dispatch } = useContext(GlobalStateContext);
+    const { state } = useContext(GlobalStateContext);
     const loc = useLocation();
     const { t } = useTranslation();
 
-    // null  = idle
-    // -1    = in-flight but no toast (toast unavailable)
-    // N > 0 = toast ID currently showing "loading"
-    const resetToastRef = useRef(null);
-    const resetTimeoutRef = useRef(null);
-
-    // Watch for service response to ResetModules
-    useEffect(() => {
-        const result = state.sharedData.resetModulesResult;
-        if (!result) return;
-
-        // Clear the safety timeout — service responded in time
-        if (resetTimeoutRef.current) {
-            clearTimeout(resetTimeoutRef.current);
-            resetTimeoutRef.current = null;
-        }
+    async function handleResetModules() {
+        if (!confirm(
+            'Reset module data?\n\n' +
+            'This overwrites tizenbrewConfig.json with the default and reloads the app.'
+        )) return;
 
         const toast = getGlobalToast();
+        if (!toast) return alert('Toast not ready, try again.');
 
-        // Build a concise but informative message
-        let msg;
-        if (result.success) {
-            // Show which file was deleted
-            msg = '✓ Config deleted: ' + result.deleted.join(', ');
-        } else {
-            // Show what was found in the candidate dirs so we know where config actually lives
-            const dirLines = Object.keys(result.dirListings || {}).map(function(dir) {
-                var files = result.dirListings[dir];
-                var shortDir = dir.split('/').slice(-2).join('/');
-                var fileStr = Array.isArray(files)
-                    ? (files.length > 0 ? files.join(', ') : '(empty)')
-                    : files;
-                return shortDir + ': ' + fileStr;
-            });
-            msg = 'No config found. Dirs checked: ' + dirLines.join(' | ');
+        const toastId = toast.loading('Starting reset…');
+
+        const { resetDone, log } = await doDirectReset(toastId, toast);
+
+        const sentToService = tryServiceReset(state);
+        if (sentToService) {
+            toast.update(toastId, log.join('\n') + '\n📡 Service also notified');
         }
 
-        // Resolve the loading toast if we have one
-        if (toast && resetToastRef.current !== null && resetToastRef.current !== -1) {
+        if (resetDone) {
             toast.resolve(
-                resetToastRef.current,
-                result.success ? 'success' : 'info',
-                msg,
-                8000
+                toastId,
+                'success',
+                log.join('\n') + '\n\n✅ Done — reloading in 5s',
+                10000
             );
-        } else if (toast) {
-            // Fallback: show a fresh toast if the loading one was lost
-            toast[result.success ? 'success' : 'info'](msg, 8000);
-        }
-
-        // Mark as idle BEFORE dispatching null (prevents a second useEffect run from acting)
-        resetToastRef.current = null;
-
-        // Clear result from state
-        dispatch({ type: 'SET_RESET_MODULES_RESULT', payload: null });
-
-        // Reload after the toast has been read
-        setTimeout(function() { window.location.reload(); }, 8500);
-    }, [state.sharedData.resetModulesResult]);
-
-    function handleResetModules() {
-        // ── GUARD: Samsung TV fires double-click (spatial nav + main.jsx Enter handler) ──
-        // Ignore any invocation while a reset is already in flight.
-        if (resetToastRef.current !== null) return;
-
-        if (!confirm('Reset all module data? This will delete your saved module list and restore defaults. The app will reload afterwards.')) return;
-
-        const toast = getGlobalToast();
-        if (toast) {
-            resetToastRef.current = toast.loading('Resetting module data…');
+            setTimeout(() => window.location.reload(), 5000);
         } else {
-            resetToastRef.current = -1; // in-flight but no toast handle
+            toast.resolve(
+                toastId,
+                'error',
+                log.join('\n') + '\n\n❌ Could not write config.\nTry reinstalling the app.',
+                15000
+            );
         }
-
-        state.client.send({ type: Events.ResetModules, payload: null });
-
-        // 10s safety timeout — fires only if service never responds
-        resetTimeoutRef.current = setTimeout(function() {
-            const t2 = getGlobalToast();
-            if (t2 && resetToastRef.current !== null && resetToastRef.current !== -1) {
-                t2.resolve(resetToastRef.current, 'error', 'No response from service after 10s. Is the service still running?');
-            }
-            resetToastRef.current = null;
-            resetTimeoutRef.current = null;
-        }, 10000);
     }
 
     return (
@@ -169,7 +231,7 @@ export default function Settings() {
                         Reset Module Data
                     </h3>
                     <p className='text-red-300/70 mt-6 text-base/7'>
-                        Deletes your saved module list and resets to defaults. Shows diagnostic info about where config lives on your TV.
+                        Rewrites tizenbrewConfig.json to defaults. Works even if the service is broken.
                     </p>
                 </ItemBasic>
             </div>
