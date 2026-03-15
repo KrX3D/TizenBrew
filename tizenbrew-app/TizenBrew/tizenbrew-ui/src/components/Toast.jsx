@@ -90,7 +90,6 @@ export function useToast() {
 
     function dismiss(id) { setToasts(prev => prev.filter(t => t.id !== id)); }
 
-    // Update the message of any toast (keeps current variant)
     function update(id, message) {
         setToasts(prev => prev.map(t => t.id === id ? { ...t, message } : t));
     }
@@ -113,7 +112,11 @@ export function useToast() {
     return { toasts, toast };
 }
 
-// Global singleton — App.jsx registers its toast instance here
+// Global singleton — App.jsx registers its toast instance here.
+// Also written to window.__globalToast so WebSocketClient (non-React) can reach it.
 let _globalToast = null;
-export function setGlobalToast(t) { _globalToast = t; }
+export function setGlobalToast(t) {
+    _globalToast = t;
+    window.__globalToast = t;
+}
 export function getGlobalToast() { return _globalToast; }

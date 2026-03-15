@@ -1,5 +1,5 @@
 import { setFocus, useFocusable } from '@noriginmedia/norigin-spatial-navigation'
-import { useEffect, useContext } from 'react';
+import { useEffect, useContext, useRef } from 'react';
 import { GlobalStateContext } from '../components/ClientContext.jsx';
 import { Events } from '../components/WebSocketClient.js';
 import { useLocation } from 'preact-iso';
@@ -12,6 +12,8 @@ function classNames(...classes) {
 
 function ItemBasic({ children, onClick, shouldFocus, danger }) {
     const { ref, focused, focusSelf } = useFocusable();
+    const lastClickRef = useRef(0);
+
     useEffect(() => {
         if (focused) {
             ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
@@ -22,10 +24,17 @@ function ItemBasic({ children, onClick, shouldFocus, danger }) {
         useEffect(() => { focusSelf(); }, [ref]);
     }
 
+    function handleClick(e) {
+        const now = Date.now();
+        if (now - lastClickRef.current < 500) return;
+        lastClickRef.current = now;
+        onClick && onClick(e);
+    }
+
     return (
         <div
             ref={ref}
-            onClick={onClick}
+            onClick={handleClick}
             className={classNames(
                 'relative shadow-2xl rounded-3xl p-8 ring-1 sm:p-10 h-[35vh] w-[20vw]',
                 danger
@@ -39,158 +48,86 @@ function ItemBasic({ children, onClick, shouldFocus, danger }) {
     );
 }
 
-// ─── Config reset ─────────────────────────────────────────────────────────────
-// configuration.js hardcodes this single path — no need to guess.
-const CONFIG_PATH = 'documents/tizenbrewConfig.json'; // Tizen virtual path for /home/owner/share
-const CONFIG_FILENAME = 'tizenbrewConfig.json';
-
-const DEFAULT_CONFIG = JSON.stringify({
-    modules: ['npm/@foxreis/tizentube'],
-    autoLaunchServiceList: [],
-    autoLaunchModule: '',
-}, null, 4);
-
-function fsResolve(path, mode) {
-    return new Promise((resolve, reject) => {
-        try {
-            tizen.filesystem.resolve(path, resolve, reject, mode);
-        } catch (e) { reject(e); }
-    });
-}
-
-function fsList(dir) {
-    return new Promise((resolve) => {
-        try {
-            dir.listFiles(
-                (files) => resolve(files.map(f => f.name)),
-                () => resolve([])
-            );
-        } catch (e) { resolve([]); }
-    });
-}
-
-function fsWriteFile(dir, filename, content) {
-    return new Promise((resolve) => {
-        try {
-            let fileObj;
-            try {
-                fileObj = dir.createFile(filename);
-            } catch (e) {
-                // Already exists — resolve it
-                try { fileObj = dir.resolve(filename); }
-                catch (e2) { return resolve({ ok: false, err: 'Cannot create or resolve file: ' + e2.message }); }
-            }
-            fileObj.openStream('w', (stream) => {
-                try {
-                    stream.write(content);
-                    stream.close();
-                    resolve({ ok: true });
-                } catch (e) { resolve({ ok: false, err: 'stream.write: ' + e.message }); }
-            }, (e) => resolve({ ok: false, err: 'openStream: ' + e.message }), 'UTF-8');
-        } catch (e) { resolve({ ok: false, err: 'fsWriteFile threw: ' + e.message }); }
-    });
-}
-
-// Tizen virtual filesystem paths for /home/owner/share
-// 'documents' is the standard Tizen virtual root that maps to /home/owner/share
-const VIRTUAL_ROOTS_TO_TRY = [
-    'documents',    // → /home/owner/share  (standard Tizen)
-    'wgt-private',  // → app's private storage (fallback)
-];
-
-async function doDirectReset(toastId, toast) {
-    const log = [];
-    function step(msg) {
-        log.push(msg);
-        toast.update(toastId, log.join('\n'));
-    }
-
-    step('📋 Target: /home/owner/share/tizenbrewConfig.json');
-    step('🔍 Resolving Tizen virtual path...');
-
-    let resetDone = false;
-
-    for (const virtualRoot of VIRTUAL_ROOTS_TO_TRY) {
-        let dir;
-        try {
-            dir = await fsResolve(virtualRoot, 'rw');
-            step(`✓ Resolved "${virtualRoot}"`);
-        } catch (e) {
-            step(`✗ "${virtualRoot}" not accessible: ${e.message || e}`);
-            continue;
-        }
-
-        // List so we can confirm the config file is there
-        const files = await fsList(dir);
-        step(`  Contents: ${files.length > 0 ? files.join(', ') : '(empty or listing unavailable)'}`);
-
-        const hasConfig = files.includes(CONFIG_FILENAME);
-        step(hasConfig ? `  ⚠️ ${CONFIG_FILENAME} found` : `  ℹ️ ${CONFIG_FILENAME} not present — will create fresh`);
-
-        step(`  ✏️ Writing default config...`);
-        const result = await fsWriteFile(dir, CONFIG_FILENAME, DEFAULT_CONFIG);
-
-        if (result.ok) {
-            step(`  ✅ Write succeeded!`);
-            resetDone = true;
-            break;
-        } else {
-            step(`  ❌ Write failed: ${result.err}`);
-        }
-    }
-
-    return { resetDone, log };
-}
-
-function tryServiceReset(state) {
-    try {
-        if (state.client && state.client.socket && state.client.socket.readyState === WebSocket.OPEN) {
-            state.client.send({ type: Events.ResetModules, payload: null });
-            return true;
-        }
-    } catch (e) { /* service dead, fine */ }
-    return false;
-}
-
 export default function Settings() {
-    const { state } = useContext(GlobalStateContext);
+    const { state, dispatch } = useContext(GlobalStateContext);
     const loc = useLocation();
     const { t } = useTranslation();
+    const resettingRef = useRef(false);
+    const resetToastRef = useRef(null);
+    const resetTimeoutRef = useRef(null);
 
-    async function handleResetModules() {
-        if (!confirm(
-            'Reset module data?\n\n' +
-            'This overwrites tizenbrewConfig.json with the default and reloads the app.'
-        )) return;
+    // Watch for ResetModules response from service
+    useEffect(() => {
+        const result = state.sharedData.resetModulesResult;
+        if (!result || resetToastRef.current === null) return;
 
         const toast = getGlobalToast();
-        if (!toast) return alert('Toast not ready, try again.');
+        if (!toast) return;
 
-        const toastId = toast.loading('Starting reset…');
-
-        const { resetDone, log } = await doDirectReset(toastId, toast);
-
-        const sentToService = tryServiceReset(state);
-        if (sentToService) {
-            toast.update(toastId, log.join('\n') + '\n📡 Service also notified');
+        if (resetTimeoutRef.current) {
+            clearTimeout(resetTimeoutRef.current);
+            resetTimeoutRef.current = null;
         }
 
-        if (resetDone) {
-            toast.resolve(
-                toastId,
-                'success',
-                log.join('\n') + '\n\n✅ Done — reloading in 5s',
+        const msg = (result.success ? '✅ Reset complete\n' : '❌ Reset failed\n') + (result.detail || '');
+
+        toast.resolve(resetToastRef.current, result.success ? 'success' : 'error', msg, 10000);
+        resetToastRef.current = null;
+        resettingRef.current = false;
+
+        dispatch({ type: 'SET_RESET_MODULES_RESULT', payload: null });
+
+        if (result.success) {
+            setTimeout(() => window.location.reload(), 5000);
+        }
+    }, [state.sharedData.resetModulesResult]);
+
+    function handleResetModules() {
+        if (resettingRef.current) return;
+
+        if (!confirm(
+            'Reset module data?\n\n' +
+            'This overwrites tizenbrewConfig.json at /home/owner/share with defaults.\n' +
+            'The app will reload afterwards.'
+        )) return;
+
+        resettingRef.current = true;
+
+        const toast = getGlobalToast();
+        if (!toast) { resettingRef.current = false; return; }
+
+        // Check service is alive
+        if (!state.client?.socket || state.client.socket.readyState !== WebSocket.OPEN) {
+            resettingRef.current = false;
+            toast.error(
+                '❌ Service not connected.\n\n' +
+                'The service writes the config file — it must be running to reset it.\n' +
+                'Try restarting the app first.',
                 10000
             );
-            setTimeout(() => window.location.reload(), 5000);
-        } else {
-            toast.resolve(
-                toastId,
-                'error',
-                log.join('\n') + '\n\n❌ Could not write config.\nTry reinstalling the app.',
-                15000
-            );
+            return;
         }
+
+        resetToastRef.current = toast.loading(
+            '⏳ Sending reset to service…\n' +
+            'Target: /home/owner/share/tizenbrewConfig.json'
+        );
+
+        state.client.send({ type: Events.ResetModules, payload: null });
+
+        // 10s safety timeout
+        resetTimeoutRef.current = setTimeout(() => {
+            if (resetToastRef.current !== null && toast) {
+                toast.resolve(
+                    resetToastRef.current,
+                    'error',
+                    '❌ No response from service after 10s.\nIs it still running?',
+                    8000
+                );
+                resetToastRef.current = null;
+                resettingRef.current = false;
+            }
+        }, 10000);
     }
 
     return (
@@ -231,7 +168,8 @@ export default function Settings() {
                         Reset Module Data
                     </h3>
                     <p className='text-red-300/70 mt-6 text-base/7'>
-                        Rewrites tizenbrewConfig.json to defaults. Works even if the service is broken.
+                        Overwrites tizenbrewConfig.json with defaults via the service.
+                        Shows directory listing so you can see what's on disk.
                     </p>
                 </ItemBasic>
             </div>

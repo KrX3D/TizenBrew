@@ -12,6 +12,7 @@ const Events = {
     CanLaunchModules: 9,
     ModuleAction: 10,
     ResetModules: 11,
+    ModuleActionResult: 12,
     WebApisPath: 20,
     WebApisCode: 21,
 };
@@ -64,19 +65,11 @@ class Client {
             }
 
             case Events.GetDebugStatus: {
-                // PR #209: normalize webDebug/appDebug — service may use either field name
-                const normalizedPayload = {
-                    rwiDebug:   Boolean(payload && payload.rwiDebug),
-                    webDebug:   Boolean(payload && (payload.webDebug || payload.appDebug)),
-                    appDebug:   Boolean(payload && (payload.webDebug || payload.appDebug)),
-                    tizenDebug: Boolean(payload && payload.tizenDebug),
-                };
-
                 const state = this.context.state;
-                state.sharedData.debugStatus = normalizedPayload;
+                state.sharedData.debugStatus = payload;
                 this.context.dispatch({ type: 'SET_SHARED_DATA', payload: state.sharedData });
 
-                if (!normalizedPayload.rwiDebug && !normalizedPayload.webDebug && !normalizedPayload.tizenDebug) {
+                if (!payload.rwiDebug && !payload.appDebug && !payload.tizenDebug) {
                     this.send({ type: Events.CanLaunchInDebug });
                 } else {
                     this.send({ type: Events.GetModules });
@@ -90,7 +83,6 @@ class Client {
                     this.send({ type: Events.ReLaunchInDebug, payload: { tvIP } });
                     tizen.application.getCurrentApplication().exit();
                 } else if (payload === null) {
-                    // Should no longer happen with PR #208 fix, but kept as safety net
                     this.send({ type: Events.CanLaunchInDebug });
                 } else {
                     this.context.dispatch({
@@ -156,8 +148,26 @@ class Client {
                 break;
             }
 
-            case Events.Error: {
-                console.error('[WebSocketClient] Service error:', payload);
+            case Events.ModuleActionResult: {
+                // Show a toast with the result so we can see exactly what happened
+                const toast = window.__globalToast;
+                if (!toast) break;
+
+                if (payload.ok) {
+                    // Only show info toasts for non-add actions (add has its own pending toast)
+                    if (payload.action !== 'add') {
+                        toast.info(`✓ ${payload.message}`);
+                    }
+                    console.log('[ModuleActionResult]', payload);
+                } else {
+                    // Always show errors loudly
+                    toast.error(
+                        `✗ ModuleAction "${payload.action}" failed:\n${payload.message}` +
+                        (payload.stack ? `\n\n${payload.stack}` : ''),
+                        10000
+                    );
+                    console.error('[ModuleActionResult] FAILED', payload);
+                }
                 break;
             }
         }
@@ -165,9 +175,7 @@ class Client {
 
     handleCanLaunchModules(payload) {
         const debugStatus = this.context.state.sharedData.debugStatus;
-        // PR #209: set both aliases
         debugStatus.webDebug = true;
-        debugStatus.appDebug = true;
         this.context.dispatch({ type: 'SET_DEBUG_STATUS', payload: debugStatus });
 
         if (payload) {
@@ -210,10 +218,6 @@ class Client {
     }
 
     send(data) {
-        if (this.socket.readyState !== WebSocket.OPEN) {
-            console.warn('[Client] send() skipped — socket not open, state:', this.socket.readyState);
-            return;
-        }
         this.socket.send(JSON.stringify(data));
     }
 }

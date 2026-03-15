@@ -312,37 +312,68 @@ module.exports.onStart = function () {
                 }
                 case Events.ModuleAction: {
                     const { action, module } = payload;
-
-                    const config = readConfig();
-                    switch (action) {
-                        case 'add': {
-                            const index = config.modules.findIndex(m => m === module);
-                            if (index === -1) {
-                                config.modules.push(module);
-                                writeConfig(config);
+                    let resultPayload;
+ 
+                    try {
+                        const config = readConfig();
+ 
+                        // Log what we read so we can diagnose corruption
+                        console.log('[ModuleAction] action=' + action + ' module=' + module);
+                        console.log('[ModuleAction] config before:', JSON.stringify(config));
+ 
+                        switch (action) {
+                            case 'add': {
+                                const index = config.modules.findIndex(m => m === module);
+                                if (index === -1) {
+                                    config.modules.push(module);
+                                    writeConfig(config);
+                                    console.log('[ModuleAction] added, config after:', JSON.stringify(config));
+                                    resultPayload = { ok: true, action, module, message: 'Added "' + module + '"', config };
+                                } else {
+                                    resultPayload = { ok: true, action, module, message: 'Already present: "' + module + '"', config };
+                                }
+                                break;
                             }
-                            break;
-                        }
-                        case 'remove': {
-                            const index = config.modules.findIndex(m => m === module);
-                            if (index !== -1) {
-                                config.modules.splice(index, 1);
-                                writeConfig(config);
+                            case 'remove': {
+                                const index = config.modules.findIndex(m => m === module);
+                                if (index !== -1) {
+                                    config.modules.splice(index, 1);
+                                    writeConfig(config);
+                                    console.log('[ModuleAction] removed, config after:', JSON.stringify(config));
+                                    resultPayload = { ok: true, action, module, message: 'Removed "' + module + '"', config };
+                                } else {
+                                    resultPayload = { ok: true, action, module, message: 'Not found (nothing removed): "' + module + '"', config };
+                                }
+                                break;
                             }
-                            break;
+                            case 'autolaunch': {
+                                config.autoLaunchModule = module;
+                                writeConfig(config);
+                                resultPayload = { ok: true, action, module, message: 'Autolaunch set to "' + module + '"', config };
+                                break;
+                            }
+                            case 'autolaunchService': {
+                                config.autoLaunchServiceList = module;
+                                writeConfig(config);
+                                resultPayload = { ok: true, action, module, message: 'Autolaunch service list updated', config };
+                                break;
+                            }
+                            default: {
+                                resultPayload = { ok: false, action, module, message: 'Unknown action: "' + action + '"' };
+                            }
                         }
-                        case 'autolaunch': {
-                            config.autoLaunchModule = module;
-                            writeConfig(config);
-                            break;
-                        }
-                        case 'autolaunchService': {
-                            // PR #207: always store as array
-                            config.autoLaunchServiceList = module ? [module] : [];
-                            writeConfig(config);
-                            break;
-                        }
+                    } catch (e) {
+                        console.log('[ModuleAction] ERROR: ' + e.message);
+                        resultPayload = {
+                            ok: false,
+                            action,
+                            module,
+                            message: 'Exception: ' + e.message,
+                            stack: e.stack
+                        };
                     }
+ 
+                    wsConn.send(wsConn.Event(Events.ModuleActionResult, resultPayload));
                     break;
                 }
                 case Events.Ready: {
@@ -352,54 +383,42 @@ module.exports.onStart = function () {
                 }
                 case Events.ResetModules: {
                     const fs = require('fs');
-
-                    const configPaths = [
-                        '/home/owner/share/tizenbrewConfig.json',
-                        '/home/owner/apps_rw/tizenbrewConfig.json',
-                        '/opt/usr/home/owner/share/tizenbrewConfig.json',
-                        '/opt/share/tizenbrewConfig.json',
-                        '/tmp/tizenbrewConfig.json',
-                    ];
-
-                    const deleted = [];
-                    const notFound = [];
-                    for (const p of configPaths) {
-                        try {
-                            if (fs.existsSync(p)) {
-                                fs.unlinkSync(p);
-                                deleted.push(p);
-                            } else {
-                                notFound.push(p);
-                            }
-                        } catch (e) {
-                            notFound.push(p + ' (err: ' + e.message + ')');
-                        }
+ 
+                    // This is the only path configuration.js ever reads/writes.
+                    // /home/owner/share is a shared area accessible to both the
+                    // app and its service — it is NOT wiped by "Clear Data" in
+                    // Tizen settings (that only clears wgt-private).
+                    const CONFIG_PATH = '/home/owner/share/tizenbrewConfig.json';
+ 
+                    const DEFAULT_CONFIG = JSON.stringify({
+                        modules: ['npm/@foxreis/tizentube'],
+                        autoLaunchServiceList: [],
+                        autoLaunchModule: '',
+                    }, null, 4);
+ 
+                    let success = false;
+                    let detail = '';
+ 
+                    try {
+                        // List the directory first so we can see what's there
+                        const dirContents = fs.readdirSync('/home/owner/share');
+                        detail += 'Dir contents: ' + dirContents.join(', ') + '\n';
+ 
+                        const existed = fs.existsSync(CONFIG_PATH);
+                        detail += existed ? 'Config found.\n' : 'Config not found — will create.\n';
+ 
+                        // Overwrite with defaults (creates if missing, resets if corrupt)
+                        fs.writeFileSync(CONFIG_PATH, DEFAULT_CONFIG, 'utf8');
+                        detail += 'Write succeeded.';
+                        success = true;
+                    } catch (e) {
+                        detail += 'Error: ' + e.message;
                     }
-
+ 
+                    // Reset in-memory cache too
                     modulesCache = [];
-
-                    const dirsToList = [
-                        '/home/owner/share',
-                        '/home/owner/apps_rw',
-                        '/opt/usr/home/owner/share',
-                    ];
-                    const dirListings = {};
-                    for (const dir of dirsToList) {
-                        try {
-                            dirListings[dir] = fs.existsSync(dir)
-                                ? fs.readdirSync(dir)
-                                : '(not found)';
-                        } catch (e) {
-                            dirListings[dir] = '(err: ' + e.message + ')';
-                        }
-                    }
-
-                    wsConn.send(wsConn.Event(Events.ResetModules, {
-                        success: deleted.length > 0,
-                        deleted,
-                        notFound,
-                        dirListings,
-                    }));
+ 
+                    wsConn.send(wsConn.Event(Events.ResetModules, { success, detail }));
                     break;
                 }
                 default: {

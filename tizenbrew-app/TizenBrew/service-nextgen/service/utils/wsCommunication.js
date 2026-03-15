@@ -30,6 +30,7 @@ const Events = {
     CanLaunchModules: 9,
     ModuleAction: 10,
     ResetModules: 11,
+    ModuleActionResult: 12,
     WebApisPath: 20,
     WebApisCode: 21,
 };
