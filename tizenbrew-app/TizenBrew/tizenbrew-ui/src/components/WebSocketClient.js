@@ -27,6 +27,7 @@ class Client {
         this.pendingEvents = [];
         this.modulesLoaded = false;
         this.modules = [];
+        this.startupDiagShown = false;
     }
 
     onOpen() {
@@ -98,8 +99,27 @@ class Client {
                     return setTimeout(() => this.send({ type: Events.GetModules }), 500);
                 }
 
-                this.context.dispatch({ type: 'SET_MODULES', payload });
-                this.modules = payload;
+                // On the first (non-forced) call, service wraps payload as
+                // { modules: [...], diagnostic: '...' }.
+                // On forced reload calls, payload is the plain array.
+                let modules, diagnostic;
+                if (payload && !Array.isArray(payload) && payload.modules) {
+                    modules = payload.modules;
+                    diagnostic = payload.diagnostic;
+                } else {
+                    modules = payload;
+                    diagnostic = null;
+                }
+
+                // Show startup diagnostic toast once
+                if (!this.startupDiagShown && diagnostic) {
+                    this.startupDiagShown = true;
+                    const toast = window.__globalToast;
+                    if (toast) toast.info('🗂 Startup fs check:\n' + diagnostic, 15000);
+                }
+
+                this.context.dispatch({ type: 'SET_MODULES', payload: modules });
+                this.modules = modules;
                 this.modulesLoaded = true;
 
                 this.send({ type: Events.Ready });
@@ -149,29 +169,29 @@ class Client {
             }
 
             case Events.ModuleActionResult: {
-                // ── Always toast this — it's our main diagnostic window ──────────────
-                // payload: { ok, action, module, message, config?, stack? }
+                // payload: { ok, action, module, message, config?, diagnostic, stack? }
                 const toast = window.__globalToast;
                 console.log('[ModuleActionResult]', JSON.stringify(payload));
 
                 if (!toast) break;
 
                 if (payload.ok) {
-                    // Show config modules list so we can confirm the write landed
                     const moduleList = payload.config && payload.config.modules
-                        ? '\nConfig modules: ' + JSON.stringify(payload.config.modules)
+                        ? '\nModules in config: ' + JSON.stringify(payload.config.modules)
                         : '';
-
+                    const diag = payload.diagnostic
+                        ? '\n\n' + payload.diagnostic
+                        : '';
                     toast.info(
-                        '📝 ' + payload.action + ': ' + payload.message + moduleList,
-                        8000
+                        '📝 ' + payload.action + ': ' + payload.message + moduleList + diag,
+                        12000
                     );
                 } else {
-                    // Write or read failed — show full error
+                    const diag = payload.diagnostic ? '\n\n' + payload.diagnostic : '';
                     toast.error(
-                        '❌ Service error on "' + payload.action + '":\n' +
-                        payload.message +
-                        (payload.stack ? '\n\n' + payload.stack.split('\n').slice(0, 4).join('\n') : ''),
+                        '❌ "' + payload.action + '" failed:\n' + payload.message +
+                        (payload.stack ? '\n' + payload.stack.split('\n').slice(0, 3).join('\n') : '') +
+                        diag,
                         15000
                     );
                 }

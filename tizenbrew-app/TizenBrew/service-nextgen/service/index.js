@@ -6,7 +6,7 @@ module.exports.onStart = function () {
     const express = require('express');
     const fetch = require('node-fetch');
     const path = require('path');
-    const { readConfig, writeConfig } = require('./utils/configuration.js');
+    const { readConfig, writeConfig, diagnoseConfig } = require('./utils/configuration.js');
     const loadModules = require('./utils/moduleLoader.js');
     const { startDebugging, setWebApisPath } = require('./utils/debugger.js');
     const startService = require('./utils/serviceLauncher.js');
@@ -84,7 +84,6 @@ module.exports.onStart = function () {
     let adbClient;
     let canLaunchInDebug = null;
 
-    // PR #208: fetch THEN respond — never return null/stale value
     function refreshCanLaunchInDebugStatus() {
         return fetch('http://127.0.0.1:8001/api/v2/')
             .then(res => res.json())
@@ -100,7 +99,6 @@ module.exports.onStart = function () {
 
     refreshCanLaunchInDebugStatus();
 
-    // PR #209: include appDebug alias alongside webDebug
     const inDebug = {
         tizenDebug: false,
         webDebug: false,
@@ -130,7 +128,6 @@ module.exports.onStart = function () {
     loadModules().then(modules => {
         modulesCache = modules;
         const config = readConfig();
-        // PR #207: normalize autoLaunchServiceList — may be stored as string or array
         const rawList = config.autoLaunchServiceList;
         const serviceModuleList = Array.isArray(rawList)
             ? rawList.filter(Boolean)
@@ -220,7 +217,6 @@ module.exports.onStart = function () {
                     break;
                 }
                 case Events.CanLaunchInDebug: {
-                    // PR #208: wait for fresh status before responding — never returns stale null
                     refreshCanLaunchInDebugStatus().then((status) => {
                         wsConn.send(wsConn.Event(Events.CanLaunchInDebug, status));
                     });
@@ -241,7 +237,17 @@ module.exports.onStart = function () {
                             modulesCache = modules;
                             wsConn.send(wsConn.Event(Events.GetModules, modules));
                         });
-                    } else wsConn.send(wsConn.Event(Events.GetModules, modulesCache));
+                    } else {
+                        // First call (payload=false) — include fs diagnostic so frontend
+                        // can show it as a toast and we can see the config state at startup.
+                        // Wrap in object so diagnostic travels alongside modules array.
+                        const diagnostic = diagnoseConfig();
+                        console.log('[GetModules] startup diagnostic:\n' + diagnostic);
+                        wsConn.send(wsConn.Event(Events.GetModules, {
+                            modules: modulesCache,
+                            diagnostic: diagnostic
+                        }));
+                    }
                     break;
                 }
                 case Events.LaunchModule: {
@@ -255,7 +261,6 @@ module.exports.onStart = function () {
                     currentModule.serviceFile = mdl.serviceFile;
 
                     if (mdl.packageType === 'app') {
-                        // PR #209: reset both aliases
                         inDebug.webDebug = false;
                         inDebug.appDebug = false;
                         inDebug.tizenDebug = false;
@@ -313,14 +318,14 @@ module.exports.onStart = function () {
                 case Events.ModuleAction: {
                     const { action, module } = payload;
                     let resultPayload;
- 
+                    const diagnostic = diagnoseConfig();
+                    console.log('[ModuleAction] action=' + action + ' module=' + module);
+                    console.log('[ModuleAction] fs diagnostic:\n' + diagnostic);
+
                     try {
                         const config = readConfig();
- 
-                        // Log what we read so we can diagnose corruption
-                        console.log('[ModuleAction] action=' + action + ' module=' + module);
                         console.log('[ModuleAction] config before:', JSON.stringify(config));
- 
+
                         switch (action) {
                             case 'add': {
                                 const index = config.modules.findIndex(m => m === module);
@@ -328,9 +333,9 @@ module.exports.onStart = function () {
                                     config.modules.push(module);
                                     writeConfig(config);
                                     console.log('[ModuleAction] added, config after:', JSON.stringify(config));
-                                    resultPayload = { ok: true, action, module, message: 'Added "' + module + '"', config };
+                                    resultPayload = { ok: true, action, module, message: 'Added "' + module + '"', config, diagnostic };
                                 } else {
-                                    resultPayload = { ok: true, action, module, message: 'Already present: "' + module + '"', config };
+                                    resultPayload = { ok: true, action, module, message: 'Already present: "' + module + '"', config, diagnostic };
                                 }
                                 break;
                             }
@@ -339,27 +344,26 @@ module.exports.onStart = function () {
                                 if (index !== -1) {
                                     config.modules.splice(index, 1);
                                     writeConfig(config);
-                                    console.log('[ModuleAction] removed, config after:', JSON.stringify(config));
-                                    resultPayload = { ok: true, action, module, message: 'Removed "' + module + '"', config };
+                                    resultPayload = { ok: true, action, module, message: 'Removed "' + module + '"', config, diagnostic };
                                 } else {
-                                    resultPayload = { ok: true, action, module, message: 'Not found (nothing removed): "' + module + '"', config };
+                                    resultPayload = { ok: true, action, module, message: 'Not found (nothing removed): "' + module + '"', config, diagnostic };
                                 }
                                 break;
                             }
                             case 'autolaunch': {
                                 config.autoLaunchModule = module;
                                 writeConfig(config);
-                                resultPayload = { ok: true, action, module, message: 'Autolaunch set to "' + module + '"', config };
+                                resultPayload = { ok: true, action, module, message: 'Autolaunch set to "' + module + '"', config, diagnostic };
                                 break;
                             }
                             case 'autolaunchService': {
                                 config.autoLaunchServiceList = module;
                                 writeConfig(config);
-                                resultPayload = { ok: true, action, module, message: 'Autolaunch service list updated', config };
+                                resultPayload = { ok: true, action, module, message: 'Autolaunch service list updated', config, diagnostic };
                                 break;
                             }
                             default: {
-                                resultPayload = { ok: false, action, module, message: 'Unknown action: "' + action + '"' };
+                                resultPayload = { ok: false, action, module, message: 'Unknown action: "' + action + '"', diagnostic };
                             }
                         }
                     } catch (e) {
@@ -369,10 +373,11 @@ module.exports.onStart = function () {
                             action,
                             module,
                             message: 'Exception: ' + e.message,
-                            stack: e.stack
+                            stack: e.stack,
+                            diagnostic
                         };
                     }
- 
+
                     wsConn.send(wsConn.Event(Events.ModuleActionResult, resultPayload));
                     break;
                 }
@@ -383,41 +388,26 @@ module.exports.onStart = function () {
                 }
                 case Events.ResetModules: {
                     const fs = require('fs');
- 
-                    // This is the only path configuration.js ever reads/writes.
-                    // /home/owner/share is a shared area accessible to both the
-                    // app and its service — it is NOT wiped by "Clear Data" in
-                    // Tizen settings (that only clears wgt-private).
                     const CONFIG_PATH = '/home/owner/share/tizenbrewConfig.json';
- 
+
                     const DEFAULT_CONFIG = JSON.stringify({
                         modules: ['npm/@foxreis/tizentube'],
                         autoLaunchServiceList: [],
                         autoLaunchModule: '',
                     }, null, 4);
- 
+
                     let success = false;
-                    let detail = '';
- 
+                    let detail = diagnoseConfig() + '\n';
+
                     try {
-                        // List the directory first so we can see what's there
-                        const dirContents = fs.readdirSync('/home/owner/share');
-                        detail += 'Dir contents: ' + dirContents.join(', ') + '\n';
- 
-                        const existed = fs.existsSync(CONFIG_PATH);
-                        detail += existed ? 'Config found.\n' : 'Config not found — will create.\n';
- 
-                        // Overwrite with defaults (creates if missing, resets if corrupt)
                         fs.writeFileSync(CONFIG_PATH, DEFAULT_CONFIG, 'utf8');
                         detail += 'Write succeeded.';
                         success = true;
                     } catch (e) {
-                        detail += 'Error: ' + e.message;
+                        detail += 'Write error: ' + e.message;
                     }
- 
-                    // Reset in-memory cache too
+
                     modulesCache = [];
- 
                     wsConn.send(wsConn.Event(Events.ResetModules, { success, detail }));
                     break;
                 }
