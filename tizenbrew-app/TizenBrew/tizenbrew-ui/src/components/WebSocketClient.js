@@ -149,24 +149,31 @@ class Client {
             }
 
             case Events.ModuleActionResult: {
-                // Show a toast with the result so we can see exactly what happened
+                // ── Always toast this — it's our main diagnostic window ──────────────
+                // payload: { ok, action, module, message, config?, stack? }
                 const toast = window.__globalToast;
+                console.log('[ModuleActionResult]', JSON.stringify(payload));
+
                 if (!toast) break;
 
                 if (payload.ok) {
-                    // Only show info toasts for non-add actions (add has its own pending toast)
-                    if (payload.action !== 'add') {
-                        toast.info(`✓ ${payload.message}`);
-                    }
-                    console.log('[ModuleActionResult]', payload);
-                } else {
-                    // Always show errors loudly
-                    toast.error(
-                        `✗ ModuleAction "${payload.action}" failed:\n${payload.message}` +
-                        (payload.stack ? `\n\n${payload.stack}` : ''),
-                        10000
+                    // Show config modules list so we can confirm the write landed
+                    const moduleList = payload.config && payload.config.modules
+                        ? '\nConfig modules: ' + JSON.stringify(payload.config.modules)
+                        : '';
+
+                    toast.info(
+                        '📝 ' + payload.action + ': ' + payload.message + moduleList,
+                        8000
                     );
-                    console.error('[ModuleActionResult] FAILED', payload);
+                } else {
+                    // Write or read failed — show full error
+                    toast.error(
+                        '❌ Service error on "' + payload.action + '":\n' +
+                        payload.message +
+                        (payload.stack ? '\n\n' + payload.stack.split('\n').slice(0, 4).join('\n') : ''),
+                        15000
+                    );
                 }
                 break;
             }
