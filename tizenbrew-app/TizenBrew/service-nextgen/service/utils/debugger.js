@@ -5,7 +5,6 @@ const fetch = require('node-fetch');
 const { Events } = require('./wsCommunication.js');
 const { readConfig } = require('./configuration.js');
 const WebSocket = require('ws');
-const { buildModuleFileUrl } = require('./moduleSource.js');
 
 const modulesCache = new Map();
 
@@ -19,17 +18,12 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
 
             client.on('Runtime.executionContextCreated', (msg) => {
                 if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
-                    const cache = modulesCache.get(mdl.fullName);
-                    if (cache) {
-                        client.Runtime.evaluate({ expression: cache, contextId: msg.context.id });
-                    } else {
-                        fetch(`https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.mainFile}`).then(res => res.text()).then(modFile => {
-                            modulesCache.set(mdl.fullName, modFile);
-                            client.Runtime.evaluate({ expression: modFile, contextId: msg.context.id });
-                        }).catch(e => {
-                            client.Runtime.evaluate({ expression: `alert("Failed to load module: '${mdl.fullName}'. Please relaunch TizenBrew to try again.")`, contextId: msg.context.id });
-                        });
-                    }
+                    const expression = `
+                    const script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.mainFile}?v=${Date.now()}';
+                    document.head.appendChild(script);
+                    `;
+                    client.Runtime.evaluate({ expression, contextId: msg.context.id });
                 } else if (mdl.name !== '' && mdl.evaluateScriptOnDocumentStart) {
                     const cache = modulesCache.get(mdl.fullName);
                     const clientConnection = clientConn.get('wsConn');
@@ -37,12 +31,11 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                         client.Page.addScriptToEvaluateOnNewDocument({ expression: cache });
                         sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                     } else {
-                        fetch(buildModuleFileUrl(mdl.fullName, mdl.sourceMode || 'cdn', mdl.mainFile, mdl.sourceBranch || 'main')).then(res => res.text()).then(modFile => {
+                        fetch(`https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.mainFile}`).then(res => res.text()).then(modFile => {
                             modulesCache.set(mdl.fullName, modFile);
                             sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                             client.Page.addScriptToEvaluateOnNewDocument({ expression: modFile });
                         }).catch(e => {
-                            log('error', 'debugger', `Failed to fetch module script ${mdl.fullName}`, e);
                             sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                             client.Page.addScriptToEvaluateOnNewDocument({ expression: `alert("Failed to load module: '${mdl.fullName}'. Please relaunch TizenBrew to try again.")` });
                         });
@@ -55,7 +48,6 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
 
                 inDebug.tizenDebug = false;
                 inDebug.webDebug = false;
-                inDebug.appDebug = false;
                 inDebug.rwiDebug = false;
 
                 mdl.fullName = '';
@@ -92,21 +84,16 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     }
                 }
             }
-            if (!isAnotherApp) {
-                inDebug.webDebug = true;
-                inDebug.appDebug = true;
-            }
+            if (!isAnotherApp) inDebug.webDebug = true;
             appControlData = null;
         }).on('error', (err) => {
             if (attempts >= 15) {
                 if (!isAnotherApp) {
-                    log('error', 'debugger', 'Failed to connect to the debugger after retries');
                     clientConn.send(clientConn.Event(Events.Error, 'Failed to connect to the debugger'));
                     inDebug.tizenDebug = false;
                     return;
                 } else return;
             }
-            log('warn', 'debugger', 'Debugger connection attempt failed', err);
             attempts++;
             setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts), 750)
         });
@@ -134,4 +121,9 @@ function sendClientInformation(clientConn, data) {
     }, 500);
 }
 
-module.exports = startDebugging;
+// Backward-compatible no-op APIs for newer UI events.
+function setWebApisPath() {}
+function setWebApisCode() {}
+function getWebApisCode() { return null; }
+
+module.exports = { startDebugging, setWebApisPath, setWebApisCode, getWebApisCode };

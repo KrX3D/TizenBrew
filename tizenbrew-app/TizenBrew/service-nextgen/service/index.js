@@ -1,16 +1,16 @@
 "use strict";
 
 module.exports.onStart = function () {
+    console.log('Service started');
     const adbhost = require('adbhost');
     const express = require('express');
     const fetch = require('node-fetch');
     const path = require('path');
     const { readConfig, writeConfig } = require('./utils/configuration.js');
     const loadModules = require('./utils/moduleLoader.js');
-    const startDebugging = require('./utils/debugger.js');
+    const { startDebugging, setWebApisPath } = require('./utils/debugger.js');
     const startService = require('./utils/serviceLauncher.js');
     const { Connection, Events } = require('./utils/wsCommunication.js');
-    const { buildModuleFileUrl } = require('./utils/moduleSource.js');
     let WebSocket;
     if (process.version === 'v4.4.3') {
         WebSocket = require('ws-old');
@@ -25,25 +25,72 @@ module.exports.onStart = function () {
 
     // HTTP Proxy for modules 
     app.all('*', (req, res) => {
-        if (req.url.startsWith('/module/')) {
+        if (req.url === '/webapis.js') {
+            const { getWebApisCode } = require('./utils/debugger.js');
+            const code = getWebApisCode();
+            if (code) {
+                res.setHeader('Content-Type', 'application/javascript');
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                res.send(code);
+            } else {
+                res.status(404).send('WebAPIs not bridged yet. Open TizenBrew UI first.');
+            }
+        } else if (req.url.startsWith('/module/')) {
             const splittedUrl = req.url.split('/');
             const encodedModuleName = splittedUrl[2];
             const moduleName = decodeURIComponent(encodedModuleName);
-            const moduleEntry = modulesCache && modulesCache.find(m => m.fullName === moduleName);
-            const moduleFilePath = req.url.replace(`/module/${encodedModuleName}/`, '');
-            const moduleFileUrl = buildModuleFileUrl(
-                moduleName,
-                moduleEntry && moduleEntry.sourceMode ? moduleEntry.sourceMode : 'cdn',
-                moduleFilePath,
-                moduleEntry && moduleEntry.sourceBranch ? moduleEntry.sourceBranch : 'main'
-            );
-            fetch(moduleFileUrl)
+            // Append timestamp to ensure we don't hit any intermediate caches for proxy requests
+            const cacheBuster = `?t=${Date.now()}`;
+
+            let upstreamUrl;
+            const filePathWithQuery = req.url.replace(`/module/${encodedModuleName}/`, '');
+            const queryIndex = filePathWithQuery.indexOf('?');
+            const filePath = queryIndex === -1 ? filePathWithQuery : filePathWithQuery.substring(0, queryIndex);
+            const queryString = queryIndex === -1 ? '' : filePathWithQuery.substring(queryIndex + 1);
+            const sourceMode = queryString.indexOf('sourceMode=direct') !== -1 ? 'direct' : 'cdn';
+
+            // Strip jsDelivr prefixes to get clean GitHub user/repo
+            function getGitHubRepo(name) {
+                if (name.startsWith('gh/')) return name.substring(3);
+                if (name.startsWith('npm/')) return null;
+                return name;
+            }
+
+            // Check if versioned
+            if (moduleName.includes('@')) {
+                const [rawRepo, tag] = moduleName.split('@');
+                const repo = getGitHubRepo(rawRepo);
+                if (repo) {
+                    upstreamUrl = sourceMode === 'direct'
+                        ? `https://raw.githubusercontent.com/${repo}/${tag}/${filePath}`
+                        : `https://cdn.jsdelivr.net/gh/${repo}@${tag}/${filePath}`;
+                } else {
+                    const npmName = moduleName.replace(/^npm\//, '');
+                    upstreamUrl = sourceMode === 'direct'
+                        ? `https://unpkg.com/${npmName}/${filePath}`
+                        : `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
+                }
+            } else {
+                const repo = getGitHubRepo(moduleName);
+                if (repo) {
+                    upstreamUrl = sourceMode === 'direct'
+                        ? `https://raw.githubusercontent.com/${repo}/main/${filePath}`
+                        : `https://cdn.jsdelivr.net/gh/${repo}/${filePath}`;
+                } else {
+                    const npmName = moduleName.replace(/^npm\//, '');
+                    upstreamUrl = sourceMode === 'direct'
+                        ? `https://unpkg.com/${npmName}/${filePath}`
+                        : `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
+                }
+            }
+
+            fetch(`${upstreamUrl}${cacheBuster}`)
                 .then(fetchRes => {
                     return fetchRes.body.pipe(res);
                 })
                 .then(() => {
                     res.setHeader('Access-Control-Allow-Origin', '*');
-                    res.type(path.basename(req.url.replace(`/module/${encodedModuleName}/`, '')).split('.').slice(-1)[0].split('?')[0]);
+                    res.type(path.basename(filePath).split('.').slice(-1)[0].split('?')[0]);
                 });
         } else {
             res.send(deviceIP);
@@ -54,7 +101,7 @@ module.exports.onStart = function () {
 
     let adbClient;
     let canLaunchInDebug = null;
-
+    
     fetch('http://127.0.0.1:8001/api/v2/').then(res => res.json())
         .then(json => {
             canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
@@ -63,7 +110,6 @@ module.exports.onStart = function () {
     const inDebug = {
         tizenDebug: false,
         webDebug: false,
-        appDebug: false,
         rwiDebug: false
     };
 
@@ -73,12 +119,12 @@ module.exports.onStart = function () {
 
     const currentModule = {
         name: '',
+        fullName: '',
+        versionedFullName: '',
         appPath: '',
         moduleType: '',
         packageType: '',
-        serviceFile: '',
-        sourceMode: 'cdn',
-        sourceBranch: 'main'
+        serviceFile: ''
     };
 
     const appControlData = {
@@ -111,7 +157,7 @@ module.exports.onStart = function () {
         adbClient = adbhost.createConnection({ host: '127.0.0.1', port: 26101 });
 
         adbClient._stream.on('connect', () => {
-            log('info', 'service', 'ADB connection established');
+            console.log('ADB connection established');
             //Launch app
             const tbPackageId = tizen.application.getAppInfo().packageId;
             const shellCmd = adbClient.createStream(`shell:0 debug ${tbPackageId}.TizenBrewStandalone${isTizen3 ? ' 0' : ''}`);
@@ -126,35 +172,21 @@ module.exports.onStart = function () {
         });
 
         adbClient._stream.on('error', (e) => {
-            log('error', 'service', 'ADB connection error.', e);
+            console.log('ADB connection error. ' + e);
         });
         adbClient._stream.on('close', () => {
-            log('info', 'service', 'ADB connection closed.');
+            console.log('ADB connection closed.');
         });
     }
 
 
     wsServer.on('connection', (ws) => {
-        const unsubscribeLogs = subscribe(entry => {
-            try {
-                ws.send(JSON.stringify({
-                    type: Events.LogEntry,
-                    payload: [entry]
-                }));
-            } catch (e) {
-                // ignore send failures on closed websocket
-            }
-        });
         const wsConn = new Connection(ws);
         for (const event of queuedEvents) {
             wsConn.send(event);
             queuedEvents.splice(queuedEvents.indexOf(event), 1);
         }
         services.set('wsConn', wsConn);
-        ws.on('close', () => {
-            unsubscribeLogs();
-        });
-
         ws.on('message', (message) => {
             let msg;
             try {
@@ -216,17 +248,15 @@ module.exports.onStart = function () {
                 case Events.LaunchModule: {
                     const mdl = payload;
                     currentModule.fullName = mdl.fullName;
+                    currentModule.versionedFullName = mdl.versionedFullName;
                     currentModule.name = mdl.name;
                     currentModule.appPath = mdl.appPath;
                     currentModule.moduleType = mdl.moduleType;
                     currentModule.packageType = mdl.packageType;
                     currentModule.serviceFile = mdl.serviceFile;
-                    currentModule.sourceMode = mdl.sourceMode || 'cdn';
-                    currentModule.sourceBranch = mdl.sourceBranch || 'main';
 
                     if (mdl.packageType === 'app') {
                         inDebug.webDebug = false;
-                        inDebug.appDebug = false;
                         inDebug.tizenDebug = false;
                     } else {
                         currentModule.mainFile = mdl.mainFile;
@@ -266,37 +296,37 @@ module.exports.onStart = function () {
                     wsConn.send(wsConn.Event(Events.GetServiceStatuses, serviceList));
                     break;
                 }
-                case Events.GetLogs: {
-                    wsConn.send(wsConn.Event(Events.LogEntry, getLogs()));
+                case Events.WebApisPath: {
+                    if (payload) {
+                        setWebApisPath(payload);
+                    }
+                    break;
+                }
+                case Events.WebApisCode: {
+                    if (payload) {
+                        const { setWebApisCode } = require('./utils/debugger.js');
+                        setWebApisCode(payload);
+                    }
                     break;
                 }
                 case Events.ModuleAction: {
-                    const action = payload.action;
-                    const module = payload.module;
+                    const { action, module, sourceMode } = payload;
 
                     const config = readConfig();
-                    if (!config.moduleSources) config.moduleSources = {};
-
                     switch (action) {
                         case 'add': {
-                            const index = config.modules.findIndex(m => m === module);
+                            const normalizedMode = sourceMode === 'direct' ? 'direct' : 'cdn';
+                            const index = config.modules.findIndex(m => (typeof m === 'string' ? m : m.name || m.module) === module);
                             if (index === -1) {
-                                config.modules.push(module);
+                                config.modules.push({ name: module, sourceMode: normalizedMode });
+                                writeConfig(config);
                             }
-
-                            config.moduleSources[module] = payload.sourceMode === 'direct' ? 'direct' : 'cdn';
-                            if (payload.sourceBranch) {
-                                config.moduleSources[`${module}:branch`] = payload.sourceBranch;
-                            }
-                            writeConfig(config);
                             break;
                         }
                         case 'remove': {
-                            const index = config.modules.findIndex(m => m === module);
+                            const index = config.modules.findIndex(m => (typeof m === 'string' ? m : m.name || m.module) === module);
                             if (index !== -1) {
                                 config.modules.splice(index, 1);
-                                delete config.moduleSources[module];
-                                delete config.moduleSources[`${module}:branch`];
                                 writeConfig(config);
                             }
                             break;

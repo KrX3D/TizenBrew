@@ -28,9 +28,9 @@ const Events = {
     GetServiceStatuses: 7,
     Error: 8,
     CanLaunchModules: 9,
-    ModuleAction: 10,
-    GetLogs: 11,
-    LogEntry: 12
+    WebApisPath: 20,
+    WebApisCode: 21,
+    ModuleAction: 10
 };
 
 module.exports = {

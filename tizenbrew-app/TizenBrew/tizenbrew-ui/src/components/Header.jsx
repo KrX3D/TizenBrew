@@ -1,12 +1,13 @@
-import { Cog6ToothIcon, ArchiveBoxIcon, HomeIcon, QuestionMarkCircleIcon } from '@heroicons/react/16/solid';
+import { Cog6ToothIcon, ArchiveBoxIcon, HomeIcon, QuestionMarkCircleIcon, ArrowPathIcon } from '@heroicons/react/16/solid';
 import { useFocusable } from '@noriginmedia/norigin-spatial-navigation';
-import { useEffect, useContext } from 'preact/hooks';
+import { useEffect, useContext, useState } from 'preact/hooks';
 import { useLocation } from 'preact-iso';
 import { GlobalStateContext } from './ClientContext.jsx';
 import TBLogo from '../assets/tizenbrew.svg';
 import { useTranslation } from 'react-i18next';
+import { Events } from './WebSocketClient.js';
 
-function Button({ children, route, focus, focusKey }) {
+function Button({ children, route, focus, focusKey, onClick }) {
     const { ref, focusSelf, focused } = useFocusable();
     const location = useLocation();
 
@@ -20,7 +21,7 @@ function Button({ children, route, focus, focusKey }) {
             ref={ref}
             focusKey={focus ? 'sn:focusable-item-1' : focusKey}
             className={`flex items-center justify-center p-2 rounded-full bg-slate-800 hover:bg-slate-600 text-slate-100 ${focused ? 'focus' : ''}`}
-            onClick={() => location.route(`/tizenbrew-ui/dist/index.html${route}`)}
+            onClick={onClick || (() => location.route(`/tizenbrew-ui/dist/index.html${route}`))}
         >
             {children}
         </button>
@@ -29,6 +30,19 @@ function Button({ children, route, focus, focusKey }) {
 export default function Header() {
     const { state } = useContext(GlobalStateContext);
     const { t } = useTranslation();
+    const [reloading, setReloading] = useState(false);
+
+    const handleReload = () => {
+        if (state.client && !reloading) {
+            setReloading(true);
+            state.client.send({
+                type: Events.GetModules,
+                payload: true // Force reload
+            });
+            // Visual feedback: stop spinning after 2 seconds
+            setTimeout(() => setReloading(false), 2000);
+        }
+    };
 
     return (
         <header className="inset-x-0 top-0 bg-slate-700 h-[8vh]">
@@ -45,12 +59,15 @@ export default function Header() {
                     <div className="mx-auto max-w-[30vw] h-[2.5vh]">
                         <div className="hidden sm:mb-8 sm:flex sm:justify-center">
                             <div className="relative rounded-full px-3 py-1 text-xl text-gray-200 ring-1 ring-gray-900/10 hover:ring-gray-900/20">
-                                {t(state?.sharedData?.state || '...')}
+                                {reloading ? '⟳ Reloading modules...' : t(state?.sharedData?.state || '...')}
                             </div>
                         </div>
                     </div>
                 </div>
                 <div className="hidden lg:flex lg:flex-1 lg:justify-end lg:gap-x-2">
+                    <Button onClick={handleReload} route="#">
+                        <ArrowPathIcon className={`h-[4vh] w-[2vw] ${reloading ? 'animate-spin' : ''}`} />
+                    </Button>
                     <Button route="/" focus={true} focusKey="sn:focusable-item-1">
                         <HomeIcon className="h-[4vh] w-[2vw]" />
                     </Button>

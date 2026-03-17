@@ -7,8 +7,7 @@ function readConfig() {
         return {
             modules: ["npm/@foxreis/tizentube"],
             autoLaunchServiceList: [],
-            autoLaunchModule: '',
-            moduleSources: {},
+            autoLaunchModule: '', 
         };
     }
     return JSON.parse(fs.readFileSync('/home/owner/share/tizenbrewConfig.json', 'utf8'));

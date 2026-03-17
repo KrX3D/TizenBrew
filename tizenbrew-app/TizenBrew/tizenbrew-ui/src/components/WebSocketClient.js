@@ -10,9 +10,9 @@ const Events = {
     GetServiceStatuses: 7,
     Error: 8,
     CanLaunchModules: 9,
-    ModuleAction: 10,
-    GetLogs: 11,
-    LogEntry: 12
+    WebApisPath: 20,
+    WebApisCode: 21,
+    ModuleAction: 10
 };
 
 class Client {
@@ -27,11 +27,22 @@ class Client {
         this.modules = [];
     }
 
-    onOpen() {
-        this.send({
-            type: Events.GetLogs
-        });
+    shouldRelaunchInDebug(payload) {
+        const alreadyDebugging = payload.rwiDebug || payload.webDebug || payload.appDebug || payload.tizenDebug;
+        if (alreadyDebugging) return false;
 
+        const relaunchKey = 'tizenbrew_debug_relaunch_attempt';
+        const lastAttempt = Number(sessionStorage.getItem(relaunchKey) || 0);
+        const now = Date.now();
+
+        // Avoid endless relaunch loops when debug attach fails on some platforms.
+        if (now - lastAttempt < 15000) return false;
+
+        sessionStorage.setItem(relaunchKey, String(now));
+        return true;
+    }
+
+    onOpen() {
         const data = tizen.application.getCurrentApplication().getRequestedAppControl().appControl.data;
         if (data.length > 0 && data[0].value.length > 0) {
             // TizenBrew allows other apps to launch a specific module outside of the TizenBrew app.
@@ -79,21 +90,14 @@ class Client {
             }
 
             case Events.GetDebugStatus: {
-                const normalizedPayload = {
-                    rwiDebug: Boolean(payload && payload.rwiDebug),
-                    webDebug: Boolean(payload && (payload.webDebug || payload.appDebug)),
-                    appDebug: Boolean(payload && (payload.webDebug || payload.appDebug)),
-                    tizenDebug: Boolean(payload && payload.tizenDebug)
-                };
-
                 const state = this.context.state;
-                state.sharedData.debugStatus = normalizedPayload;
+                state.sharedData.debugStatus = payload;
                 this.context.dispatch({
                     type: 'SET_SHARED_DATA',
                     payload: state.sharedData
                 });
 
-                if (!normalizedPayload.rwiDebug && !normalizedPayload.webDebug && !normalizedPayload.tizenDebug) {
+                if (this.shouldRelaunchInDebug(payload)) {
                     this.send({
                         type: Events.CanLaunchInDebug
                     });
@@ -152,6 +156,28 @@ class Client {
                     type: Events.Ready
                 });
 
+                // Send resolved webapis path
+                if (window.TIZEN_WEBAPIS_PATH) {
+                    console.log('[WebSocketClient] Sending webapis path:', window.TIZEN_WEBAPIS_PATH);
+                    this.send({
+                        type: Events.WebApisPath,
+                        payload: window.TIZEN_WEBAPIS_PATH
+                    });
+
+                    // Fetch the actual code and send it to the service
+                    fetch(window.TIZEN_WEBAPIS_PATH)
+                        .then(res => res.text())
+                        .then(code => {
+                            console.log('[WebSocketClient] Sending webapis code (length: ' + code.length + ')');
+                            this.send({
+                                type: Events.WebApisCode,
+                                payload: code
+                            });
+                        })
+                        .catch(err => console.error('[WebSocketClient] Failed to fetch webapis code:', err));
+                }
+
+
                 this.processPendingEvents();
 
                 break;
@@ -169,16 +195,6 @@ class Client {
                     this.handleCanLaunchModules(payload);
                 }
 
-                break;
-            }
-
-
-            case Events.LogEntry: {
-                const currentLogs = this.context.state.sharedData.logs || [];
-                this.context.dispatch({
-                    type: 'SET_LOGS',
-                    payload: currentLogs.concat(payload || [])
-                });
                 break;
             }
 
@@ -201,7 +217,6 @@ class Client {
     handleCanLaunchModules(payload) {
         const debugStatus = this.context.state.sharedData.debugStatus;
         debugStatus.webDebug = true;
-        debugStatus.appDebug = true;
         this.context.dispatch({
             type: 'SET_DEBUG_STATUS',
             payload: debugStatus
