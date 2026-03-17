@@ -29,15 +29,10 @@ export default function App() {
     }
   }, [context.state.sharedData.error.disappear]);
 
-  useEffect(() => {
-    setHeaderHeight(headerRef.current.base.clientHeight);
-  }, [headerRef]);
+  useEffect(() => { setHeaderHeight(headerRef.current.base.clientHeight); }, [headerRef]);
 
   useEffect(() => {
-    if (!window.setClient) {
-      startService(context);
-      window.setClient = true;
-    }
+    if (!window.setClient) { startService(context); window.setClient = true; }
   }, []);
 
   return (
@@ -54,13 +49,13 @@ export default function App() {
             </div>
           </div>
           <Router>
-            <Route component={Home}             path="/tizenbrew-ui/dist/index.html" />
-            <Route component={ModuleManager}    path="/tizenbrew-ui/dist/index.html/module-manager" />
-            <Route component={AddModule}        path="/tizenbrew-ui/dist/index.html/module-manager/add" />
-            <Route component={Settings}         path="/tizenbrew-ui/dist/index.html/settings" />
-            <Route component={Change}           path="/tizenbrew-ui/dist/index.html/settings/change" />
+            <Route component={Home}              path="/tizenbrew-ui/dist/index.html" />
+            <Route component={ModuleManager}     path="/tizenbrew-ui/dist/index.html/module-manager" />
+            <Route component={AddModule}         path="/tizenbrew-ui/dist/index.html/module-manager/add" />
+            <Route component={Settings}          path="/tizenbrew-ui/dist/index.html/settings" />
+            <Route component={Change}            path="/tizenbrew-ui/dist/index.html/settings/change" />
             <Route component={UserAgentSettings} path="/tizenbrew-ui/dist/index.html/settings/change-ua" />
-            <Route component={About}            path="/tizenbrew-ui/dist/index.html/about" />
+            <Route component={About}             path="/tizenbrew-ui/dist/index.html/about" />
           </Router>
         </div>
       </LocationProvider>
@@ -69,87 +64,71 @@ export default function App() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Service startup
+// Service startup — sessionStorage flag prevents re-launching on every reload
 //
-// Root cause of the Tizen 5.5 loop:
-//   Every reload resets all JS state → wsRetry always starts at 0 → WS fails
-//   → launches service again → service already running → "unknown error" or
-//   new instance → reload → repeat forever.
+// Flow:
+//   First load  → try WS → fails → launchAppControl → set flag → wait 3 s → reload
+//   After reload → flag is set → skip launch, retry WS up to 15 times (30 s total)
+//   On connect  → clear flag, set client
+//   On give-up  → clear flag, show error
 //
-// Fix: use sessionStorage as a reload-surviving flag.
-//   - First run (no flag)  → try WS once; if it fails → launch service,
-//                            set flag, reload.
-//   - After reload (flag set) → service was just launched; retry WS up to
-//                               10 times (15 s) WITHOUT launching again.
-//   - On successful connect → clear the flag.
+// The 3 s pre-reload wait gives Tizen 5.5's slower service process enough
+// time to actually bind port 8081 before the next WS attempt.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SS_KEY = 'tbServiceLaunched';
 
 function startService(context) {
-  const alreadyLaunched = sessionStorage.getItem(SS_KEY) === '1';
-
-  if (alreadyLaunched) {
-    // We already launched in a previous load — just wait for the WS to come up.
-    retryWS(context, 10);
+  if (sessionStorage.getItem(SS_KEY) === '1') {
+    // Already launched — just keep trying to connect
+    retryWS(context, 15);
   } else {
-    // First attempt: try to connect; if that fails, launch the service.
-    tryWS(context, /*canLaunch=*/true);
+    tryWS(context);
   }
 }
 
-function tryWS(context, canLaunch) {
+function tryWS(context) {
   const ws = new WebSocket('ws://localhost:8081');
 
-  // 2 s hard timeout — Tizen 5.5 can be slow to report ECONNREFUSED
   const timeout = setTimeout(() => {
     try { ws.close(); } catch (_) {}
-    onWSFail(context, canLaunch);
-  }, 2000);
+    launchService(context);
+  }, 3000);
 
-  ws.onerror = () => {
-    clearTimeout(timeout);
-    onWSFail(context, canLaunch);
-  };
+  ws.onerror = () => { clearTimeout(timeout); launchService(context); };
 
   ws.onopen = () => {
     clearTimeout(timeout);
-    // Connected — service is running.
     sessionStorage.removeItem(SS_KEY);
     context.dispatch({ type: 'SET_STATE', payload: 'service.alreadyRunning' });
     context.dispatch({ type: 'SET_CLIENT', payload: new Client(context) });
   };
 }
 
-function onWSFail(context, canLaunch) {
-  if (!canLaunch) return; // Should not reach here through retryWS path
-
-  // Try launching the service.
-  const pkgId = tizen.application.getCurrentApplication().appInfo.packageId;
+function launchService(context) {
+  const pkgId    = tizen.application.getCurrentApplication().appInfo.packageId;
   const serviceId = pkgId + '.StandaloneService';
 
   tizen.application.launchAppControl(
     new tizen.ApplicationControl('http://tizen.org/appcontrol/operation/service'),
     serviceId,
     function () {
-      // Launched successfully. Set the flag, wait 1.5 s, reload.
-      // The flag tells the next load NOT to launch again — just retry WS.
+      // Success callback fires when the service process has been created,
+      // but on Tizen 5.5 the WS port may not be bound yet. Wait 3 s then reload.
       sessionStorage.setItem(SS_KEY, '1');
       context.dispatch({ type: 'SET_STATE', payload: 'service.started' });
-      setTimeout(() => window.location.reload(), 1500);
+      setTimeout(() => window.location.reload(), 3000);
     },
-    function (e) {
-      // Launch failed — service might already be running from a previous crash
-      // or a parallel attempt. Don't loop: just retry WS several times.
+    function () {
+      // Error — service may already be running. Set flag and retry WS.
       sessionStorage.setItem(SS_KEY, '1');
-      retryWS(context, 8);
+      retryWS(context, 15);
     }
   );
 }
 
 function retryWS(context, attemptsLeft) {
   if (attemptsLeft <= 0) {
-    // Gave up — show error but clear the flag so the user can try again
     sessionStorage.removeItem(SS_KEY);
     context.dispatch({
       type: 'SET_ERROR',
@@ -162,12 +141,12 @@ function retryWS(context, attemptsLeft) {
 
   const timeout = setTimeout(() => {
     try { ws.close(); } catch (_) {}
-    setTimeout(() => retryWS(context, attemptsLeft - 1), 1500);
+    setTimeout(() => retryWS(context, attemptsLeft - 1), 2000);
   }, 2000);
 
   ws.onerror = () => {
     clearTimeout(timeout);
-    setTimeout(() => retryWS(context, attemptsLeft - 1), 1500);
+    setTimeout(() => retryWS(context, attemptsLeft - 1), 2000);
   };
 
   ws.onopen = () => {
