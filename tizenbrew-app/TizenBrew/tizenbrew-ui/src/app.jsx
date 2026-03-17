@@ -24,10 +24,7 @@ export default function App() {
   useEffect(() => {
     if (context.state.sharedData.error.disappear) {
       setTimeout(() => {
-        context.dispatch({
-          type: 'SET_ERROR',
-          payload: { message: null, disappear: false }
-        });
+        context.dispatch({ type: 'SET_ERROR', payload: { message: null, disappear: false } });
       }, 5000);
     }
   }, [context.state.sharedData.error.disappear]);
@@ -71,49 +68,63 @@ export default function App() {
   );
 }
 
-// ── Service startup with retry logic ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Service startup
 //
-// Problem on Tizen 5.5:
-//   1. WS connect to 8081 fails → launchAppControl fires
-//   2. launchAppControl success callback → immediate reload
-//   3. On reload, service may not be fully up yet → WS fails again
-//   4. Second launchAppControl attempt → "unknown error" (service already launching)
+// Root cause of the Tizen 5.5 loop:
+//   Every reload resets all JS state → wsRetry always starts at 0 → WS fails
+//   → launches service again → service already running → "unknown error" or
+//   new instance → reload → repeat forever.
 //
-// Fix:
-//   - Add a 2s delay before reload so the service has time to bind its WS port
-//   - If launchAppControl itself fails, assume the service is already running/launching
-//     and retry the WS connection (up to 5 times, 1.5s apart) instead of alerting
+// Fix: use sessionStorage as a reload-surviving flag.
+//   - First run (no flag)  → try WS once; if it fails → launch service,
+//                            set flag, reload.
+//   - After reload (flag set) → service was just launched; retry WS up to
+//                               10 times (15 s) WITHOUT launching again.
+//   - On successful connect → clear the flag.
+// ─────────────────────────────────────────────────────────────────────────────
 
-function tryConnectWS(context, wsRetry) {
-  const testWS = new WebSocket('ws://localhost:8081');
+const SS_KEY = 'tbServiceLaunched';
 
-  // Timeout in case the socket neither opens nor errors quickly (Tizen 5.5 quirk)
+function startService(context) {
+  const alreadyLaunched = sessionStorage.getItem(SS_KEY) === '1';
+
+  if (alreadyLaunched) {
+    // We already launched in a previous load — just wait for the WS to come up.
+    retryWS(context, 10);
+  } else {
+    // First attempt: try to connect; if that fails, launch the service.
+    tryWS(context, /*canLaunch=*/true);
+  }
+}
+
+function tryWS(context, canLaunch) {
+  const ws = new WebSocket('ws://localhost:8081');
+
+  // 2 s hard timeout — Tizen 5.5 can be slow to report ECONNREFUSED
   const timeout = setTimeout(() => {
-    try { testWS.close(); } catch (_) {}
-    handleWSFailure(context, wsRetry);
-  }, 3000);
+    try { ws.close(); } catch (_) {}
+    onWSFail(context, canLaunch);
+  }, 2000);
 
-  testWS.onerror = () => {
+  ws.onerror = () => {
     clearTimeout(timeout);
-    handleWSFailure(context, wsRetry);
+    onWSFail(context, canLaunch);
   };
 
-  testWS.onopen = () => {
+  ws.onopen = () => {
     clearTimeout(timeout);
+    // Connected — service is running.
+    sessionStorage.removeItem(SS_KEY);
     context.dispatch({ type: 'SET_STATE', payload: 'service.alreadyRunning' });
     context.dispatch({ type: 'SET_CLIENT', payload: new Client(context) });
   };
 }
 
-function handleWSFailure(context, wsRetry) {
-  if (wsRetry > 0) {
-    // Already tried launching — just retry the WS connection, the service
-    // is probably still warming up.
-    setTimeout(() => tryConnectWS(context, wsRetry - 1), 1500);
-    return;
-  }
+function onWSFail(context, canLaunch) {
+  if (!canLaunch) return; // Should not reach here through retryWS path
 
-  // First failure — try launching the service.
+  // Try launching the service.
   const pkgId = tizen.application.getCurrentApplication().appInfo.packageId;
   const serviceId = pkgId + '.StandaloneService';
 
@@ -121,25 +132,48 @@ function handleWSFailure(context, wsRetry) {
     new tizen.ApplicationControl('http://tizen.org/appcontrol/operation/service'),
     serviceId,
     function () {
-      // Success — give the service 2 s to start its WS server, then reload.
+      // Launched successfully. Set the flag, wait 1.5 s, reload.
+      // The flag tells the next load NOT to launch again — just retry WS.
+      sessionStorage.setItem(SS_KEY, '1');
       context.dispatch({ type: 'SET_STATE', payload: 'service.started' });
-      setTimeout(() => window.location.reload(), 2000);
+      setTimeout(() => window.location.reload(), 1500);
     },
     function (e) {
-      // launchAppControl failed.
-      // "unknown error" on Tizen 5.5 usually means the service is already
-      // running or is still in the process of starting up.
-      // Retry WS connection up to 5 more times before giving up.
-      const msg = (e && e.message) ? e.message.toLowerCase() : '';
-      if (msg.includes('unknown') || msg.includes('already') || wsRetry < 5) {
-        setTimeout(() => tryConnectWS(context, 5), 1500);
-      } else {
-        alert('Launch Service failed: ' + e.message);
-      }
+      // Launch failed — service might already be running from a previous crash
+      // or a parallel attempt. Don't loop: just retry WS several times.
+      sessionStorage.setItem(SS_KEY, '1');
+      retryWS(context, 8);
     }
   );
 }
 
-function startService(context) {
-  tryConnectWS(context, 0);
+function retryWS(context, attemptsLeft) {
+  if (attemptsLeft <= 0) {
+    // Gave up — show error but clear the flag so the user can try again
+    sessionStorage.removeItem(SS_KEY);
+    context.dispatch({
+      type: 'SET_ERROR',
+      payload: { message: 'errors.serviceDidntConnectYet', disappear: false }
+    });
+    return;
+  }
+
+  const ws = new WebSocket('ws://localhost:8081');
+
+  const timeout = setTimeout(() => {
+    try { ws.close(); } catch (_) {}
+    setTimeout(() => retryWS(context, attemptsLeft - 1), 1500);
+  }, 2000);
+
+  ws.onerror = () => {
+    clearTimeout(timeout);
+    setTimeout(() => retryWS(context, attemptsLeft - 1), 1500);
+  };
+
+  ws.onopen = () => {
+    clearTimeout(timeout);
+    sessionStorage.removeItem(SS_KEY);
+    context.dispatch({ type: 'SET_STATE', payload: 'service.alreadyRunning' });
+    context.dispatch({ type: 'SET_CLIENT', payload: new Client(context) });
+  };
 }
