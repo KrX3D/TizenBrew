@@ -10,11 +10,9 @@ const Events = {
     GetServiceStatuses: 7,
     Error: 8,
     CanLaunchModules: 9,
-    ModuleAction: 10,
-    ResetModules: 11,
-    ModuleActionResult: 12,
     WebApisPath: 20,
     WebApisCode: 21,
+    ModuleAction: 10
 };
 
 class Client {
@@ -27,12 +25,12 @@ class Client {
         this.pendingEvents = [];
         this.modulesLoaded = false;
         this.modules = [];
-        this.startupDiagShown = false;
     }
 
     onOpen() {
         const data = tizen.application.getCurrentApplication().getRequestedAppControl().appControl.data;
         if (data.length > 0 && data[0].value.length > 0) {
+            // TizenBrew allows other apps to launch a specific module outside of the TizenBrew app.
             try {
                 const parsedData = JSON.parse(data[0].value[0]);
                 const moduleName = parsedData.moduleName;
@@ -40,18 +38,27 @@ class Client {
                 const args = parsedData.args;
 
                 if (!moduleName || !moduleType) {
-                    return this.send({ type: Events.GetDebugStatus });
+                    return this.send({
+                        type: Events.GetDebugStatus
+                    });
                 }
 
                 this.send({
                     type: Events.AppControlData,
-                    payload: { package: `${moduleType}/${moduleName}`, args }
+                    payload: {
+                        package: `${moduleType}/${moduleName}`,
+                        args
+                    }
                 });
             } catch (e) {
-                this.send({ type: Events.GetDebugStatus });
+                this.send({
+                    type: Events.GetDebugStatus
+                });
             }
         } else {
-            this.send({ type: Events.GetDebugStatus });
+            this.send({
+                type: Events.GetDebugStatus
+            });
         }
     }
 
@@ -61,36 +68,59 @@ class Client {
 
         switch (type) {
             case Events.AppControlData: {
-                this.send({ type: Events.GetDebugStatus });
+                this.send({
+                    type: Events.GetDebugStatus
+                });
                 break;
             }
 
             case Events.GetDebugStatus: {
                 const state = this.context.state;
                 state.sharedData.debugStatus = payload;
-                this.context.dispatch({ type: 'SET_SHARED_DATA', payload: state.sharedData });
+                this.context.dispatch({
+                    type: 'SET_SHARED_DATA',
+                    payload: state.sharedData
+                });
 
                 if (!payload.rwiDebug && !payload.appDebug && !payload.tizenDebug) {
-                    this.send({ type: Events.CanLaunchInDebug });
+                    this.send({
+                        type: Events.CanLaunchInDebug
+                    });
                 } else {
-                    this.send({ type: Events.GetModules });
+                    this.send({
+                        type: Events.GetModules
+                    });
                 }
+
                 break;
             }
 
             case Events.CanLaunchInDebug: {
                 if (payload) {
                     const tvIP = webapis.network.getIp();
-                    this.send({ type: Events.ReLaunchInDebug, payload: { tvIP } });
+                    this.send({
+                        type: Events.ReLaunchInDebug,
+                        payload: {
+                            tvIP
+                        }
+                    });
+
                     tizen.application.getCurrentApplication().exit();
                 } else if (payload === null) {
-                    this.send({ type: Events.CanLaunchInDebug });
-                } else {
-                    this.context.dispatch({
-                        type: 'SET_ERROR',
-                        payload: { message: 'errors.debuggingNotEnabled', disappear: false }
+                    this.send({
+                        type: Events.CanLaunchInDebug
                     });
                 }
+                else {
+                    this.context.dispatch({
+                        type: 'SET_ERROR',
+                        payload: {
+                            message: 'errors.debuggingNotEnabled',
+                            disappear: false
+                        }
+                    });
+                }
+
                 break;
             }
 
@@ -99,131 +129,71 @@ class Client {
                     return setTimeout(() => this.send({ type: Events.GetModules }), 500);
                 }
 
-                // On the first (non-forced) call, service wraps payload as
-                // { modules: [...], diagnostic: '...' }.
-                // On forced reload calls, payload is the plain array.
-                let modules, diagnostic;
-                if (payload && !Array.isArray(payload) && payload.modules) {
-                    modules = payload.modules;
-                    diagnostic = payload.diagnostic;
-                } else {
-                    modules = payload;
-                    diagnostic = null;
-                }
+                this.context.dispatch({
+                    type: 'SET_MODULES',
+                    payload
+                });
 
-                // Show startup diagnostic toast once
-                if (!this.startupDiagShown && diagnostic) {
-                    this.startupDiagShown = true;
-                    const toast = window.__globalToast;
-                    if (toast) {
-                        // Resolve the "Probing config file…" toast from app.jsx
-                        if (window.__configProbeToastId != null) {
-                            const isPresent = diagnostic.includes('File exists: YES');
-                            const isWritable = diagnostic.includes('File writable: YES');
-                            let summary;
-                            if (isPresent && isWritable) {
-                                summary = '✅ Config file found and writable';
-                            } else if (isPresent) {
-                                summary = '⚠️ Config file found but NOT writable!';
-                            } else {
-                                summary = '⚠️ Config file NOT found (will be created on first write)';
-                            }
-                            toast.resolve(window.__configProbeToastId, isPresent && isWritable ? 'success' : 'info',
-                                summary + '\n\n' + diagnostic, 12000);
-                            window.__configProbeToastId = null;
-                        } else {
-                            toast.info('🗂 Startup fs check:\n' + diagnostic, 12000);
-                        }
-                    }
-                } else if (!this.startupDiagShown) {
-                    // No diagnostic (old service build) — resolve probe toast with warning
-                    this.startupDiagShown = true;
-                    const toast = window.__globalToast;
-                    if (toast && window.__configProbeToastId != null) {
-                        toast.resolve(window.__configProbeToastId, 'error',
-                            '❌ Service sent no diagnostic.\nYou are probably still running the old dist/index.js bundle.\nDeploy the new index.js and configuration.js, then rebuild.',
-                            15000);
-                        window.__configProbeToastId = null;
-                    }
-                }
-
-                this.context.dispatch({ type: 'SET_MODULES', payload: modules });
-                this.modules = modules;
+                this.modules = payload;
                 this.modulesLoaded = true;
 
-                this.send({ type: Events.Ready });
+                this.send({
+                    type: Events.Ready
+                });
 
+                // Send resolved webapis path
                 if (window.TIZEN_WEBAPIS_PATH) {
                     console.log('[WebSocketClient] Sending webapis path:', window.TIZEN_WEBAPIS_PATH);
-                    this.send({ type: Events.WebApisPath, payload: window.TIZEN_WEBAPIS_PATH });
+                    this.send({
+                        type: Events.WebApisPath,
+                        payload: window.TIZEN_WEBAPIS_PATH
+                    });
 
+                    // Fetch the actual code and send it to the service
                     fetch(window.TIZEN_WEBAPIS_PATH)
                         .then(res => res.text())
                         .then(code => {
                             console.log('[WebSocketClient] Sending webapis code (length: ' + code.length + ')');
-                            this.send({ type: Events.WebApisCode, payload: code });
+                            this.send({
+                                type: Events.WebApisCode,
+                                payload: code
+                            });
                         })
                         .catch(err => console.error('[WebSocketClient] Failed to fetch webapis code:', err));
                 }
 
+
                 this.processPendingEvents();
+
                 break;
             }
 
             case Events.CanLaunchModules: {
-                this.context.dispatch({ type: 'SET_STATE', payload: 'service.connected' });
+                this.context.dispatch({
+                    type: 'SET_STATE',
+                    payload: 'service.connected'
+                });
 
                 if (!this.modulesLoaded) {
                     this.pendingEvents.push({ type, payload });
                 } else {
                     this.handleCanLaunchModules(payload);
                 }
+
                 break;
             }
 
             case Events.LaunchModule: {
                 const module = this.modules.find(mdl => mdl.fullName === payload);
+
                 if (module) {
                     for (const key of module.keys) {
                         tizen.tvinputdevice.registerKey(key);
                     }
+
                     location.href = module.appPath;
                 }
-                break;
-            }
 
-            case Events.ResetModules: {
-                this.context.dispatch({ type: 'SET_RESET_MODULES_RESULT', payload });
-                break;
-            }
-
-            case Events.ModuleActionResult: {
-                // payload: { ok, action, module, message, config?, diagnostic, stack? }
-                const toast = window.__globalToast;
-                console.log('[ModuleActionResult]', JSON.stringify(payload));
-
-                if (!toast) break;
-
-                if (payload.ok) {
-                    const moduleList = payload.config && payload.config.modules
-                        ? '\nModules in config: ' + JSON.stringify(payload.config.modules)
-                        : '';
-                    const diag = payload.diagnostic
-                        ? '\n\n' + payload.diagnostic
-                        : '';
-                    toast.info(
-                        '📝 ' + payload.action + ': ' + payload.message + moduleList + diag,
-                        12000
-                    );
-                } else {
-                    const diag = payload.diagnostic ? '\n\n' + payload.diagnostic : '';
-                    toast.error(
-                        '❌ "' + payload.action + '" failed:\n' + payload.message +
-                        (payload.stack ? '\n' + payload.stack.split('\n').slice(0, 3).join('\n') : '') +
-                        diag,
-                        15000
-                    );
-                }
                 break;
             }
         }
@@ -232,7 +202,10 @@ class Client {
     handleCanLaunchModules(payload) {
         const debugStatus = this.context.state.sharedData.debugStatus;
         debugStatus.webDebug = true;
-        this.context.dispatch({ type: 'SET_DEBUG_STATUS', payload: debugStatus });
+        this.context.dispatch({
+            type: 'SET_DEBUG_STATUS',
+            payload: debugStatus
+        });
 
         if (payload) {
             if (payload.type === 'autolaunch' && !window.shouldDisableAutoLaunch) {
@@ -240,26 +213,41 @@ class Client {
                 if (!module) {
                     this.context.dispatch({
                         type: 'SET_ERROR',
-                        payload: { message: 'errors.moduleNotFound', args: { moduleName: payload.module }, disappear: true }
+                        payload: {
+                            message: 'errors.moduleNotFound',
+                            args: {
+                                moduleName: payload.module
+                            },
+                            disappear: true
+                        }
                     });
                     return;
                 }
                 for (const key of module.keys) {
                     tizen.tvinputdevice.registerKey(key);
                 }
-                this.send({ type: Events.LaunchModule, payload: module });
+
+                this.send({
+                    type: Events.LaunchModule,
+                    payload: module
+                });
+
                 if (!module.evaluateScriptOnDocumentStart) {
                     location.href = module.appPath;
                 }
-            } else if (payload.type === 'appControl') {
+            }
+            else if (payload.type === 'appControl') {
                 const module = payload.module;
                 for (const key of module.keys) {
                     tizen.tvinputdevice.registerKey(key);
                 }
-                this.send({ type: Events.LaunchModule, payload: module });
-                module.appPath.includes('?')
-                    ? location.href = `${module.appPath}&${payload.args}`
-                    : location.href = `${module.appPath}?${payload.args}`;
+
+                this.send({
+                    type: Events.LaunchModule,
+                    payload: module
+                });
+
+                module.appPath.includes('?') ? location.href = `${module.appPath}&${payload.args}` : location.href = `${module.appPath}?${payload.args}`;
             }
         }
     }

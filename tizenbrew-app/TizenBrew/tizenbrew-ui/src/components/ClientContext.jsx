@@ -5,19 +5,15 @@ const initialState = {
     sharedData: {
         debugStatus: {
             rwiDebug: false,
-            webDebug: false,   // PR #209: added — service sends this field
             appDebug: false,
             tizenDebug: false
         },
         modules: null,
-        modulesVersion: 0,
         state: null,
         error: {
             message: null,
             dissapear: false
-        },
-        pendingAdd: null,           // { fullName, type, toastId, snapshotVersion }
-        resetModulesResult: null,   // { success, deleted, notFound, dirListings }
+        }
     },
     client: null
 };
@@ -30,18 +26,7 @@ function reducer(state, action) {
             if (state.client) return state;
             return { ...state, client: action.payload };
         case 'SET_MODULES':
-            return {
-                ...state,
-                sharedData: {
-                    ...state.sharedData,
-                    modules: action.payload,
-                    modulesVersion: state.sharedData.modulesVersion + 1
-                }
-            };
-        case 'SET_PENDING_ADD':
-            return { ...state, sharedData: { ...state.sharedData, pendingAdd: action.payload } };
-        case 'SET_RESET_MODULES_RESULT':
-            return { ...state, sharedData: { ...state.sharedData, resetModulesResult: action.payload } };
+            return { ...state, sharedData: { ...state.sharedData, modules: action.payload } };
         case 'SET_DEBUG_STATUS':
             return { ...state, sharedData: { ...state.sharedData, debugStatus: action.payload } };
         case 'SET_STATE':

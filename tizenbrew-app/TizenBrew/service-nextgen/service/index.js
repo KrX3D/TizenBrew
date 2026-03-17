@@ -6,7 +6,7 @@ module.exports.onStart = function () {
     const express = require('express');
     const fetch = require('node-fetch');
     const path = require('path');
-    const { readConfig, writeConfig, diagnoseConfig } = require('./utils/configuration.js');
+    const { readConfig, writeConfig } = require('./utils/configuration.js');
     const loadModules = require('./utils/moduleLoader.js');
     const { startDebugging, setWebApisPath } = require('./utils/debugger.js');
     const startService = require('./utils/serviceLauncher.js');
@@ -18,11 +18,12 @@ module.exports.onStart = function () {
         WebSocket = require('ws-new');
     }
 
+
     const app = express();
     let deviceIP;
     const isTizen3 = tizen.systeminfo.getCapability('http://tizen.org/feature/platform.version').startsWith('3.0');
 
-    // HTTP Proxy for modules
+    // HTTP Proxy for modules 
     app.all('*', (req, res) => {
         if (req.url === '/webapis.js') {
             const { getWebApisCode } = require('./utils/debugger.js');
@@ -38,23 +39,27 @@ module.exports.onStart = function () {
             const splittedUrl = req.url.split('/');
             const encodedModuleName = splittedUrl[2];
             const moduleName = decodeURIComponent(encodedModuleName);
+            // Append timestamp to ensure we don't hit any intermediate caches for proxy requests
             const cacheBuster = `?t=${Date.now()}`;
 
             let upstreamUrl;
             const filePath = req.url.replace(`/module/${encodedModuleName}/`, '');
 
+            // Strip jsDelivr prefixes to get clean GitHub user/repo
             function getGitHubRepo(name) {
                 if (name.startsWith('gh/')) return name.substring(3);
                 if (name.startsWith('npm/')) return null;
                 return name;
             }
 
+            // Check if versioned
             if (moduleName.includes('@')) {
                 const [rawRepo, tag] = moduleName.split('@');
                 const repo = getGitHubRepo(rawRepo);
                 if (repo) {
                     upstreamUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${filePath}`;
                 } else {
+                    // npm package, fallback to jsDelivr
                     upstreamUrl = `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
                 }
             } else {
@@ -83,26 +88,13 @@ module.exports.onStart = function () {
 
     let adbClient;
     let canLaunchInDebug = null;
-
-    function refreshCanLaunchInDebugStatus() {
-        return fetch('http://127.0.0.1:8001/api/v2/')
-            .then(res => res.json())
-            .then(json => {
-                canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
-                return canLaunchInDebug;
-            })
-            .catch(() => {
-                canLaunchInDebug = false;
-                return canLaunchInDebug;
-            });
-    }
-
-    refreshCanLaunchInDebugStatus();
-
+    fetch('http://127.0.0.1:8001/api/v2/').then(res => res.json())
+        .then(json => {
+            canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
+        });
     const inDebug = {
         tizenDebug: false,
         webDebug: false,
-        appDebug: false,
         rwiDebug: false
     };
 
@@ -127,12 +119,7 @@ module.exports.onStart = function () {
 
     loadModules().then(modules => {
         modulesCache = modules;
-        const config = readConfig();
-        const rawList = config.autoLaunchServiceList;
-        const serviceModuleList = Array.isArray(rawList)
-            ? rawList.filter(Boolean)
-            : (rawList ? [rawList] : []);
-
+        const serviceModuleList = readConfig().autoLaunchServiceList;
         if (serviceModuleList.length > 0) {
             serviceModuleList.forEach(module => {
                 const service = modules.find(m => m.name === module);
@@ -156,6 +143,7 @@ module.exports.onStart = function () {
 
         adbClient._stream.on('connect', () => {
             console.log('ADB connection established');
+            //Launch app
             const tbPackageId = tizen.application.getAppInfo().packageId;
             const shellCmd = adbClient.createStream(`shell:0 debug ${tbPackageId}.TizenBrewStandalone${isTizen3 ? ' 0' : ''}`);
             shellCmd.on('data', function dataIncoming(data) {
@@ -217,9 +205,11 @@ module.exports.onStart = function () {
                     break;
                 }
                 case Events.CanLaunchInDebug: {
-                    refreshCanLaunchInDebugStatus().then((status) => {
-                        wsConn.send(wsConn.Event(Events.CanLaunchInDebug, status));
-                    });
+                    fetch('http://127.0.0.1:8001/api/v2/').then(res => res.json())
+                        .then(json => {
+                            canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
+                        });
+                    wsConn.send(wsConn.Event(Events.CanLaunchInDebug, canLaunchInDebug));
                     break;
                 }
                 case Events.ReLaunchInDebug: {
@@ -237,17 +227,7 @@ module.exports.onStart = function () {
                             modulesCache = modules;
                             wsConn.send(wsConn.Event(Events.GetModules, modules));
                         });
-                    } else {
-                        // First call (payload=false) — include fs diagnostic so frontend
-                        // can show it as a toast and we can see the config state at startup.
-                        // Wrap in object so diagnostic travels alongside modules array.
-                        const diagnostic = diagnoseConfig();
-                        console.log('[GetModules] startup diagnostic:\n' + diagnostic);
-                        wsConn.send(wsConn.Event(Events.GetModules, {
-                            modules: modulesCache,
-                            diagnostic: diagnostic
-                        }));
-                    }
+                    } else wsConn.send(wsConn.Event(Events.GetModules, modulesCache));
                     break;
                 }
                 case Events.LaunchModule: {
@@ -262,7 +242,6 @@ module.exports.onStart = function () {
 
                     if (mdl.packageType === 'app') {
                         inDebug.webDebug = false;
-                        inDebug.appDebug = false;
                         inDebug.tizenDebug = false;
                     } else {
                         currentModule.mainFile = mdl.mainFile;
@@ -317,98 +296,41 @@ module.exports.onStart = function () {
                 }
                 case Events.ModuleAction: {
                     const { action, module } = payload;
-                    let resultPayload;
-                    const diagnostic = diagnoseConfig();
-                    console.log('[ModuleAction] action=' + action + ' module=' + module);
-                    console.log('[ModuleAction] fs diagnostic:\n' + diagnostic);
 
-                    try {
-                        const config = readConfig();
-                        console.log('[ModuleAction] config before:', JSON.stringify(config));
-
-                        switch (action) {
-                            case 'add': {
-                                const index = config.modules.findIndex(m => m === module);
-                                if (index === -1) {
-                                    config.modules.push(module);
-                                    writeConfig(config);
-                                    console.log('[ModuleAction] added, config after:', JSON.stringify(config));
-                                    resultPayload = { ok: true, action, module, message: 'Added "' + module + '"', config, diagnostic };
-                                } else {
-                                    resultPayload = { ok: true, action, module, message: 'Already present: "' + module + '"', config, diagnostic };
-                                }
-                                break;
-                            }
-                            case 'remove': {
-                                const index = config.modules.findIndex(m => m === module);
-                                if (index !== -1) {
-                                    config.modules.splice(index, 1);
-                                    writeConfig(config);
-                                    resultPayload = { ok: true, action, module, message: 'Removed "' + module + '"', config, diagnostic };
-                                } else {
-                                    resultPayload = { ok: true, action, module, message: 'Not found (nothing removed): "' + module + '"', config, diagnostic };
-                                }
-                                break;
-                            }
-                            case 'autolaunch': {
-                                config.autoLaunchModule = module;
+                    const config = readConfig();
+                    switch (action) {
+                        case 'add': {
+                            const index = config.modules.findIndex(m => m === module);
+                            if (index === -1) {
+                                config.modules.push(module);
                                 writeConfig(config);
-                                resultPayload = { ok: true, action, module, message: 'Autolaunch set to "' + module + '"', config, diagnostic };
-                                break;
                             }
-                            case 'autolaunchService': {
-                                config.autoLaunchServiceList = module;
-                                writeConfig(config);
-                                resultPayload = { ok: true, action, module, message: 'Autolaunch service list updated', config, diagnostic };
-                                break;
-                            }
-                            default: {
-                                resultPayload = { ok: false, action, module, message: 'Unknown action: "' + action + '"', diagnostic };
-                            }
+                            break;
                         }
-                    } catch (e) {
-                        console.log('[ModuleAction] ERROR: ' + e.message);
-                        resultPayload = {
-                            ok: false,
-                            action,
-                            module,
-                            message: 'Exception: ' + e.message,
-                            stack: e.stack,
-                            diagnostic
-                        };
+                        case 'remove': {
+                            const index = config.modules.findIndex(m => m === module);
+                            if (index !== -1) {
+                                config.modules.splice(index, 1);
+                                writeConfig(config);
+                            }
+                            break;
+                        }
+                        case 'autolaunch': {
+                            config.autoLaunchModule = module;
+                            writeConfig(config);
+                            break;
+                        }
+                        case 'autolaunchService': {
+                            config.autoLaunchServiceList = module;
+                            writeConfig(config);
+                            break;
+                        }
                     }
-
-                    wsConn.send(wsConn.Event(Events.ModuleActionResult, resultPayload));
                     break;
                 }
                 case Events.Ready: {
                     wsConn.isReady = true;
                     services.set('wsConn', wsConn);
-                    break;
-                }
-                case Events.ResetModules: {
-                    const fs = require('fs');
-                    const CONFIG_PATH = '/home/owner/share/tizenbrewConfig.json';
-
-                    const DEFAULT_CONFIG = JSON.stringify({
-                        modules: ['npm/@foxreis/tizentube'],
-                        autoLaunchServiceList: [],
-                        autoLaunchModule: '',
-                    }, null, 4);
-
-                    let success = false;
-                    let detail = diagnoseConfig() + '\n';
-
-                    try {
-                        fs.writeFileSync(CONFIG_PATH, DEFAULT_CONFIG, 'utf8');
-                        detail += 'Write succeeded.';
-                        success = true;
-                    } catch (e) {
-                        detail += 'Write error: ' + e.message;
-                    }
-
-                    modulesCache = [];
-                    wsConn.send(wsConn.Event(Events.ResetModules, { success, detail }));
                     break;
                 }
                 default: {

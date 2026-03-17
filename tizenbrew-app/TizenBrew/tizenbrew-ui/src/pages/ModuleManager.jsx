@@ -4,12 +4,6 @@ import { GlobalStateContext } from '../components/ClientContext.jsx';
 import { Events } from '../components/WebSocketClient.js';
 import { useLocation } from 'preact-iso';
 import { useTranslation } from 'react-i18next';
-import { getGlobalToast } from '../components/Toast.jsx';
-
-const DEFAULTS = {
-    npm: '@krx3d/tizentube2',
-    gh: 'krx3d/tizentube',
-};
 
 function classNames(...classes) {
     return classes.filter(Boolean).join(' ')
@@ -18,17 +12,32 @@ function classNames(...classes) {
 function Item({ children, module, id, state }) {
     const { t } = useTranslation();
     const { ref, focused } = useFocusable();
-    useEffect(() => {
-        if (focused) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      useEffect(() => {
+        if (focused) {
+            ref.current.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+                inline: 'center',
+            });
+        }
     }, [focused, ref]);
 
     function handleOnClick() {
         const deleteConfirm = confirm(t('moduleManager.confirmDelete', { packageName: module.appName }));
         if (deleteConfirm) {
-            state.client.send({ type: Events.ModuleAction, payload: { action: 'remove', module: module.fullName } });
-            state.client.send({ type: Events.GetModules, payload: true });
-            const toast = getGlobalToast();
-            if (toast) toast.info(`"${module.appName}" removed.`);
+            state.client.send({
+                type: Events.ModuleAction,
+                payload: {
+                    action: 'remove',
+                    module: module.fullName
+                }
+            });
+
+            state.client.send({
+                type: Events.GetModules,
+                payload: true
+            });
+
             setFocus('sn:focusable-item-1');
         }
     }
@@ -51,9 +60,16 @@ function Item({ children, module, id, state }) {
 
 function ItemBasic({ children, onClick }) {
     const { ref, focused } = useFocusable();
-    useEffect(() => {
-        if (focused) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      useEffect(() => {
+        if (focused) {
+            ref.current.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+                inline: 'center',
+            });
+        }
     }, [focused, ref]);
+
     return (
         <div
             ref={ref}
@@ -67,7 +83,6 @@ function ItemBasic({ children, onClick }) {
         </div>
     );
 }
-
 export default function ModuleManager() {
     const { state } = useContext(GlobalStateContext);
     const loc = useLocation();
@@ -78,7 +93,9 @@ export default function ModuleManager() {
             <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
                 {state?.sharedData?.modules?.map((module, moduleIdx) => (
                     <Item module={module} id={moduleIdx} state={state}>
-                        <h3 className='text-indigo-400 text-base/7 font-semibold'>
+                        <h3
+                            className='text-indigo-400 text-base/7 font-semibold'
+                        >
                             {module.appName} ({module.version})
                         </h3>
                         <p className='text-gray-300 mt-6 text-base/7'>
@@ -87,107 +104,72 @@ export default function ModuleManager() {
                     </Item>
                 ))}
                 <ItemBasic onClick={() => loc.route('/tizenbrew-ui/dist/index.html/module-manager/add?type=npm')}>
-                    <h3 className='text-indigo-400 text-base/7 font-semibold'>{t('moduleManager.addNPM')}</h3>
-                    <p className='text-gray-300 mt-6 text-base/7'>{t('moduleManager.addNPMDesc')}</p>
+                    <h3 className='text-indigo-400 text-base/7 font-semibold'>
+                        {t('moduleManager.addNPM')}
+                    </h3>
+                    <p className='text-gray-300 mt-6 text-base/7'>
+                        {t('moduleManager.addNPMDesc')}
+                    </p>
                 </ItemBasic>
                 <ItemBasic onClick={() => loc.route('/tizenbrew-ui/dist/index.html/module-manager/add?type=gh')}>
-                    <h3 className='text-indigo-400 text-base/7 font-semibold'>{t('moduleManager.addGH')}</h3>
-                    <p className='text-gray-300 mt-6 text-base/7'>{t('moduleManager.addGHDesc')}</p>
+                    <h3 className='text-indigo-400 text-base/7 font-semibold'>
+                        {t('moduleManager.addGH')}
+                    </h3>
+                    <p className='text-gray-300 mt-6 text-base/7'>
+                        {t('moduleManager.addGHDesc')}
+                    </p>
                 </ItemBasic>
+
             </div>
         </div>
-    );
+    )
 }
 
 function AddModule() {
+    const [name, setName] = useState('');
     const loc = useLocation();
-    const context = useContext(GlobalStateContext);
+    const { state } = useContext(GlobalStateContext);
+    const ref = useRef(null);
     const { t } = useTranslation();
 
-    const type = loc.query.type || 'npm';
-    const [name, setName] = useState(DEFAULTS[type] || '');
-
-    const inputRef = useRef(null);
-    // Prevents double-submit if Back blurs the input AND history.back() both fire
-    const didSubmitRef = useRef(false);
-
-    // Auto-open the Samsung virtual keyboard
     useEffect(() => {
-        inputRef.current?.focus();
-    }, []);
-
-    function handleSubmit() {
-        if (didSubmitRef.current) return;
-        didSubmitRef.current = true;
-
-        const trimmed = name.trim();
-
-        // Empty → just go back, no toast
-        if (!trimmed) {
-            loc.route('/tizenbrew-ui/dist/index.html/module-manager');
-            setFocus('sn:focusable-item-1');
-            return;
-        }
-
-        const fullName = type + '/' + trimmed;
-        const snapshotVersion = context.state.sharedData.modulesVersion;
-        const toast = getGlobalToast();
-
-        const toastId = toast
-            ? toast.loading(type === 'gh'
-                ? 'Fetching "' + trimmed + '" from GitHub\u2026'
-                : 'Fetching "' + trimmed + '" from jsDelivr CDN\u2026')
-            : null;
-
-        // Store pending in context — App.jsx watcher resolves it when GetModules responds
-        context.dispatch({
-            type: 'SET_PENDING_ADD',
-            payload: { fullName, type, toastId, snapshotVersion }
-        });
-
-        context.state.client.send({ type: Events.ModuleAction, payload: { action: 'add', module: fullName } });
-        context.state.client.send({ type: Events.GetModules, payload: true });
-
-        loc.route('/tizenbrew-ui/dist/index.html/module-manager');
-        setFocus('sn:focusable-item-1');
-    }
-
-    function handleKeyDown(e) {
-        // Arrow keys: let the cursor move, don't let spatial nav steal them
-        if (e.keyCode === 37 || e.keyCode === 38 || e.keyCode === 39 || e.keyCode === 40) {
-            e.stopPropagation();
-        }
-        // Fertig (65376) on Samsung TV closes keyboard and blurs → onBlur fires → submit
-        // Enter (13) same behaviour for convenience
-        if (e.keyCode === 65376 || e.keyCode === 13) {
-            inputRef.current.blur();
-        }
-    }
-
+        ref.current.focus();
+    }, [ref]);
     return (
         <div className="relative isolate lg:px-8">
             <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
-                <div className='relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 w-[30vw]'>
-                    <p className='text-gray-400 text-xl mb-3'>
-                        {t('moduleManager.moduleName', { type })}
-                    </p>
+                <ItemBasic>
                     <input
                         type="text"
-                        ref={inputRef}
+                        ref={ref}
                         value={name}
                         className="w-full p-2 rounded-lg bg-gray-800 text-gray-200"
                         onChange={(e) => setName(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        onBlur={handleSubmit}
-                        placeholder={DEFAULTS[type] || ''}
+                        onBlur={(e) => {
+                            if (name) {
+                                state.client.send({
+                                    type: Events.ModuleAction,
+                                    payload: {
+                                        action: 'add',
+                                        module: `${loc.query.type}/${name}`
+                                    }
+                                });
+                            }
+                            state.client.send({
+                                type: Events.GetModules,
+                                payload: true
+                            });
+                            loc.route('/tizenbrew-ui/dist/index.html/module-manager');
+                            setFocus('sn:focusable-item-1');
+                        }}
+                        placeholder={t('moduleManager.moduleName', { type: loc.query.type })}
                     />
-                    <p className='text-slate-500 text-lg mt-3'>
-                        Press Fertig to add
-                    </p>
-                </div>
+                </ItemBasic>
             </div>
         </div>
-    );
+    )
 }
 
-export { AddModule };
+export {
+    AddModule
+}
