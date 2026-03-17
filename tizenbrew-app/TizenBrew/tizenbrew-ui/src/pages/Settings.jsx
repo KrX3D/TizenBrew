@@ -71,6 +71,7 @@ export default function Settings() {
                         {t('settings.autolaunchServiceDesc')}
                     </p>
                 </ItemBasic>
+
                 <ItemBasic onClick={() => {
                     loc.route('/tizenbrew-ui/dist/index.html/settings/change-ua');
                 }}>
@@ -81,6 +82,7 @@ export default function Settings() {
                         {t('settings.useragentDesc')}
                     </p>
                 </ItemBasic>
+
             </div>
         </div>
     )

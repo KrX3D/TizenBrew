@@ -8,6 +8,7 @@ import { useEffect, useState, useContext } from 'react';
 import Client from './components/WebSocketClient.js';
 import Settings, { Change } from './pages/Settings.jsx';
 import About from './pages/About.jsx';
+import Logs from './pages/Logs.jsx';
 import './components/i18n.js';
 import UserAgentSettings from './pages/UserAgentSettings.jsx';
 import { ExclamationCircleIcon } from '@heroicons/react/16/solid';
@@ -67,6 +68,7 @@ export default function App() {
             <Route component={Change} path="/tizenbrew-ui/dist/index.html/settings/change" />
             <Route component={UserAgentSettings} path="/tizenbrew-ui/dist/index.html/settings/change-ua" />
             <Route component={About} path="/tizenbrew-ui/dist/index.html/about" />
+            <Route component={Logs} path="/tizenbrew-ui/dist/index.html/logs" />
           </Router>
         </div>
       </LocationProvider>

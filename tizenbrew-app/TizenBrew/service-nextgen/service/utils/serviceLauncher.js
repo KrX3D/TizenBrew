@@ -2,6 +2,7 @@
 
 const vm = require('vm');
 const fetch = require('node-fetch');
+const { buildModuleFileUrl } = require('./moduleSource.js');
 
 function startService(mdl, services) {
     let sandbox = {};
@@ -17,36 +18,7 @@ function startService(mdl, services) {
     sandbox['tizen'] = global.tizen;
     sandbox['module'] = { exports: {} };
 
-    // Strip jsDelivr prefixes to get clean GitHub user/repo
-    function getGitHubRepo(name) {
-        if (name.startsWith('gh/')) return name.substring(3);
-        if (name.startsWith('npm/')) return null;
-        return name;
-    }
-
-    // Construct Raw GitHub fetch URL
-    let fetchUrl;
-    const cleanName = mdl.versionedFullName || mdl.fullName;
-    if (cleanName.includes('@')) {
-        const [rawRepo, tag] = cleanName.split('@');
-        const repo = getGitHubRepo(rawRepo);
-        if (repo) {
-            fetchUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${mdl.serviceFile}`;
-        } else {
-            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.serviceFile}`;
-        }
-    } else {
-        const repo = getGitHubRepo(cleanName);
-        if (repo) {
-            fetchUrl = `https://raw.githubusercontent.com/${repo}/main/${mdl.serviceFile}`;
-        } else {
-            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.serviceFile}`;
-        }
-    }
-    // Append cache buster
-    fetchUrl += `?v=${Date.now()}`;
-
-    fetch(fetchUrl)
+    fetch(buildModuleFileUrl(mdl.fullName, mdl.sourceMode || 'cdn', mdl.serviceFile, mdl.sourceBranch || 'main'))
         .then(res => res.text())
         .then(script => {
             services.set(mdl.fullName, {
@@ -60,18 +32,21 @@ function startService(mdl, services) {
             } catch (e) {
                 services.get(mdl.fullName).hasCrashed = true;
                 services.get(mdl.fullName).error = e;
+                log('error', `module-service:${mdl.fullName}`, 'Service script crashed', e);
             }
         })
         .catch(e => {
             if (services.has(mdl.fullName)) {
                 services.get(mdl.fullName).hasCrashed = true;
                 services.get(mdl.fullName).error = e;
+                log('error', `module-service:${mdl.fullName}`, 'Service script crashed', e);
             } else {
                 services.set(mdl.fullName, {
                     context: null,
                     hasCrashed: true,
                     error: e
                 });
+                log('error', `module-service:${mdl.fullName}`, 'Failed to fetch service script', e);
             }
         });
 }
