@@ -27,9 +27,11 @@ jobs:
       - name: Ensure target release exists
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_REPO: ${{ github.repository }}
         run: |
-          gh release view "${{ inputs.target_tag }}" >/dev/null 2>&1 || \
+          gh release view "${{ inputs.target_tag }}" --repo "$TARGET_REPO" >/dev/null 2>&1 || \
           gh release create "${{ inputs.target_tag }}" \
+            --repo "$TARGET_REPO" \
             --title "${{ inputs.target_title }}" \
             --notes "Release created automatically by workflow."
 
@@ -43,7 +45,7 @@ jobs:
             --pattern "TizenBrewStandalone-Old.wgt" \
             --dir import
 
-          ls -lah import
+          test -f "import/TizenBrewStandalone-Old.wgt"
 
       - name: Rename asset for clarity
         run: |
@@ -53,7 +55,9 @@ jobs:
       - name: Upload asset to target release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_REPO: ${{ github.repository }}
         run: |
           gh release upload "${{ inputs.target_tag }}" \
             "import/TizenBrewStandalone-Old-${{ inputs.source_tag }}.wgt" \
+            --repo "$TARGET_REPO" \
             --clobber
