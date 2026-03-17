@@ -24,16 +24,27 @@ export default function App() {
   useEffect(() => {
     if (context.state.sharedData.error.disappear) {
       setTimeout(() => {
-        context.dispatch({ type: 'SET_ERROR', payload: { message: null, disappear: false } });
+        context.dispatch({
+          type: 'SET_ERROR',
+          payload: {
+            message: null,
+            disappear: false
+          }
+        });
       }, 5000);
     }
   }, [context.state.sharedData.error.disappear]);
-
-  useEffect(() => { setHeaderHeight(headerRef.current.base.clientHeight); }, [headerRef]);
+  useEffect(() => {
+    setHeaderHeight(headerRef.current.base.clientHeight);
+  }, [headerRef]);
 
   useEffect(() => {
-    if (!window.setClient) { startService(context); window.setClient = true; }
+    if (!window.setClient) {
+      startService(context);
+      window.setClient = true;
+    }
   }, []);
+
 
   return (
     <ErrorBoundary>
@@ -49,13 +60,13 @@ export default function App() {
             </div>
           </div>
           <Router>
-            <Route component={Home}              path="/tizenbrew-ui/dist/index.html" />
-            <Route component={ModuleManager}     path="/tizenbrew-ui/dist/index.html/module-manager" />
-            <Route component={AddModule}         path="/tizenbrew-ui/dist/index.html/module-manager/add" />
-            <Route component={Settings}          path="/tizenbrew-ui/dist/index.html/settings" />
-            <Route component={Change}            path="/tizenbrew-ui/dist/index.html/settings/change" />
+            <Route component={Home} path="/tizenbrew-ui/dist/index.html" />
+            <Route component={ModuleManager} path="/tizenbrew-ui/dist/index.html/module-manager" />
+            <Route component={AddModule} path="/tizenbrew-ui/dist/index.html/module-manager/add" />
+            <Route component={Settings} path="/tizenbrew-ui/dist/index.html/settings" />
+            <Route component={Change} path="/tizenbrew-ui/dist/index.html/settings/change" />
             <Route component={UserAgentSettings} path="/tizenbrew-ui/dist/index.html/settings/change-ua" />
-            <Route component={About}             path="/tizenbrew-ui/dist/index.html/about" />
+            <Route component={About} path="/tizenbrew-ui/dist/index.html/about" />
           </Router>
         </div>
       </LocationProvider>
@@ -63,96 +74,42 @@ export default function App() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Service startup — sessionStorage flag prevents re-launching on every reload
-//
-// Flow:
-//   First load  → try WS → fails → launchAppControl → set flag → wait 3 s → reload
-//   After reload → flag is set → skip launch, retry WS up to 15 times (30 s total)
-//   On connect  → clear flag, set client
-//   On give-up  → clear flag, show error
-//
-// The 3 s pre-reload wait gives Tizen 5.5's slower service process enough
-// time to actually bind port 8081 before the next WS attempt.
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SS_KEY = 'tbServiceLaunched';
 
 function startService(context) {
-  if (sessionStorage.getItem(SS_KEY) === '1') {
-    // Already launched — just keep trying to connect
-    retryWS(context, 15);
-  } else {
-    tryWS(context);
+  const testWS = new WebSocket('ws://localhost:8081');
+
+  testWS.onerror = () => {
+    const pkgId = tizen.application.getCurrentApplication().appInfo.packageId;
+
+    const serviceId = pkgId + ".StandaloneService";
+
+    tizen.application.launchAppControl(
+      new tizen.ApplicationControl("http://tizen.org/appcontrol/operation/service"),
+      serviceId,
+      function () {
+        context.dispatch({
+          type: 'SET_STATE',
+          payload: 'service.started'
+        });
+
+        window.location.reload();
+      },
+      function (e) {
+        alert("Launch Service failed: " + e.message);
+      }
+    );
   }
-}
 
-function tryWS(context) {
-  const ws = new WebSocket('ws://localhost:8081');
-
-  const timeout = setTimeout(() => {
-    try { ws.close(); } catch (_) {}
-    launchService(context);
-  }, 3000);
-
-  ws.onerror = () => { clearTimeout(timeout); launchService(context); };
-
-  ws.onopen = () => {
-    clearTimeout(timeout);
-    sessionStorage.removeItem(SS_KEY);
-    context.dispatch({ type: 'SET_STATE', payload: 'service.alreadyRunning' });
-    context.dispatch({ type: 'SET_CLIENT', payload: new Client(context) });
-  };
-}
-
-function launchService(context) {
-  const pkgId    = tizen.application.getCurrentApplication().appInfo.packageId;
-  const serviceId = pkgId + '.StandaloneService';
-
-  tizen.application.launchAppControl(
-    new tizen.ApplicationControl('http://tizen.org/appcontrol/operation/service'),
-    serviceId,
-    function () {
-      // Success callback fires when the service process has been created,
-      // but on Tizen 5.5 the WS port may not be bound yet. Wait 3 s then reload.
-      sessionStorage.setItem(SS_KEY, '1');
-      context.dispatch({ type: 'SET_STATE', payload: 'service.started' });
-      setTimeout(() => window.location.reload(), 3000);
-    },
-    function () {
-      // Error — service may already be running. Set flag and retry WS.
-      sessionStorage.setItem(SS_KEY, '1');
-      retryWS(context, 15);
-    }
-  );
-}
-
-function retryWS(context, attemptsLeft) {
-  if (attemptsLeft <= 0) {
-    sessionStorage.removeItem(SS_KEY);
+  testWS.onopen = () => {
     context.dispatch({
-      type: 'SET_ERROR',
-      payload: { message: 'errors.serviceDidntConnectYet', disappear: false }
+      type: 'SET_STATE',
+      payload: 'service.alreadyRunning'
     });
-    return;
+
+    context.dispatch({
+      type: 'SET_CLIENT',
+      payload: new Client(context)
+    });
+
   }
-a
-  const ws = new WebSocket('ws://localhost:8081');
-
-  const timeout = setTimeout(() => {
-    try { ws.close(); } catch (_) {}
-    setTimeout(() => retryWS(context, attemptsLeft - 1), 2000);
-  }, 2000);
-
-  ws.onerror = () => {
-    clearTimeout(timeout);
-    setTimeout(() => retryWS(context, attemptsLeft - 1), 2000);
-  };
-
-  ws.onopen = () => {
-    clearTimeout(timeout);
-    sessionStorage.removeItem(SS_KEY);
-    context.dispatch({ type: 'SET_STATE', payload: 'service.alreadyRunning' });
-    context.dispatch({ type: 'SET_CLIENT', payload: new Client(context) });
-  };
 }
