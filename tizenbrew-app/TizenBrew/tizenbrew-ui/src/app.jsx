@@ -63,95 +63,28 @@ export default function App() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Service startup — sessionStorage flag prevents re-launching on every reload
-//
-// Flow:
-//   First load  → try WS → fails → launchAppControl → set flag → wait 3 s → reload
-//   After reload → flag is set → skip launch, retry WS up to 15 times (30 s total)
-//   On connect  → clear flag, set client
-//   On give-up  → clear flag, show error
-//
-// The 3 s pre-reload wait gives Tizen 5.5's slower service process enough
-// time to actually bind port 8081 before the next WS attempt.
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SS_KEY = 'tbServiceLaunched';
-
+// Mirrors the installer's startService exactly — that pattern works on Tizen 5.5.
+// Try WS → fail → launchAppControl → reload (no delay, no sessionStorage).
+// On the next load the WS succeeds because the service is up by then.
 function startService(context) {
-  if (sessionStorage.getItem(SS_KEY) === '1') {
-    // Already launched — just keep trying to connect
-    retryWS(context, 15);
-  } else {
-    tryWS(context);
-  }
-}
+  const testWS = new WebSocket('ws://localhost:8081');
 
-function tryWS(context) {
-  const ws = new WebSocket('ws://localhost:8081');
+  testWS.onerror = () => {
+    const pkgId     = tizen.application.getCurrentApplication().appInfo.packageId;
+    const serviceId = pkgId + '.StandaloneService';
 
-  const timeout = setTimeout(() => {
-    try { ws.close(); } catch (_) {}
-    launchService(context);
-  }, 3000);
-
-  ws.onerror = () => { clearTimeout(timeout); launchService(context); };
-
-  ws.onopen = () => {
-    clearTimeout(timeout);
-    sessionStorage.removeItem(SS_KEY);
-    context.dispatch({ type: 'SET_STATE', payload: 'service.alreadyRunning' });
-    context.dispatch({ type: 'SET_CLIENT', payload: new Client(context) });
-  };
-}
-
-function launchService(context) {
-  const pkgId    = tizen.application.getCurrentApplication().appInfo.packageId;
-  const serviceId = pkgId + '.StandaloneService';
-
-  tizen.application.launchAppControl(
-    new tizen.ApplicationControl('http://tizen.org/appcontrol/operation/service'),
-    serviceId,
-    function () {
-      // Success callback fires when the service process has been created,
-      // but on Tizen 5.5 the WS port may not be bound yet. Wait 3 s then reload.
-      sessionStorage.setItem(SS_KEY, '1');
-      context.dispatch({ type: 'SET_STATE', payload: 'service.started' });
-      setTimeout(() => window.location.reload(), 3000);
-    },
-    function () {
-      // Error — service may already be running. Set flag and retry WS.
-      sessionStorage.setItem(SS_KEY, '1');
-      retryWS(context, 15);
-    }
-  );
-}
-
-function retryWS(context, attemptsLeft) {
-  if (attemptsLeft <= 0) {
-    sessionStorage.removeItem(SS_KEY);
-    context.dispatch({
-      type: 'SET_ERROR',
-      payload: { message: 'errors.serviceDidntConnectYet', disappear: false }
-    });
-    return;
-  }
-
-  const ws = new WebSocket('ws://localhost:8081');
-
-  const timeout = setTimeout(() => {
-    try { ws.close(); } catch (_) {}
-    setTimeout(() => retryWS(context, attemptsLeft - 1), 2000);
-  }, 2000);
-
-  ws.onerror = () => {
-    clearTimeout(timeout);
-    setTimeout(() => retryWS(context, attemptsLeft - 1), 2000);
+    tizen.application.launchAppControl(
+      new tizen.ApplicationControl('http://tizen.org/appcontrol/operation/service'),
+      serviceId,
+      function () {
+        context.dispatch({ type: 'SET_STATE', payload: 'service.started' });
+        window.location.reload();
+      },
+      function (e) { alert('Launch Service failed: ' + e.message); }
+    );
   };
 
-  ws.onopen = () => {
-    clearTimeout(timeout);
-    sessionStorage.removeItem(SS_KEY);
+  testWS.onopen = () => {
     context.dispatch({ type: 'SET_STATE', payload: 'service.alreadyRunning' });
     context.dispatch({ type: 'SET_CLIENT', payload: new Client(context) });
   };
