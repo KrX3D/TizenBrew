@@ -1,0 +1,59 @@
+name: Import external WGT into release
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: "Source tag from reisxd/TizenBrew"
+        required: true
+        default: "v2.0.4"
+      target_tag:
+        description: "Target tag in this repo"
+        required: true
+        default: "v3.0.0"
+      target_title:
+        description: "Target release title"
+        required: true
+        default: "TizenBrew v3.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  import-wgt:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ensure target release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "${{ inputs.target_tag }}" >/dev/null 2>&1 || \
+          gh release create "${{ inputs.target_tag }}" \
+            --title "${{ inputs.target_title }}" \
+            --notes "Release created automatically by workflow."
+
+      - name: Download WGT from reisxd/TizenBrew
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p import
+          gh release download "${{ inputs.source_tag }}" \
+            --repo reisxd/TizenBrew \
+            --pattern "TizenBrewStandalone-Old.wgt" \
+            --dir import
+
+          ls -lah import
+
+      - name: Rename asset for clarity
+        run: |
+          cp "import/TizenBrewStandalone-Old.wgt" \
+             "import/TizenBrewStandalone-Old-${{ inputs.source_tag }}.wgt"
+
+      - name: Upload asset to target release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ inputs.target_tag }}" \
+            "import/TizenBrewStandalone-Old-${{ inputs.source_tag }}.wgt" \
+            --clobber
