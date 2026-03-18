@@ -3,6 +3,7 @@
         "alreadyRunning": "Service is already running.",
         "started": "Service started.",
         "connected": "Service connected to the app.",
+        "connecting": "Connecting...",
         "reloading": "Reloading modules..."
     },
     "errors": {
@@ -39,7 +40,8 @@
         "uaSetRelaunch": "User-Agent set. Relaunch the app to apply changes.",
         "uaNegativeEffects": "Note that while this could have positive effects, there could also be negative effects.",
         "language": "Language Settings",
-        "languageDesc": "Change the language of the app."
+        "languageDesc": "Change the language of the app.",
+        "selected": "Selected"
     },
     "__contributors": [
         "reisxd"

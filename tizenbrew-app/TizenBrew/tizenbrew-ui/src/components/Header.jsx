@@ -1,6 +1,6 @@
 import { Cog6ToothIcon, ArchiveBoxIcon, HomeIcon, QuestionMarkCircleIcon, ArrowPathIcon } from '@heroicons/react/16/solid';
 import { useFocusable } from '@noriginmedia/norigin-spatial-navigation';
-import { useEffect, useContext, useState } from 'preact/hooks';
+import { useEffect, useContext, useState, useRef } from 'preact/hooks';
 import { useLocation } from 'preact-iso';
 import { GlobalStateContext } from './ClientContext.jsx';
 import TBLogo from '../assets/tizenbrew.svg';
@@ -10,16 +10,12 @@ import { Events } from './WebSocketClient.js';
 function Button({ children, route, focus, focusKey, onClick }) {
     const { ref, focusSelf, focused } = useFocusable();
     const location = useLocation();
-
-    if (focus) {
-        useEffect(() => { focusSelf(); }, []);
-    }
+    if (focus) { useEffect(() => { focusSelf(); }, []); }
 
     return (
         <button
             ref={ref}
             focusKey={focus ? 'sn:focusable-item-1' : focusKey}
-            // rounded-full keeps the focus ring round (box-shadow follows border-radius)
             className={`flex items-center justify-center p-2 rounded-full bg-slate-800 hover:bg-slate-600 text-slate-100 ${focused ? 'focus' : ''}`}
             onClick={onClick || (() => location.route(`/tizenbrew-ui/dist/index.html${route}`))}
         >
@@ -33,6 +29,12 @@ export default function Header() {
     const { t } = useTranslation();
     const [reloading, setReloading] = useState(false);
 
+    // Remember the last non-null state so we never fall back to 'Connecting...'
+    // once the service has been reached at least once.
+    const lastStateRef = useRef(null);
+    const currentState = state?.sharedData?.state;
+    if (currentState) lastStateRef.current = currentState;
+
     const handleReload = () => {
         if (state.client && !reloading) {
             setReloading(true);
@@ -41,12 +43,13 @@ export default function Header() {
         }
     };
 
-    // Show a proper status string:
-    // - null / undefined  → 'service.connecting' (translates to e.g. "Connecting...")
-    // - any other key     → translate it normally
-    // This avoids showing the raw literal '...' forever while the service starts.
-    const statusKey = state?.sharedData?.state || 'service.connecting';
-    const statusText = reloading ? t('service.reloading') : t(statusKey);
+    let statusText;
+    if (reloading) {
+        statusText = t('service.reloading');
+    } else {
+        const key = lastStateRef.current || 'service.connecting';
+        statusText = t(key);
+    }
 
     return (
         <header className="inset-x-0 top-0 bg-slate-700 h-[8vh]">

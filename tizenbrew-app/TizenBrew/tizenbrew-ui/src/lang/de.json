@@ -3,7 +3,8 @@
         "alreadyRunning": "Service läuft bereits.",
         "started": "Service wurde gestartet.",
         "connected": "Service ist mit der App verbunden.",
-        "reloading": "Module neuladen..."
+        "connecting": "Verbinde...",
+        "reloading": "Module werden neu geladen..."
     },
     "errors": {
         "serviceDidntConnectYet": "Du kannst Module nicht starten, solange der Service noch nicht mit der App verbunden ist.",
@@ -39,7 +40,8 @@
         "uaSetRelaunch": "User-Agent set. Relaunch the app to apply changes.",
         "uaNegativeEffects": "Beachte: Dies könnte sowohl positive als auch negative Effekte haben.",
         "language": "Spracheinstellungen",
-        "languageDesc": "Ändere die Sprache der App."
+        "languageDesc": "Ändere die Sprache der App.",
+        "selected": "Ausgewählt"
     },
     "__contributors": [
         "zexalgames",

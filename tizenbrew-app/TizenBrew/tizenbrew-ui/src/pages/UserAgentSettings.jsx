@@ -2,6 +2,7 @@ import { useFocusable } from "@noriginmedia/norigin-spatial-navigation";
 import { useTranslation } from "react-i18next";
 import { useEffect } from "react";
 
+// Exact same UA list as the working backup — 3 entries
 const UserAgents = [
     {
         name: 'UE50MU7000',
@@ -22,9 +23,9 @@ const UserAgents = [
             let apiData = {};
             try { apiData = JSON.parse(xhr.responseText); } catch (e) { alert("Failed to parse API response:", e); }
             const firmware = tizen.systeminfo.getCapability("http://tizen.org/custom/sw_version");
-            const model = tizen.systeminfo.getCapability("http://tizen.org/system/model_name");
+            const model    = tizen.systeminfo.getCapability("http://tizen.org/system/model_name");
             const chipsetModel = apiData.device.model.split('_')[1];
-            const deviceName = `_TV_${chipsetModel}`;
+            const deviceName   = `_TV_${chipsetModel}`;
             return `${window.navigator.userAgent}, ${deviceName}/${firmware} (Samsung, ${model}, Wired)`;
         }
     }
@@ -39,28 +40,18 @@ function ItemBasic({ children, onClick, shouldFocus, selected }) {
     useEffect(() => {
         if (focused) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }, [focused, ref]);
-
-    if (shouldFocus) {
-        useEffect(() => { focusSelf(); }, [ref]);
-    }
+    if (shouldFocus) { useEffect(() => { focusSelf(); }, [ref]); }
 
     return (
         <div
             ref={ref}
             onClick={onClick}
             className={classNames(
-                'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw]',
+                'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw] mb-4',
                 focused ? 'focus' : '',
-                // Extra ring when this UA is currently active
                 selected ? 'ring-2 ring-indigo-400' : ''
             )}
         >
-            {/* "Selected" badge in top-right corner */}
-            {selected && (
-                <span className='absolute top-3 right-3 text-xs bg-indigo-600 text-white px-2 py-1 rounded'>
-                    Selected
-                </span>
-            )}
             {children}
         </div>
     );
@@ -72,33 +63,43 @@ export default function UserAgentSettings() {
 
     return (
         <div className="relative isolate lg:px-8 pt-6">
-            <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
+            <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative pb-6">
                 {UserAgents.map((ua, idx) => {
                     const isSelected = typeof ua.userAgent === 'string' && ua.userAgent === selectedUA;
                     return (
-                        <ItemBasic key={idx} selected={isSelected} onClick={() => {
+                        <ItemBasic key={idx} selected={isSelected} shouldFocus={idx === 0} onClick={() => {
                             const userAgent = typeof ua.userAgent === 'function' ? ua.userAgent() : ua.userAgent;
                             if (confirm(`${t('settings.setUaTo', { userAgent })}\n\n${t('settings.uaNegativeEffects')}`)) {
                                 localStorage.setItem('userAgent', userAgent);
                                 alert(t('settings.uaSetRelaunch'));
                                 tizen.application.getCurrentApplication().exit();
                             }
-                        }} shouldFocus={idx === 0}>
+                        }}>
                             <h3 className='text-indigo-400 text-base/7 font-semibold'>{t(ua.name)}</h3>
                             <p className='text-gray-300 mt-6 text-base/7'>
                                 {ua.worksOnTizen ? t('settings.worksOnTizen', { version: ua.worksOnTizen }) : ''}
                             </p>
+                            {isSelected && (
+                                <span className='absolute top-3 right-3 text-xs bg-indigo-600 text-white px-2 py-1 rounded'>
+                                    {t('settings.selected')}
+                                </span>
+                            )}
                         </ItemBasic>
                     );
                 })}
 
-                {/* Default / clear UA */}
+                {/* Default — selected when no UA override is set */}
                 <ItemBasic selected={!selectedUA} onClick={() => {
                     localStorage.removeItem('userAgent');
                     alert(t('settings.uaSetRelaunch'));
                     tizen.application.getCurrentApplication().exit();
                 }}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>{t('settings.default')}</h3>
+                    {!selectedUA && (
+                        <span className='absolute top-3 right-3 text-xs bg-indigo-600 text-white px-2 py-1 rounded'>
+                            {t('settings.selected')}
+                        </span>
+                    )}
                 </ItemBasic>
             </div>
         </div>

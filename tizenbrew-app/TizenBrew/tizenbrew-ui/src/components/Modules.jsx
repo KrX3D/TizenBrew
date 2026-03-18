@@ -15,19 +15,13 @@ function getModuleTypeLabel(module) {
 function Item({ children, module, id, state }) {
   const { ref, focused } = useFocusable();
   useEffect(() => {
-    if (focused) {
-      ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-    }
+    if (focused) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
   }, [focused, ref]);
 
   function handleOnClick() {
-    for (const key of module.keys) {
-      tizen.tvinputdevice.registerKey(key);
-    }
+    for (const key of module.keys) tizen.tvinputdevice.registerKey(key);
     state.client.send({ type: Events.LaunchModule, payload: module });
-    if (!module.evaluateScriptOnDocumentStart) {
-      location.href = module.appPath;
-    }
+    if (!module.evaluateScriptOnDocumentStart) location.href = module.appPath;
   }
 
   return (
@@ -36,7 +30,10 @@ function Item({ children, module, id, state }) {
       ref={ref}
       onClick={handleOnClick}
       className={classNames(
-        'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw]',
+        // mb-4 provides the vertical row gap on ALL Tizen versions.
+        // The flexbox-gap-polyfill skips flex-wrap containers so we can't
+        // rely on gap for row spacing on Tizen 5.5 (Chrome 47).
+        'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw] mb-4',
         focused ? 'focus' : '',
         id === 0 ? 'ml-4' : ''
       )}
@@ -50,14 +47,12 @@ export default function Modules() {
   const { state } = useContext(GlobalStateContext);
 
   return (
-    // pt-6   — gap below the header so the first row never overlaps
-    // overflow-y-auto + max-h  — makes the grid scrollable when modules
-    //                            wrap to a second (or third) row
     <div
       className="relative isolate lg:px-8 pt-6 overflow-y-auto"
       style={{ maxHeight: 'calc(100vh - 8vh)' }}
     >
-      <div className="mx-auto flex flex-wrap justify-center gap-4 relative pb-6">
+      {/* gap-x-2: half the previous horizontal gap between cards in the same row */}
+      <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative pb-6">
         {state?.sharedData?.modules?.map((module, moduleIdx) => (
           <Item module={module} id={moduleIdx} state={state}>
             <h3 className='text-indigo-400 text-base/7 font-semibold'>

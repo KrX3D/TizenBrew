@@ -83,7 +83,7 @@ function ItemBasic({ children, onClick }) {
 // clip the content. No h-[35vh], just min-h so it never collapses to nothing.
 function ItemAuto({ children }) {
     return (
-        <div className="relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 min-h-[20vh] w-[40vw]">
+        <div className="relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 min-h-[20vh] w-[40vw] mb-4">
             {children}
         </div>
     );

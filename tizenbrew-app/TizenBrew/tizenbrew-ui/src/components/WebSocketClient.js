@@ -188,6 +188,12 @@ class Client {
                     type: 'SET_STATE',
                     payload: 'service.connected'
                 });
+                if (payload && payload.type === 'autolaunch') {
+                    this.context.dispatch({
+                        type: 'SET_AUTOLAUNCH',
+                        payload: { autoLaunchModule: payload.module }
+                    });
+                }
 
                 if (!this.modulesLoaded) {
                     this.pendingEvents.push({ type, payload });
