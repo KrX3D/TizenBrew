@@ -211,7 +211,10 @@ class Client {
             case Events.ResetTizenBrewConfig: {
                 if (!toast) break;
                 const msgs = {
-                    success:          () => toast.success(i18next.t('tizenBrewConfig.resetSuccess')),
+                    success: () => {
+                        toast.success(i18next.t('tizenBrewConfig.resetSuccess'));
+                        this.send({ type: Events.GetModules, payload: true });
+                    },
                     notFound:         () => toast.info(i18next.t('tizenBrewConfig.notFound')),
                     permissionDenied: () => toast.error(i18next.t('tizenBrewConfig.permissionDenied'), 8000),
                     error:            () => toast.error(i18next.t('tizenBrewConfig.resetError', { error: payload.message }), 8000),
