@@ -3,7 +3,6 @@
         "alreadyRunning": "Service läuft bereits.",
         "started": "Service wurde gestartet.",
         "connected": "Service ist mit der App verbunden.",
-        "connecting": "",
         "reloading": "Module neuladen..."
     },
     "errors": {

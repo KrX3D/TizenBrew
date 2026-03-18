@@ -35,7 +35,7 @@ function normalizeNpmModule(input) {
     return value ? `npm/${value}` : '';
 }
 
-// ─── Shared Item components ───────────────────────────────────────────────────
+// ─── Fixed-height card — used on the main ModuleManager list ─────────────────
 
 function Item({ children, module, id, state }) {
     const { t } = useTranslation();
@@ -79,6 +79,16 @@ function ItemBasic({ children, onClick }) {
     );
 }
 
+// Auto-height card — used ONLY on AddModule so the virtual keyboard can't
+// clip the content. No h-[35vh], just min-h so it never collapses to nothing.
+function ItemAuto({ children }) {
+    return (
+        <div className="relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 min-h-[20vh] w-[40vw]">
+            {children}
+        </div>
+    );
+}
+
 // ─── Main ModuleManager page ──────────────────────────────────────────────────
 
 export default function ModuleManager() {
@@ -87,7 +97,6 @@ export default function ModuleManager() {
     const { t } = useTranslation();
 
     return (
-        // pt-6 pushes the card row away from the header so nothing overlaps
         <div className="relative isolate lg:px-8 pt-6">
             <div className="mx-auto flex flex-wrap justify-center gap-4 relative">
 
@@ -151,12 +160,10 @@ function AddModule() {
     const submittedRef = useRef(false);
     const { t } = useTranslation();
 
-    // Persist source mode
     useEffect(() => { localStorage.setItem('addModuleSourceMode', sourceMode); }, [sourceMode]);
-
     useEffect(() => { inputRef.current?.focus(); }, []);
 
-    // Yellow button (405) toggles CDN / Direct while on this page
+    // Yellow button (405) toggles CDN / Direct
     useEffect(() => {
         function onKeyDown(e) {
             if (e.keyCode === 405) {
@@ -187,12 +194,10 @@ function AddModule() {
     }
 
     function handleKeyDown(e) {
-        // Let the browser move the cursor — don't let spatial nav steal left/right
         if (e.keyCode === 37 || e.keyCode === 39) {
             e.stopPropagation();
             return;
         }
-        // Enter or Fertig → confirm and navigate
         if (e.keyCode === 13 || e.keyCode === 65376) {
             e.preventDefault();
             confirmedRef.current = true;
@@ -201,7 +206,6 @@ function AddModule() {
     }
 
     function handleBlur() {
-        // Only submit on explicit Enter/Fertig, not on Back or focus-out
         if (confirmedRef.current) {
             confirmedRef.current = false;
             submit();
@@ -215,9 +219,13 @@ function AddModule() {
     const sourceModeLabel = sourceMode === 'direct' ? '[DIRECT]' : '[CDN]';
 
     return (
-        <div className="relative isolate lg:px-8 pt-6">
-            <div className="mx-auto flex flex-wrap justify-center gap-4 relative">
-                <ItemBasic>
+        // The outer div uses fixed positioning anchored to the top so the
+        // virtual keyboard pushing up the viewport doesn't shift the card.
+        // overflow-y-auto lets the card scroll if the keyboard is very tall.
+        <div className="relative isolate lg:px-8 pt-6 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 8vh)' }}>
+            <div className="mx-auto flex flex-wrap justify-center gap-4 relative pb-6">
+                {/* ItemAuto: no fixed height, grows with content */}
+                <ItemAuto>
                     <h3 className='text-indigo-400 text-base/7 font-semibold mb-3'>
                         {t('moduleManager.addModule')} ({moduleType.toUpperCase()})
                     </h3>
@@ -236,14 +244,13 @@ function AddModule() {
 
                     <p className='text-gray-400 mt-2 text-sm'>{hint}</p>
 
-                    {/* Current source mode — toggled with the Yellow button */}
                     <p className='text-gray-300 mt-3 text-sm font-semibold'>
                         Source: {sourceModeLabel}
                     </p>
                     <p className='text-gray-500 mt-1 text-xs'>
                         [YELLOW] to toggle &nbsp;|&nbsp; CDN = jsDelivr &nbsp;|&nbsp; DIRECT = GitHub/unpkg
                     </p>
-                </ItemBasic>
+                </ItemAuto>
             </div>
         </div>
     );
