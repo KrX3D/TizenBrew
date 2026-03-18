@@ -22,17 +22,18 @@ function ModalButton({ children, onClick, focusKey, autoFocus }) {
     );
 }
 
-export default function ConfirmModal({ message, onConfirm, onCancel, returnFocusKey }) {
+/**
+ * Props:
+ *   message    string  — question text, \n splits into sub-line (e.g. repo path)
+ *   onConfirm  fn      — called on OK  (parent handles focus after)
+ *   onCancel   fn      — called on Cancel / Back  (parent handles focus after)
+ *
+ * ConfirmModal does NOT touch focus on unmount — the parent is fully
+ * responsible for restoring focus, because it knows whether the triggering
+ * element still exists after the action completes.
+ */
+export default function ConfirmModal({ message, onConfirm, onCancel }) {
     const { t } = useTranslation();
-
-    // Restore focus to triggering card when modal unmounts
-    useEffect(() => {
-        return () => {
-            if (returnFocusKey) {
-                setTimeout(() => setFocus(returnFocusKey), 80);
-            }
-        };
-    }, [returnFocusKey]);
 
     // Back button → cancel
     useEffect(() => {
@@ -43,8 +44,7 @@ export default function ConfirmModal({ message, onConfirm, onCancel, returnFocus
         return () => window.removeEventListener('keydown', onKey, true);
     }, [onCancel]);
 
-    // Split message on \n so the repo line renders smaller below the main text
-    const lines = (message || '').split('\n');
+    const lines   = (message || '').split('\n');
     const mainLine = lines[0];
     const subLines = lines.slice(1);
 

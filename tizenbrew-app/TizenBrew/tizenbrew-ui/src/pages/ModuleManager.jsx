@@ -34,14 +34,11 @@ function normalizeNpmModule(input) {
     return value ? `npm/${value}` : '';
 }
 
-// ─── Cards ────────────────────────────────────────────────────────────────────
-
 function Item({ children, id, focusKey, onRemoveRequest }) {
     const { ref, focused } = useFocusable({ focusKey, onEnterPress: onRemoveRequest });
     useEffect(() => {
         if (focused) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }, [focused, ref]);
-
     return (
         <div ref={ref} onClick={onRemoveRequest} className={classNames(
             'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw] mb-4',
@@ -58,7 +55,6 @@ function ItemBasic({ children, onClick, focusKey }) {
     useEffect(() => {
         if (focused) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }, [focused, ref]);
-
     return (
         <div ref={ref} onClick={onClick} className={classNames(
             'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw] mb-4',
@@ -77,8 +73,6 @@ function ItemAuto({ children }) {
     );
 }
 
-// ─── Main ModuleManager page ──────────────────────────────────────────────────
-
 export default function ModuleManager() {
     const { state } = useContext(GlobalStateContext);
     const loc = useLocation();
@@ -86,36 +80,41 @@ export default function ModuleManager() {
     const [modal, setModal] = useState(null);
     const modules = state?.sharedData?.modules || [];
 
-    // After OK removal, GetModules triggers a re-render that wipes the spatial
-    // nav tree. We store the desired focus target here and apply it once the
-    // new module list has mounted.
+    // After OK, GetModules response triggers a re-render that rebuilds the
+    // spatial nav tree. We store the desired focus key here and apply it
+    // AFTER the new module list has mounted — not before.
     const pendingFocusRef = useRef(null);
 
     useEffect(() => {
-        if (pendingFocusRef.current) {
+        if (pendingFocusRef.current !== null) {
             const key = pendingFocusRef.current;
             pendingFocusRef.current = null;
-            // Small delay so spatial nav has re-registered all new nodes
+            // 80 ms gives spatial nav time to register all new card nodes
             setTimeout(() => setFocus(key), 80);
         }
-    }, [modules]);
+        // Run whenever the module list changes (i.e. after GetModules response)
+    }, [modules.length, modules.map(m => m.fullName).join(',')]);
 
     function requestRemove(module, cardIdx) {
-        const repoLine = (module.fullName || '').replace(/^(npm|gh)\//, '');
+        const repoLine  = (module.fullName || '').replace(/^(npm|gh)\//, '');
         const versionStr = module.version ? ` (${module.version})` : '';
-        const message = `${t('moduleManager.confirmDelete', { packageName: `${module.appName}${versionStr}` })}\n${repoLine}`;
+        const message   = `${t('moduleManager.confirmDelete', { packageName: `${module.appName}${versionStr}` })}\n${repoLine}`;
+        const cardKey   = `module-card-${cardIdx}`;
 
         setModal({
             message,
-            // Which card to focus if user cancels (card still exists)
-            returnFocusKey: `module-card-${cardIdx}`,
+            onCancel: () => {
+                // Card still exists — focus it immediately
+                setModal(null);
+                setTimeout(() => setFocus(cardKey), 50);
+            },
             onConfirm: () => {
                 setModal(null);
                 state.client.send({ type: Events.ModuleAction, payload: { action: 'remove', module: module.fullName } });
                 state.client.send({ type: Events.GetModules, payload: true });
-                // After the modules reload, focus the card at the same index
-                // (or the add-npm card if the list becomes shorter)
-                pendingFocusRef.current = `module-card-${cardIdx}`;
+                // After the module list re-renders, focus the card at the same
+                // index (now pointing at the next module) or the Add card.
+                pendingFocusRef.current = cardIdx > 0 ? `module-card-${cardIdx - 1}` : cardKey;
             }
         });
     }
@@ -125,9 +124,8 @@ export default function ModuleManager() {
             {modal && (
                 <ConfirmModal
                     message={modal.message}
-                    returnFocusKey={modal.returnFocusKey}
                     onConfirm={modal.onConfirm}
-                    onCancel={() => setModal(null)}
+                    onCancel={modal.onCancel}
                 />
             )}
 
@@ -185,17 +183,15 @@ function AddModule() {
     })();
 
     const exampleValue = moduleType === 'gh' ? 'reisxd/TizenTube' : '@foxreis/tizentube';
-
     const [name, setName] = useState(exampleValue);
     const [sourceMode, setSourceMode] = useState(() => {
-        try {
-            return new URL(location.href).searchParams.get('sourceMode') === 'direct' ? 'direct' : 'cdn';
-        } catch (_) { return 'cdn'; }
+        try { return new URL(location.href).searchParams.get('sourceMode') === 'direct' ? 'direct' : 'cdn'; }
+        catch (_) { return 'cdn'; }
     });
 
     const loc = useLocation();
     const { state } = useContext(GlobalStateContext);
-    const inputRef = useRef(null);
+    const inputRef    = useRef(null);
     const confirmedRef = useRef(false);
     const submittedRef = useRef(false);
     const { t } = useTranslation();
@@ -240,8 +236,6 @@ function AddModule() {
         ? t('moduleManager.hintGH', { example: exampleValue })
         : t('moduleManager.hintNPM', { example: exampleValue });
 
-    const sourceModeLabel = sourceMode === 'direct' ? '[DIRECT]' : '[CDN]';
-
     return (
         <div className="relative isolate lg:px-8 pt-6 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 8vh)' }}>
             <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative pb-6">
@@ -262,7 +256,7 @@ function AddModule() {
                     />
                     <p className='text-gray-400 mt-2 text-sm'>{hint}</p>
                     <p className='text-gray-300 mt-3 text-sm font-semibold'>
-                        {t('moduleManager.sourceLabel')}: {sourceModeLabel}
+                        {t('moduleManager.sourceLabel')}: {sourceMode === 'direct' ? '[DIRECT]' : '[CDN]'}
                     </p>
                     <p className='text-gray-500 mt-1 text-xs'>
                         {t('moduleManager.sourceHint')}
