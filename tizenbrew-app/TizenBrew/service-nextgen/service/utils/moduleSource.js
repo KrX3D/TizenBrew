@@ -1,11 +1,9 @@
 "use strict";
 
+// Splits "gh/user/repo" or "npm/@scope/pkg" into { type, name }
 function parseModule(fullName) {
     const firstSlash = fullName.indexOf('/');
-    if (firstSlash === -1) {
-        return { type: '', name: fullName };
-    }
-
+    if (firstSlash === -1) return { type: '', name: fullName };
     return {
         type: fullName.substring(0, firstSlash),
         name: fullName.substring(firstSlash + 1)
@@ -17,49 +15,41 @@ function normalizeModulePath(path) {
     return path.replace(/^\/+/, '');
 }
 
-function getPackageJsonUrls(fullName, sourceMode, branch) {
-    const moduleMeta = parseModule(fullName);
+// Returns the URL(s) to try for package.json
+function getPackageJsonUrls(fullName, sourceMode) {
+    const meta = parseModule(fullName);
 
-    if (sourceMode !== 'direct') {
-        return [`https://cdn.jsdelivr.net/${fullName}/package.json`];
+    if (sourceMode === 'direct') {
+        if (meta.type === 'gh') {
+            return [
+                `https://raw.githubusercontent.com/${meta.name}/main/package.json`,
+                `https://raw.githubusercontent.com/${meta.name}/master/package.json`
+            ];
+        }
+        if (meta.type === 'npm') {
+            return [`https://unpkg.com/${meta.name}/package.json`];
+        }
     }
 
-    if (moduleMeta.type === 'gh') {
-        const targetBranch = branch || 'main';
-        return [
-            `https://raw.githubusercontent.com/${moduleMeta.name}/${targetBranch}/package.json`,
-            `https://raw.githubusercontent.com/${moduleMeta.name}/master/package.json`
-        ];
-    }
-
-    if (moduleMeta.type === 'npm') {
-        return [
-            `https://unpkg.com/${moduleMeta.name}/package.json`
-        ];
-    }
-
+    // CDN (default)
     return [`https://cdn.jsdelivr.net/${fullName}/package.json`];
 }
 
+// Returns the URL for a specific file inside a module
 function buildModuleFileUrl(fullName, sourceMode, filePath, branch) {
-    const moduleMeta = parseModule(fullName);
+    const meta = parseModule(fullName);
     const normalizedPath = normalizeModulePath(filePath);
 
     if (sourceMode === 'direct') {
-        if (moduleMeta.type === 'gh') {
-            return `https://raw.githubusercontent.com/${moduleMeta.name}/${branch || 'main'}/${normalizedPath}`;
+        if (meta.type === 'gh') {
+            return `https://raw.githubusercontent.com/${meta.name}/${branch || 'main'}/${normalizedPath}`;
         }
-
-        if (moduleMeta.type === 'npm') {
-            return `https://unpkg.com/${moduleMeta.name}/${normalizedPath}`;
+        if (meta.type === 'npm') {
+            return `https://unpkg.com/${meta.name}/${normalizedPath}`;
         }
     }
 
     return `https://cdn.jsdelivr.net/${fullName}/${normalizedPath}`;
 }
 
-module.exports = {
-    parseModule,
-    getPackageJsonUrls,
-    buildModuleFileUrl
-};
+module.exports = { parseModule, getPackageJsonUrls, buildModuleFileUrl };

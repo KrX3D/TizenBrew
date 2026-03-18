@@ -8,10 +8,7 @@ function classNames(...classes) {
 }
 
 function getModuleTypeLabel(module) {
-  if (module?.moduleType) {
-    return String(module.moduleType).toUpperCase();
-  }
-
+  if (module?.moduleType) return String(module.moduleType).toUpperCase();
   return module?.fullName?.startsWith('gh/') ? 'GH' : 'NPM';
 }
 
@@ -19,11 +16,7 @@ function Item({ children, module, id, state }) {
   const { ref, focused } = useFocusable();
   useEffect(() => {
     if (focused) {
-      ref.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-        inline: 'center',
-      });
+      ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }
   }, [focused, ref]);
 
@@ -31,12 +24,7 @@ function Item({ children, module, id, state }) {
     for (const key of module.keys) {
       tizen.tvinputdevice.registerKey(key);
     }
-
-    state.client.send({
-      type: Events.LaunchModule,
-      payload: module
-    });
-
+    state.client.send({ type: Events.LaunchModule, payload: module });
     if (!module.evaluateScriptOnDocumentStart) {
       location.href = module.appPath;
     }
@@ -57,6 +45,7 @@ function Item({ children, module, id, state }) {
     </div>
   );
 }
+
 export default function Modules() {
   const { state } = useContext(GlobalStateContext);
 
@@ -65,23 +54,25 @@ export default function Modules() {
       <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
         {state?.sharedData?.modules?.map((module, moduleIdx) => (
           <Item module={module} id={moduleIdx} state={state}>
-            <h3
-              className='text-indigo-400 text-base/7 font-semibold'
-            >
+            {/* Name + version */}
+            <h3 className='text-indigo-400 text-base/7 font-semibold'>
               {module.appName} ({module.version})
             </h3>
+            {/* Source mode badge: "NPM CDN" / "GH DIRECT" etc */}
             <p className='text-gray-400 mt-2 text-sm'>
               {`${getModuleTypeLabel(module)} ${(module.sourceMode || 'cdn').toUpperCase()}`}
             </p>
+            {/* Full module identifier, stripped of type prefix */}
             <p className='text-gray-400 mt-1 text-xs break-all'>
               {(module.fullName || '').replace(/^(npm|gh)\//, '')}
             </p>
-            <p className='text-gray-300 mt-6 text-base/7'>
+            {/* Description */}
+            <p className='text-gray-300 mt-4 text-base/7'>
               {module.description}
             </p>
           </Item>
         ))}
       </div>
     </div>
-  )
+  );
 }
