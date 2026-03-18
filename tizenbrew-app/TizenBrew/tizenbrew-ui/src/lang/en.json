@@ -2,7 +2,9 @@
     "service": {
         "alreadyRunning": "Service is already running.",
         "started": "Service started.",
-        "connected": "Service connected to the app."
+        "connected": "Service connected to the app.",
+        "connecting": "Connecting...",
+        "reloading": "Reloading modules..."
     },
     "errors": {
         "serviceDidntConnectYet": "You can't launch modules while the service hasn't connected to the app yet.",
