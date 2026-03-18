@@ -10,23 +10,19 @@ function classNames(...classes) {
     return classes.filter(Boolean).join(' ')
 }
 
-function ItemBasic({ children, onClick, shouldFocus, selected }) {
-    const { ref, focused, focusSelf } = useFocusable({ onEnterPress: onClick });
+function ItemBasic({ children, onClick, shouldFocus, selected, focusKey }) {
+    const { ref, focused, focusSelf } = useFocusable({ focusKey, onEnterPress: onClick });
     useEffect(() => {
         if (focused) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }, [focused, ref]);
     if (shouldFocus) { useEffect(() => { focusSelf(); }, [ref]); }
 
     return (
-        <div
-            ref={ref}
-            onClick={onClick}
-            className={classNames(
-                'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw] mb-4',
-                focused ? 'focus' : '',
-                selected ? 'ring-2 ring-indigo-400' : ''
-            )}
-        >
+        <div ref={ref} onClick={onClick} className={classNames(
+            'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw] mb-4',
+            focused ? 'focus' : '',
+            selected ? 'ring-2 ring-indigo-400' : ''
+        )}>
             {children}
         </div>
     );
@@ -69,7 +65,7 @@ export default function Settings() {
     );
 }
 
-// ─── Change page (autolaunch / autolaunchService) ─────────────────────────────
+// ─── Change page ──────────────────────────────────────────────────────────────
 
 function Change() {
     const loc = useLocation();
@@ -90,9 +86,10 @@ function Change() {
         return activeAutolaunch === module.fullName;
     }
 
-    function handleSelect(module) {
+    function handleSelect(module, cardKey) {
         setModal({
             message: t('settings.enableAutolaunchPrompt', { packageName: module.appName }),
+            returnFocusKey: cardKey,
             onConfirm: () => {
                 setModal(null);
                 state.client.send({ type: Events.ModuleAction, payload: { action: loc.query.type, module: module.fullName } });
@@ -107,9 +104,10 @@ function Change() {
         });
     }
 
-    function handleDisable() {
+    function handleDisable(disableKey) {
         setModal({
             message: t('settings.disableAutolaunchPrompt'),
+            returnFocusKey: disableKey,
             onConfirm: () => {
                 setModal(null);
                 state.client.send({ type: Events.ModuleAction, payload: { action: loc.query.type, module: '' } });
@@ -131,6 +129,7 @@ function Change() {
             {modal && (
                 <ConfirmModal
                     message={modal.message}
+                    returnFocusKey={modal.returnFocusKey}
                     onConfirm={modal.onConfirm}
                     onCancel={() => setModal(null)}
                 />
@@ -140,8 +139,10 @@ function Change() {
                 {state?.sharedData?.modules?.map((module, idx) => {
                     if (isServiceType && !module.serviceFile) return null;
                     const selected = isActive(module);
+                    const cardKey = `settings-card-${idx}`;
                     return (
-                        <ItemBasic key={idx} selected={selected} shouldFocus={idx === 0} onClick={() => handleSelect(module)}>
+                        <ItemBasic key={idx} focusKey={cardKey} selected={selected} shouldFocus={idx === 0}
+                            onClick={() => handleSelect(module, cardKey)}>
                             <h3 className='text-indigo-400 text-base/7 font-semibold'>
                                 {module.appName} ({module.version})
                             </h3>
@@ -155,7 +156,9 @@ function Change() {
                     );
                 })}
 
-                <ItemBasic selected={disableSelected} shouldFocus={state?.sharedData?.modules?.length === 0} onClick={handleDisable}>
+                <ItemBasic focusKey="settings-disable" selected={disableSelected}
+                    shouldFocus={state?.sharedData?.modules?.length === 0}
+                    onClick={() => handleDisable('settings-disable')}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>{t('settings.disableAutolaunch')}</h3>
                     {disableSelected && (
                         <span className='absolute top-3 right-3 text-xs bg-indigo-600 text-white px-2 py-1 rounded'>

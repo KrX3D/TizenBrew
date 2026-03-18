@@ -20,7 +20,11 @@
         "addGH": "Add GitHub Module",
         "addGHDesc": "This is primarily for development and for developers.",
         "addModule": "Add Module",
-        "moduleName": "Module Name (For {{type}}):"
+        "moduleName": "Module Name (For {{type}}):",
+        "hintGH":      "Format: user/repo  e.g. {{example}}",
+        "hintNPM":     "Format: @scope/package  e.g. {{example}}",
+        "sourceLabel": "Source",
+        "sourceHint":  "[YELLOW] to toggle | CDN = jsDelivr | DIRECT = GitHub/unpkg"
     },
     "settings": {
         "autolaunch": "Autolaunch Settings",

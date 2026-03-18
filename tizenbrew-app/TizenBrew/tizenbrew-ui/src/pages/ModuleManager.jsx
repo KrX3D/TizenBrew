@@ -15,8 +15,6 @@ function getModuleTypeLabel(module) {
     return module?.fullName?.startsWith('gh/') ? 'GH' : 'NPM';
 }
 
-// ─── Normalisation helpers ────────────────────────────────────────────────────
-
 function normalizeGitHubModule(input) {
     let value = (input || '').trim();
     if (!value) return '';
@@ -36,13 +34,11 @@ function normalizeNpmModule(input) {
     return value ? `npm/${value}` : '';
 }
 
-// ─── Module card (installed modules list) ─────────────────────────────────────
+// ─── Cards ────────────────────────────────────────────────────────────────────
 
-function Item({ children, module, id, onRemoveRequest }) {
+function Item({ children, module, id, focusKey, onRemoveRequest }) {
     const { ref, focused } = useFocusable({
-        // Use onEnterPress instead of relying on the global keyCode-13 click handler.
-        // This prevents the double-fire on Tizen 6.5 where the TV sends both
-        // a keydown(13) AND a native click for the same remote OK press.
+        focusKey,
         onEnterPress: onRemoveRequest
     });
     useEffect(() => {
@@ -53,10 +49,8 @@ function Item({ children, module, id, onRemoveRequest }) {
         <div
             key={id}
             ref={ref}
-            // onClick still here for mouse/touch, but NOT the primary path on TV
             onClick={onRemoveRequest}
             className={classNames(
-                // mb-4: vertical row gap for Tizen 5.5 (gap polyfill skips flex-wrap)
                 'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw] mb-4',
                 focused ? 'focus' : '',
                 id === 0 ? 'ml-4' : ''
@@ -67,27 +61,22 @@ function Item({ children, module, id, onRemoveRequest }) {
     );
 }
 
-function ItemBasic({ children, onClick }) {
-    const { ref, focused } = useFocusable({ onEnterPress: onClick });
+function ItemBasic({ children, onClick, focusKey }) {
+    const { ref, focused } = useFocusable({ focusKey, onEnterPress: onClick });
     useEffect(() => {
         if (focused) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }, [focused, ref]);
 
     return (
-        <div
-            ref={ref}
-            onClick={onClick}
-            className={classNames(
-                'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw] mb-4',
-                focused ? 'focus' : ''
-            )}
-        >
+        <div ref={ref} onClick={onClick} className={classNames(
+            'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw] mb-4',
+            focused ? 'focus' : ''
+        )}>
             {children}
         </div>
     );
 }
 
-// Auto-height card for AddModule — virtual keyboard won't clip content
 function ItemAuto({ children }) {
     return (
         <div className="relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 min-h-[20vh] w-[40vw] mb-4">
@@ -103,12 +92,13 @@ export default function ModuleManager() {
     const loc = useLocation();
     const { t } = useTranslation();
 
-    // Custom modal state — replaces confirm() to avoid IDS_WEBVIEW_* strings on Tizen 6.5
+    // modal state + which card to refocus after close
     const [modal, setModal] = useState(null);
 
-    function requestRemove(module) {
+    function requestRemove(module, cardFocusKey) {
         setModal({
             message: t('moduleManager.confirmDelete', { packageName: module.appName }),
+            returnFocusKey: cardFocusKey,
             onConfirm: () => {
                 setModal(null);
                 state.client.send({ type: Events.ModuleAction, payload: { action: 'remove', module: module.fullName } });
@@ -120,41 +110,43 @@ export default function ModuleManager() {
 
     return (
         <div className="relative isolate lg:px-8 pt-6">
-            {/* Custom confirm modal */}
             {modal && (
                 <ConfirmModal
                     message={modal.message}
+                    returnFocusKey={modal.returnFocusKey}
                     onConfirm={modal.onConfirm}
                     onCancel={() => setModal(null)}
                 />
             )}
 
-            {/* gap-x-2: half the horizontal gap; mb-4 on cards handles vertical */}
             <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative">
+                {state?.sharedData?.modules?.map((module, moduleIdx) => {
+                    const cardKey = `module-card-${moduleIdx}`;
+                    return (
+                        <Item
+                            key={module.fullName}
+                            module={module}
+                            id={moduleIdx}
+                            focusKey={cardKey}
+                            onRemoveRequest={() => requestRemove(module, cardKey)}
+                        >
+                            <h3 className='text-indigo-400 text-base/7 font-semibold'>
+                                {module.appName} ({module.version})
+                            </h3>
+                            <p className='text-gray-400 mt-2 text-sm'>
+                                {`${getModuleTypeLabel(module)} [${(module.sourceMode || 'cdn').toUpperCase()}]`}
+                            </p>
+                            <p className='text-gray-400 mt-1 text-xs break-all'>
+                                {(module.fullName || '').replace(/^(npm|gh)\//, '')}
+                            </p>
+                            <p className='text-gray-300 mt-4 text-base/7'>
+                                {module.description}
+                            </p>
+                        </Item>
+                    );
+                })}
 
-                {state?.sharedData?.modules?.map((module, moduleIdx) => (
-                    <Item
-                        key={module.fullName}
-                        module={module}
-                        id={moduleIdx}
-                        onRemoveRequest={() => requestRemove(module)}
-                    >
-                        <h3 className='text-indigo-400 text-base/7 font-semibold'>
-                            {module.appName} ({module.version})
-                        </h3>
-                        <p className='text-gray-400 mt-2 text-sm'>
-                            {`${getModuleTypeLabel(module)} [${(module.sourceMode || 'cdn').toUpperCase()}]`}
-                        </p>
-                        <p className='text-gray-400 mt-1 text-xs break-all'>
-                            {(module.fullName || '').replace(/^(npm|gh)\//, '')}
-                        </p>
-                        <p className='text-gray-300 mt-4 text-base/7'>
-                            {module.description}
-                        </p>
-                    </Item>
-                ))}
-
-                <ItemBasic onClick={() => {
+                <ItemBasic focusKey="mm-add-npm" onClick={() => {
                     const mode = localStorage.getItem('addModuleSourceMode') || 'cdn';
                     loc.route(`/tizenbrew-ui/dist/index.html/module-manager/add?type=npm&sourceMode=${mode}`);
                 }}>
@@ -162,7 +154,7 @@ export default function ModuleManager() {
                     <p className='text-gray-300 mt-6 text-base/7'>{t('moduleManager.addNPMDesc')}</p>
                 </ItemBasic>
 
-                <ItemBasic onClick={() => {
+                <ItemBasic focusKey="mm-add-gh" onClick={() => {
                     const mode = localStorage.getItem('addModuleSourceMode') || 'cdn';
                     loc.route(`/tizenbrew-ui/dist/index.html/module-manager/add?type=gh&sourceMode=${mode}`);
                 }}>
@@ -200,12 +192,9 @@ function AddModule() {
     useEffect(() => { localStorage.setItem('addModuleSourceMode', sourceMode); }, [sourceMode]);
     useEffect(() => { inputRef.current?.focus(); }, []);
 
-    // Yellow button (405) toggles CDN / Direct
     useEffect(() => {
         function onKeyDown(e) {
-            if (e.keyCode === 405) {
-                setSourceMode(prev => prev === 'cdn' ? 'direct' : 'cdn');
-            }
+            if (e.keyCode === 405) setSourceMode(prev => prev === 'cdn' ? 'direct' : 'cdn');
         }
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
@@ -214,16 +203,9 @@ function AddModule() {
     function submit() {
         if (submittedRef.current) return;
         submittedRef.current = true;
-
-        const normalized = moduleType === 'gh'
-            ? normalizeGitHubModule(name)
-            : normalizeNpmModule(name);
-
+        const normalized = moduleType === 'gh' ? normalizeGitHubModule(name) : normalizeNpmModule(name);
         if (normalized) {
-            state.client.send({
-                type: Events.ModuleAction,
-                payload: { action: 'add', module: normalized, sourceMode }
-            });
+            state.client.send({ type: Events.ModuleAction, payload: { action: 'add', module: normalized, sourceMode } });
         }
         state.client.send({ type: Events.GetModules, payload: true });
         loc.route('/tizenbrew-ui/dist/index.html/module-manager');
@@ -231,9 +213,7 @@ function AddModule() {
     }
 
     function handleKeyDown(e) {
-        // Stop spatial nav stealing left/right while typing
         if (e.keyCode === 37 || e.keyCode === 39) { e.stopPropagation(); return; }
-        // Enter or Fertig → confirm and navigate
         if (e.keyCode === 13 || e.keyCode === 65376) {
             e.preventDefault();
             confirmedRef.current = true;
@@ -246,8 +226,8 @@ function AddModule() {
     }
 
     const hint = moduleType === 'gh'
-        ? `Format: user/repo  e.g. ${exampleValue}`
-        : `Format: @scope/package  e.g. ${exampleValue}`;
+        ? t('moduleManager.hintGH', { example: exampleValue })
+        : t('moduleManager.hintNPM', { example: exampleValue });
 
     const sourceModeLabel = sourceMode === 'direct' ? '[DIRECT]' : '[CDN]';
 
@@ -270,9 +250,11 @@ function AddModule() {
                         placeholder={t('moduleManager.moduleName', { type: moduleType })}
                     />
                     <p className='text-gray-400 mt-2 text-sm'>{hint}</p>
-                    <p className='text-gray-300 mt-3 text-sm font-semibold'>Source: {sourceModeLabel}</p>
+                    <p className='text-gray-300 mt-3 text-sm font-semibold'>
+                        {t('moduleManager.sourceLabel')}: {sourceModeLabel}
+                    </p>
                     <p className='text-gray-500 mt-1 text-xs'>
-                        [YELLOW] to toggle &nbsp;|&nbsp; CDN = jsDelivr &nbsp;|&nbsp; DIRECT = GitHub/unpkg
+                        {t('moduleManager.sourceHint')}
                     </p>
                 </ItemAuto>
             </div>
