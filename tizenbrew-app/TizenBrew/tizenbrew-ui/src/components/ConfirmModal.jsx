@@ -3,10 +3,7 @@ import { useEffect } from 'preact/hooks';
 import { useTranslation } from 'react-i18next';
 
 function ModalButton({ children, onClick, focusKey, autoFocus }) {
-    const { ref, focused, focusSelf } = useFocusable({
-        focusKey,
-        onEnterPress: onClick
-    });
+    const { ref, focused, focusSelf } = useFocusable({ focusKey, onEnterPress: onClick });
     useEffect(() => { if (autoFocus) focusSelf(); }, []);
 
     return (
@@ -14,7 +11,6 @@ function ModalButton({ children, onClick, focusKey, autoFocus }) {
             ref={ref}
             onClick={onClick}
             className={[
-                // text-2xl = ~50% bigger than the previous text-base
                 'px-10 py-4 rounded-xl text-2xl font-semibold transition-all min-w-[8vw]',
                 focused
                     ? 'bg-indigo-500 text-white ring-2 ring-white'
@@ -26,22 +22,14 @@ function ModalButton({ children, onClick, focusKey, autoFocus }) {
     );
 }
 
-/**
- * Props:
- *   message      string   — question to display
- *   onConfirm    fn       — called when OK is pressed
- *   onCancel     fn       — called when Cancel or Back is pressed
- *   returnFocusKey string — focusKey to restore after modal closes (optional)
- */
 export default function ConfirmModal({ message, onConfirm, onCancel, returnFocusKey }) {
     const { t } = useTranslation();
 
-    // Restore focus to the triggering element when the modal unmounts
+    // Restore focus to triggering card when modal unmounts
     useEffect(() => {
         return () => {
             if (returnFocusKey) {
-                // Small delay so the modal has fully unmounted before refocusing
-                setTimeout(() => setFocus(returnFocusKey), 50);
+                setTimeout(() => setFocus(returnFocusKey), 80);
             }
         };
     }, [returnFocusKey]);
@@ -55,13 +43,21 @@ export default function ConfirmModal({ message, onConfirm, onCancel, returnFocus
         return () => window.removeEventListener('keydown', onKey, true);
     }, [onCancel]);
 
+    // Split message on \n so the repo line renders smaller below the main text
+    const lines = (message || '').split('\n');
+    const mainLine = lines[0];
+    const subLines = lines.slice(1);
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
             <div className="bg-slate-800 rounded-2xl shadow-2xl p-12 max-w-[65vw] min-w-[35vw] flex flex-col items-center gap-8 border border-slate-600">
-                {/* text-2xl = ~50% bigger than the original text-base message */}
-                <p className="text-white text-2xl text-center leading-relaxed">{message}</p>
+                <div className="text-center">
+                    <p className="text-white text-2xl leading-relaxed">{mainLine}</p>
+                    {subLines.map((line, i) => (
+                        <p key={i} className="text-slate-400 text-lg mt-2 font-mono break-all">{line}</p>
+                    ))}
+                </div>
                 <div className="flex gap-8">
-                    {/* Cancel focused by default — safer on TV */}
                     <ModalButton focusKey="modal-cancel" autoFocus onClick={onCancel}>
                         {t('modal.cancel')}
                     </ModalButton>

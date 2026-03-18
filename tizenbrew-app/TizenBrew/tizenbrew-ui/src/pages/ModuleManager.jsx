@@ -36,26 +36,18 @@ function normalizeNpmModule(input) {
 
 // ─── Cards ────────────────────────────────────────────────────────────────────
 
-function Item({ children, module, id, focusKey, onRemoveRequest }) {
-    const { ref, focused } = useFocusable({
-        focusKey,
-        onEnterPress: onRemoveRequest
-    });
+function Item({ children, id, focusKey, onRemoveRequest }) {
+    const { ref, focused } = useFocusable({ focusKey, onEnterPress: onRemoveRequest });
     useEffect(() => {
         if (focused) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }, [focused, ref]);
 
     return (
-        <div
-            key={id}
-            ref={ref}
-            onClick={onRemoveRequest}
-            className={classNames(
-                'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw] mb-4',
-                focused ? 'focus' : '',
-                id === 0 ? 'ml-4' : ''
-            )}
-        >
+        <div ref={ref} onClick={onRemoveRequest} className={classNames(
+            'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw] mb-4',
+            focused ? 'focus' : '',
+            id === 0 ? 'ml-4' : ''
+        )}>
             {children}
         </div>
     );
@@ -91,19 +83,39 @@ export default function ModuleManager() {
     const { state } = useContext(GlobalStateContext);
     const loc = useLocation();
     const { t } = useTranslation();
-
-    // modal state + which card to refocus after close
     const [modal, setModal] = useState(null);
+    const modules = state?.sharedData?.modules || [];
 
-    function requestRemove(module, cardFocusKey) {
+    // After OK removal, GetModules triggers a re-render that wipes the spatial
+    // nav tree. We store the desired focus target here and apply it once the
+    // new module list has mounted.
+    const pendingFocusRef = useRef(null);
+
+    useEffect(() => {
+        if (pendingFocusRef.current) {
+            const key = pendingFocusRef.current;
+            pendingFocusRef.current = null;
+            // Small delay so spatial nav has re-registered all new nodes
+            setTimeout(() => setFocus(key), 80);
+        }
+    }, [modules]);
+
+    function requestRemove(module, cardIdx) {
+        const repoLine = (module.fullName || '').replace(/^(npm|gh)\//, '');
+        const versionStr = module.version ? ` (${module.version})` : '';
+        const message = `${t('moduleManager.confirmDelete', { packageName: `${module.appName}${versionStr}` })}\n${repoLine}`;
+
         setModal({
-            message: t('moduleManager.confirmDelete', { packageName: module.appName }),
-            returnFocusKey: cardFocusKey,
+            message,
+            // Which card to focus if user cancels (card still exists)
+            returnFocusKey: `module-card-${cardIdx}`,
             onConfirm: () => {
                 setModal(null);
                 state.client.send({ type: Events.ModuleAction, payload: { action: 'remove', module: module.fullName } });
                 state.client.send({ type: Events.GetModules, payload: true });
-                setFocus('sn:focusable-item-1');
+                // After the modules reload, focus the card at the same index
+                // (or the add-npm card if the list becomes shorter)
+                pendingFocusRef.current = `module-card-${cardIdx}`;
             }
         });
     }
@@ -120,15 +132,14 @@ export default function ModuleManager() {
             )}
 
             <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative">
-                {state?.sharedData?.modules?.map((module, moduleIdx) => {
+                {modules.map((module, moduleIdx) => {
                     const cardKey = `module-card-${moduleIdx}`;
                     return (
                         <Item
                             key={module.fullName}
-                            module={module}
                             id={moduleIdx}
                             focusKey={cardKey}
-                            onRemoveRequest={() => requestRemove(module, cardKey)}
+                            onRemoveRequest={() => requestRemove(module, moduleIdx)}
                         >
                             <h3 className='text-indigo-400 text-base/7 font-semibold'>
                                 {module.appName} ({module.version})
