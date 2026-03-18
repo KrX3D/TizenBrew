@@ -1,7 +1,7 @@
 import { useFocusable } from '@noriginmedia/norigin-spatial-navigation'
 import { useEffect, useContext } from 'react';
 import { GlobalStateContext } from './ClientContext.jsx';
-import { Events } from './WebSocketClient.js';
+import { Events, getResolvedPackageUrl } from './WebSocketClient.js';
 
 function classNames(...classes) {
   return classes.filter(Boolean).join(' ')
@@ -20,12 +20,20 @@ function Item({ children, module, id, state }) {
 
   function handleOnClick() {
     const toast = window.__globalToast;
+    const pkgUrl = getResolvedPackageUrl(module);
+    const src = (module.sourceMode || 'cdn').toUpperCase();
+
     if (toast) {
-      toast.info(module.appPath, 3000);
+      toast.info(`🚀 ${module.appName} (${module.version || '?'}) [${src}]\n${pkgUrl}`, 3000);
     }
+
     for (const key of module.keys) tizen.tvinputdevice.registerKey(key);
     state.client.send({ type: Events.LaunchModule, payload: module });
-    if (!module.evaluateScriptOnDocumentStart) location.href = module.appPath;
+
+    if (!module.evaluateScriptOnDocumentStart) {
+      // Delay navigation so the toast is visible for ~3 seconds before leaving
+      setTimeout(() => { location.href = module.appPath; }, 3000);
+    }
   }
 
   return (
@@ -34,9 +42,6 @@ function Item({ children, module, id, state }) {
       ref={ref}
       onClick={handleOnClick}
       className={classNames(
-        // mb-4 provides the vertical row gap on ALL Tizen versions.
-        // The flexbox-gap-polyfill skips flex-wrap containers so we can't
-        // rely on gap for row spacing on Tizen 5.5 (Chrome 47).
         'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw] mb-4',
         focused ? 'focus' : '',
         id === 0 ? 'ml-4' : ''
@@ -55,7 +60,6 @@ export default function Modules() {
       className="relative isolate lg:px-8 pt-6 overflow-y-auto"
       style={{ maxHeight: 'calc(100vh - 8vh)' }}
     >
-      {/* gap-x-2: half the previous horizontal gap between cards in the same row */}
       <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative pb-6">
         {state?.sharedData?.modules?.map((module, moduleIdx) => (
           <Item module={module} id={moduleIdx} state={state}>

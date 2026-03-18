@@ -1,6 +1,5 @@
 "use strict";
 
-// Splits "gh/user/repo", "gh/user/repo@branch", or "npm/@scope/pkg"
 function parseModule(fullName) {
     const firstSlash = fullName.indexOf('/');
     if (firstSlash === -1) return { type: '', name: fullName, branch: null };
@@ -34,11 +33,16 @@ function getPackageJsonUrls(fullName, sourceMode) {
     if (sourceMode === 'direct') {
         if (meta.type === 'gh') {
             if (meta.branch) {
-                return [`https://raw.githubusercontent.com/${meta.name}/refs/heads/${meta.branch}/package.json`];
+                return [
+                    `https://raw.githubusercontent.com/${meta.name}/refs/heads/${meta.branch}/package.json`,
+                    `https://raw.githubusercontent.com/${meta.name}/${meta.branch}/package.json`
+                ];
             }
             return [
                 `https://raw.githubusercontent.com/${meta.name}/refs/heads/main/package.json`,
-                `https://raw.githubusercontent.com/${meta.name}/refs/heads/master/package.json`
+                `https://raw.githubusercontent.com/${meta.name}/main/package.json`,
+                `https://raw.githubusercontent.com/${meta.name}/refs/heads/master/package.json`,
+                `https://raw.githubusercontent.com/${meta.name}/master/package.json`
             ];
         }
         if (meta.type === 'npm') {

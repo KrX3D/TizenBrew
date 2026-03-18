@@ -19,16 +19,21 @@ const Events = {
     WebApisCode: 21
 };
 
-// Reconstruct the package.json URL that was actually used to resolve a module
+// Returns the actual upstream package.json URL that was used to resolve this module.
+// This is what we show in toasts — not the proxy URL.
 function getResolvedPackageUrl(module) {
     const { fullName, versionedFullName, sourceMode, moduleType } = module;
     const namePart = fullName.substring(fullName.indexOf('/') + 1);
 
     if (moduleType === 'gh') {
-        // Extract branch from versionedFullName: "gh/user/repo@branch" → "branch"
-        const versionedNamePart = versionedFullName.substring(versionedFullName.indexOf('/') + 1);
+        // Extract branch from versionedFullName: gh/user/repo@branch → branch
+        const versionedNamePart = (versionedFullName || fullName).substring(
+            (versionedFullName || fullName).indexOf('/') + 1
+        );
         const secondSlash = versionedNamePart.indexOf('/');
-        const repoAndBranch = secondSlash !== -1 ? versionedNamePart.substring(secondSlash + 1) : versionedNamePart;
+        const repoAndBranch = secondSlash !== -1
+            ? versionedNamePart.substring(secondSlash + 1)
+            : versionedNamePart;
         const atIdx = repoAndBranch.indexOf('@');
         const branch = atIdx !== -1 ? repoAndBranch.substring(atIdx + 1) : 'main';
 
@@ -155,20 +160,25 @@ class Client {
                         .catch(err => console.error('[WebSocketClient] Failed to fetch webapis code:', err));
                 }
 
-                // Show one toast per module on first load only
-                if (!this.startupToastShown && toast && payload.length > 0) {
+                // Startup toasts — delay 800ms to ensure __globalToast is registered
+                // by the time we try to use it (race condition on first render).
+                if (!this.startupToastShown && payload.length > 0) {
                     this.startupToastShown = true;
-                    payload.forEach((module, idx) => {
-                        setTimeout(() => {
-                            const pkgUrl = getResolvedPackageUrl(module);
-                            const label = module.appName && module.appName !== 'Unknown Module'
-                                ? module.appName
-                                : module.fullName;
-                            const status = module.appName === 'Unknown Module' ? '❌' : '✅';
-                            const src = (module.sourceMode || 'cdn').toUpperCase();
-                            toast.info(`${status} ${label} [${src}]\n${pkgUrl}`, 10000);
-                        }, idx * 400);
-                    });
+                    setTimeout(() => {
+                        const t = window.__globalToast;
+                        if (!t) return;
+                        payload.forEach((module, idx) => {
+                            setTimeout(() => {
+                                const pkgUrl = getResolvedPackageUrl(module);
+                                const label = module.appName && module.appName !== 'Unknown Module'
+                                    ? `${module.appName} (${module.version || '?'})`
+                                    : module.fullName;
+                                const status = module.appName === 'Unknown Module' ? '❌' : '✅';
+                                const src = (module.sourceMode || 'cdn').toUpperCase();
+                                t.info(`${status} ${label} [${src}]\n${pkgUrl}`, 10000);
+                            }, idx * 500);
+                        });
+                    }, 800);
                 }
 
                 this.processPendingEvents();
@@ -311,5 +321,5 @@ class Client {
     }
 }
 
-export { Events };
+export { Events, getResolvedPackageUrl };
 export default Client;
