@@ -7,7 +7,7 @@ const TB_CONFIG_PATH = '/home/owner/share/tizenbrewConfig.json';
 function readConfig() {
     if (!fs.existsSync(TB_CONFIG_PATH)) {
         return {
-            modules: ["npm/@foxreis/tizentube"],
+            modules: [],
             autoLaunchServiceList: [],
             autoLaunchModule: ''
         };

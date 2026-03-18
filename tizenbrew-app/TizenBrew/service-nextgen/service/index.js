@@ -348,41 +348,27 @@ module.exports.onStart = function () {
                         return wsConn.send(wsConn.Event(Events.CheckTizenBrewConfig, { exists: false }));
                     }
                     try {
-                        let stats = statSync(TB_CONFIG);
-                        const modeBefore = (stats.mode & 0o777).toString(8);
-                        let readable = false, writable = false;
-                        try { accessSync(TB_CONFIG, constants.R_OK); readable = true; } catch (_) {}
-                        try { accessSync(TB_CONFIG, constants.W_OK); writable = true; } catch (_) {}
+                        const stats = statSync(TB_CONFIG);
+                        const mode = (stats.mode & 0o777).toString(8);
 
-                        let attemptedPermissionFix = false;
-                        let permissionFixApplied = false;
-                        if (!readable || !writable) {
-                            attemptedPermissionFix = true;
-                            permissionFixApplied = tryFixTBConfigPermissions(TB_CONFIG);
-                            stats = statSync(TB_CONFIG);
-                            readable = false; writable = false;
-                            try { accessSync(TB_CONFIG, constants.R_OK); readable = true; } catch (_) {}
-                            try { accessSync(TB_CONFIG, constants.W_OK); writable = true; } catch (_) {}
-                        }
-
+                        // Skip accessSync — it lies on Tizen 5.5 (Smack labels).
+                        // Just attempt the read and catch if it actually fails.
                         let configContent = null;
                         let configError = null;
-                        if (readable) {
-                            try {
-                                configContent = JSON.parse(readFileSync(TB_CONFIG, 'utf8'));
-                            } catch (e) {
-                                configError = 'JSON parse error: ' + e.message;
-                            }
+                        try {
+                            configContent = JSON.parse(readFileSync(TB_CONFIG, 'utf8'));
+                        } catch (e) {
+                            configError = e.message;
                         }
 
                         wsConn.send(wsConn.Event(Events.CheckTizenBrewConfig, {
                             exists: true,
-                            readable,
-                            writable,
-                            attemptedPermissionFix,
-                            permissionFixApplied,
-                            modeBefore,
-                            mode: (stats.mode & 0o777).toString(8),
+                            readable: configContent !== null,
+                            writable: true,
+                            attemptedPermissionFix: false,
+                            permissionFixApplied: false,
+                            modeBefore: mode,
+                            mode,
                             size: stats.size,
                             mtime: stats.mtime.toISOString(),
                             config: configContent,
