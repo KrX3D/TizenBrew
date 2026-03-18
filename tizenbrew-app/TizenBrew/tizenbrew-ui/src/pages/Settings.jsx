@@ -1,16 +1,17 @@
 import { setFocus, useFocusable } from '@noriginmedia/norigin-spatial-navigation'
-import { useEffect, useContext } from 'react';
+import { useEffect, useContext, useState } from 'react';
 import { GlobalStateContext } from '../components/ClientContext.jsx';
 import { Events } from '../components/WebSocketClient.js';
 import { useLocation } from 'preact-iso';
 import { useTranslation } from 'react-i18next';
+import ConfirmModal from '../components/ConfirmModal.jsx';
 
 function classNames(...classes) {
     return classes.filter(Boolean).join(' ')
 }
 
 function ItemBasic({ children, onClick, shouldFocus, selected }) {
-    const { ref, focused, focusSelf } = useFocusable();
+    const { ref, focused, focusSelf } = useFocusable({ onEnterPress: onClick });
     useEffect(() => {
         if (focused) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }, [focused, ref]);
@@ -21,7 +22,6 @@ function ItemBasic({ children, onClick, shouldFocus, selected }) {
             ref={ref}
             onClick={onClick}
             className={classNames(
-                // mb-4: vertical gap that works on Tizen 5.5 (gap polyfill skips flex-wrap)
                 'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw] mb-4',
                 focused ? 'focus' : '',
                 selected ? 'ring-2 ring-indigo-400' : ''
@@ -32,7 +32,7 @@ function ItemBasic({ children, onClick, shouldFocus, selected }) {
     );
 }
 
-// ─── Settings overview page ───────────────────────────────────────────────────
+// ─── Settings overview ────────────────────────────────────────────────────────
 
 export default function Settings() {
     const { state } = useContext(GlobalStateContext);
@@ -75,11 +75,11 @@ function Change() {
     const loc = useLocation();
     const { state, dispatch } = useContext(GlobalStateContext);
     const { t } = useTranslation();
+    const [modal, setModal] = useState(null);
 
     const isServiceType = loc.query.type === 'autolaunchService';
-
-    const activeAutolaunch    = state?.sharedData?.autoLaunchModule      || '';
-    const activeServiceList   = state?.sharedData?.autoLaunchServiceList || [];
+    const activeAutolaunch  = state?.sharedData?.autoLaunchModule      || '';
+    const activeServiceList = state?.sharedData?.autoLaunchServiceList || [];
 
     function isActive(module) {
         if (isServiceType) {
@@ -91,62 +91,57 @@ function Change() {
     }
 
     function handleSelect(module) {
-        if (!confirm(t('settings.enableAutolaunchPrompt', { packageName: module.appName }))) return;
-
-        // Tell the service
-        state.client.send({
-            type: Events.ModuleAction,
-            payload: { action: loc.query.type, module: module.fullName }
+        setModal({
+            message: t('settings.enableAutolaunchPrompt', { packageName: module.appName }),
+            onConfirm: () => {
+                setModal(null);
+                state.client.send({ type: Events.ModuleAction, payload: { action: loc.query.type, module: module.fullName } });
+                if (loc.query.type === 'autolaunch') {
+                    dispatch({ type: 'SET_AUTOLAUNCH', payload: { autoLaunchModule: module.fullName } });
+                } else {
+                    dispatch({ type: 'SET_AUTOLAUNCH', payload: { autoLaunchServiceList: module.fullName ? [module.fullName] : [] } });
+                }
+                loc.route('/tizenbrew-ui/dist/index.html/settings');
+                setFocus('sn:focusable-item-1');
+            }
         });
-
-        // Update local state immediately so the badge refreshes without a reload
-        if (loc.query.type === 'autolaunch') {
-            dispatch({ type: 'SET_AUTOLAUNCH', payload: { autoLaunchModule: module.fullName } });
-        } else {
-            const newList = module.fullName ? [module.fullName] : [];
-            dispatch({ type: 'SET_AUTOLAUNCH', payload: { autoLaunchServiceList: newList } });
-        }
-
-        loc.route('/tizenbrew-ui/dist/index.html/settings');
-        setFocus('sn:focusable-item-1');
     }
 
     function handleDisable() {
-        if (!confirm(t('settings.disableAutolaunchPrompt'))) return;
-
-        state.client.send({
-            type: Events.ModuleAction,
-            payload: { action: loc.query.type, module: '' }
+        setModal({
+            message: t('settings.disableAutolaunchPrompt'),
+            onConfirm: () => {
+                setModal(null);
+                state.client.send({ type: Events.ModuleAction, payload: { action: loc.query.type, module: '' } });
+                if (loc.query.type === 'autolaunch') {
+                    dispatch({ type: 'SET_AUTOLAUNCH', payload: { autoLaunchModule: '' } });
+                } else {
+                    dispatch({ type: 'SET_AUTOLAUNCH', payload: { autoLaunchServiceList: [] } });
+                }
+                loc.route('/tizenbrew-ui/dist/index.html/settings');
+                setFocus('sn:focusable-item-1');
+            }
         });
-
-        if (loc.query.type === 'autolaunch') {
-            dispatch({ type: 'SET_AUTOLAUNCH', payload: { autoLaunchModule: '' } });
-        } else {
-            dispatch({ type: 'SET_AUTOLAUNCH', payload: { autoLaunchServiceList: [] } });
-        }
-
-        loc.route('/tizenbrew-ui/dist/index.html/settings');
-        setFocus('sn:focusable-item-1');
     }
 
-    const disableSelected = isServiceType
-        ? activeServiceList.length === 0
-        : activeAutolaunch === '';
+    const disableSelected = isServiceType ? activeServiceList.length === 0 : activeAutolaunch === '';
 
     return (
         <div className="relative isolate lg:px-8 pt-6">
-            <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative pb-6">
+            {modal && (
+                <ConfirmModal
+                    message={modal.message}
+                    onConfirm={modal.onConfirm}
+                    onCancel={() => setModal(null)}
+                />
+            )}
 
+            <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative pb-6">
                 {state?.sharedData?.modules?.map((module, idx) => {
                     if (isServiceType && !module.serviceFile) return null;
                     const selected = isActive(module);
                     return (
-                        <ItemBasic
-                            key={idx}
-                            selected={selected}
-                            shouldFocus={idx === 0}
-                            onClick={() => handleSelect(module)}
-                        >
+                        <ItemBasic key={idx} selected={selected} shouldFocus={idx === 0} onClick={() => handleSelect(module)}>
                             <h3 className='text-indigo-400 text-base/7 font-semibold'>
                                 {module.appName} ({module.version})
                             </h3>
@@ -160,14 +155,8 @@ function Change() {
                     );
                 })}
 
-                <ItemBasic
-                    selected={disableSelected}
-                    shouldFocus={state?.sharedData?.modules?.length === 0}
-                    onClick={handleDisable}
-                >
-                    <h3 className='text-indigo-400 text-base/7 font-semibold'>
-                        {t('settings.disableAutolaunch')}
-                    </h3>
+                <ItemBasic selected={disableSelected} shouldFocus={state?.sharedData?.modules?.length === 0} onClick={handleDisable}>
+                    <h3 className='text-indigo-400 text-base/7 font-semibold'>{t('settings.disableAutolaunch')}</h3>
                     {disableSelected && (
                         <span className='absolute top-3 right-3 text-xs bg-indigo-600 text-white px-2 py-1 rounded'>
                             {t('settings.selected')}

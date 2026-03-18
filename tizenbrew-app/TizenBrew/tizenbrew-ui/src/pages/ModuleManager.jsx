@@ -4,6 +4,7 @@ import { GlobalStateContext } from '../components/ClientContext.jsx';
 import { Events } from '../components/WebSocketClient.js';
 import { useLocation } from 'preact-iso';
 import { useTranslation } from 'react-i18next';
+import ConfirmModal from '../components/ConfirmModal.jsx';
 
 function classNames(...classes) {
     return classes.filter(Boolean).join(' ')
@@ -35,52 +36,58 @@ function normalizeNpmModule(input) {
     return value ? `npm/${value}` : '';
 }
 
-// ─── Fixed-height card — used on the main ModuleManager list ─────────────────
+// ─── Module card (installed modules list) ─────────────────────────────────────
 
-function Item({ children, module, id, state }) {
-    const { t } = useTranslation();
-    const { ref, focused } = useFocusable();
+function Item({ children, module, id, onRemoveRequest }) {
+    const { ref, focused } = useFocusable({
+        // Use onEnterPress instead of relying on the global keyCode-13 click handler.
+        // This prevents the double-fire on Tizen 6.5 where the TV sends both
+        // a keydown(13) AND a native click for the same remote OK press.
+        onEnterPress: onRemoveRequest
+    });
     useEffect(() => {
         if (focused) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }, [focused, ref]);
 
-    function handleOnClick() {
-        if (confirm(t('moduleManager.confirmDelete', { packageName: module.appName }))) {
-            state.client.send({ type: Events.ModuleAction, payload: { action: 'remove', module: module.fullName } });
-            state.client.send({ type: Events.GetModules, payload: true });
-            setFocus('sn:focusable-item-1');
-        }
-    }
-
     return (
-        <div key={id} ref={ref} onClick={handleOnClick} className={classNames(
-            'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw]',
-            focused ? 'focus' : '',
-            id === 0 ? 'ml-4' : ''
-        )}>
+        <div
+            key={id}
+            ref={ref}
+            // onClick still here for mouse/touch, but NOT the primary path on TV
+            onClick={onRemoveRequest}
+            className={classNames(
+                // mb-4: vertical row gap for Tizen 5.5 (gap polyfill skips flex-wrap)
+                'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw] mb-4',
+                focused ? 'focus' : '',
+                id === 0 ? 'ml-4' : ''
+            )}
+        >
             {children}
         </div>
     );
 }
 
 function ItemBasic({ children, onClick }) {
-    const { ref, focused } = useFocusable();
+    const { ref, focused } = useFocusable({ onEnterPress: onClick });
     useEffect(() => {
         if (focused) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }, [focused, ref]);
 
     return (
-        <div ref={ref} onClick={onClick} className={classNames(
-            'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw]',
-            focused ? 'focus' : ''
-        )}>
+        <div
+            ref={ref}
+            onClick={onClick}
+            className={classNames(
+                'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw] mb-4',
+                focused ? 'focus' : ''
+            )}
+        >
             {children}
         </div>
     );
 }
 
-// Auto-height card — used ONLY on AddModule so the virtual keyboard can't
-// clip the content. No h-[35vh], just min-h so it never collapses to nothing.
+// Auto-height card for AddModule — virtual keyboard won't clip content
 function ItemAuto({ children }) {
     return (
         <div className="relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 min-h-[20vh] w-[40vw] mb-4">
@@ -96,12 +103,42 @@ export default function ModuleManager() {
     const loc = useLocation();
     const { t } = useTranslation();
 
+    // Custom modal state — replaces confirm() to avoid IDS_WEBVIEW_* strings on Tizen 6.5
+    const [modal, setModal] = useState(null);
+
+    function requestRemove(module) {
+        setModal({
+            message: t('moduleManager.confirmDelete', { packageName: module.appName }),
+            onConfirm: () => {
+                setModal(null);
+                state.client.send({ type: Events.ModuleAction, payload: { action: 'remove', module: module.fullName } });
+                state.client.send({ type: Events.GetModules, payload: true });
+                setFocus('sn:focusable-item-1');
+            }
+        });
+    }
+
     return (
         <div className="relative isolate lg:px-8 pt-6">
-            <div className="mx-auto flex flex-wrap justify-center gap-4 relative">
+            {/* Custom confirm modal */}
+            {modal && (
+                <ConfirmModal
+                    message={modal.message}
+                    onConfirm={modal.onConfirm}
+                    onCancel={() => setModal(null)}
+                />
+            )}
+
+            {/* gap-x-2: half the horizontal gap; mb-4 on cards handles vertical */}
+            <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative">
 
                 {state?.sharedData?.modules?.map((module, moduleIdx) => (
-                    <Item module={module} id={moduleIdx} state={state}>
+                    <Item
+                        key={module.fullName}
+                        module={module}
+                        id={moduleIdx}
+                        onRemoveRequest={() => requestRemove(module)}
+                    >
                         <h3 className='text-indigo-400 text-base/7 font-semibold'>
                             {module.appName} ({module.version})
                         </h3>
@@ -194,10 +231,9 @@ function AddModule() {
     }
 
     function handleKeyDown(e) {
-        if (e.keyCode === 37 || e.keyCode === 39) {
-            e.stopPropagation();
-            return;
-        }
+        // Stop spatial nav stealing left/right while typing
+        if (e.keyCode === 37 || e.keyCode === 39) { e.stopPropagation(); return; }
+        // Enter or Fertig → confirm and navigate
         if (e.keyCode === 13 || e.keyCode === 65376) {
             e.preventDefault();
             confirmedRef.current = true;
@@ -206,10 +242,7 @@ function AddModule() {
     }
 
     function handleBlur() {
-        if (confirmedRef.current) {
-            confirmedRef.current = false;
-            submit();
-        }
+        if (confirmedRef.current) { confirmedRef.current = false; submit(); }
     }
 
     const hint = moduleType === 'gh'
@@ -219,17 +252,12 @@ function AddModule() {
     const sourceModeLabel = sourceMode === 'direct' ? '[DIRECT]' : '[CDN]';
 
     return (
-        // The outer div uses fixed positioning anchored to the top so the
-        // virtual keyboard pushing up the viewport doesn't shift the card.
-        // overflow-y-auto lets the card scroll if the keyboard is very tall.
         <div className="relative isolate lg:px-8 pt-6 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 8vh)' }}>
-            <div className="mx-auto flex flex-wrap justify-center gap-4 relative pb-6">
-                {/* ItemAuto: no fixed height, grows with content */}
+            <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative pb-6">
                 <ItemAuto>
                     <h3 className='text-indigo-400 text-base/7 font-semibold mb-3'>
                         {t('moduleManager.addModule')} ({moduleType.toUpperCase()})
                     </h3>
-
                     <input
                         type="text"
                         ref={inputRef}
@@ -241,12 +269,8 @@ function AddModule() {
                         onFocus={(e) => e.target.select()}
                         placeholder={t('moduleManager.moduleName', { type: moduleType })}
                     />
-
                     <p className='text-gray-400 mt-2 text-sm'>{hint}</p>
-
-                    <p className='text-gray-300 mt-3 text-sm font-semibold'>
-                        Source: {sourceModeLabel}
-                    </p>
+                    <p className='text-gray-300 mt-3 text-sm font-semibold'>Source: {sourceModeLabel}</p>
                     <p className='text-gray-500 mt-1 text-xs'>
                         [YELLOW] to toggle &nbsp;|&nbsp; CDN = jsDelivr &nbsp;|&nbsp; DIRECT = GitHub/unpkg
                     </p>

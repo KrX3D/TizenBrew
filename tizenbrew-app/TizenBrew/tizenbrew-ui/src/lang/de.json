@@ -43,6 +43,10 @@
         "languageDesc": "Ändere die Sprache der App.",
         "selected": "Ausgewählt"
     },
+    "modal": {
+        "ok": "OK",
+        "cancel": "Abbrechen"
+    },
     "__contributors": [
         "zexalgames",
         "leanyn"

@@ -43,6 +43,10 @@
         "languageDesc": "Change the language of the app.",
         "selected": "Selected"
     },
+    "modal": {
+        "ok": "OK",
+        "cancel": "Cancel"
+    },
     "__contributors": [
         "reisxd"
     ]
