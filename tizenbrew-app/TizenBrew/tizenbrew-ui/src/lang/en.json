@@ -3,7 +3,7 @@
         "alreadyRunning": "Service is already running.",
         "started": "Service started.",
         "connected": "Service connected to the app.",
-        "connecting": "Connecting...",
+        "connecting": "",
         "reloading": "Reloading modules..."
     },
     "errors": {
