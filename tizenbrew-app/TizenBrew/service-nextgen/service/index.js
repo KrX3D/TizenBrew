@@ -398,16 +398,13 @@ module.exports.onStart = function () {
                     if (!existsSync(TB_CONFIG)) {
                         return wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'notFound' }));
                     }
-                    // No accessSync pre-check — on Tizen, Smack labels can allow writes
-                    // even when accessSync returns EACCES. Just attempt and catch.
                     try {
                         const defaultConfig = {
                             modules: [],
                             autoLaunchServiceList: [],
                             autoLaunchModule: ''
                         };
-                        writeFileSync(TB_CONFIG, JSON.stringify(defaultConfig, null, 4), { mode: 0o666 });
-                        chmodSync(TB_CONFIG, 0o666);
+                        writeConfig(defaultConfig);   // already imported, handles mode 0666 + chmod
                         wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'success' }));
                     } catch (e) {
                         wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'error', message: e.message }));

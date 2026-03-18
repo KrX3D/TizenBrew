@@ -213,8 +213,8 @@ class Client {
                 const msgs = {
                     success:          () => toast.success(i18next.t('tizenBrewConfig.resetSuccess')),
                     notFound:         () => toast.info(i18next.t('tizenBrewConfig.notFound')),
-                    permissionDenied: () => toast.error(i18next.t('tizenBrewConfig.permissionDenied')),
-                    error:            () => toast.error(i18next.t('tizenBrewConfig.resetError', { error: payload.message })),
+                    permissionDenied: () => toast.error(i18next.t('tizenBrewConfig.permissionDenied'), 8000),
+                    error:            () => toast.error(i18next.t('tizenBrewConfig.resetError', { error: payload.message }), 8000),
                 };
                 (msgs[payload.status] ?? (() => {}))();
                 break;
