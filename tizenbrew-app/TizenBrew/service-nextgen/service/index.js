@@ -398,14 +398,9 @@ module.exports.onStart = function () {
                     if (!existsSync(TB_CONFIG)) {
                         return wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'notFound' }));
                     }
-                    try { accessSync(TB_CONFIG, constants.W_OK); }
-                    catch (_) {
-                        return wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'permissionDenied' }));
-                    }
+                    // No accessSync pre-check — on Tizen, Smack labels can allow writes
+                    // even when accessSync returns EACCES. Just attempt and catch.
                     try {
-                        // Cannot unlink — TizenBrew's UID lacks write on the parent directory.
-                        // Overwriting with the default config is functionally identical:
-                        // TizenBrew reads the file on launch, so an empty config == a fresh start.
                         const defaultConfig = {
                             modules: [],
                             autoLaunchServiceList: [],
