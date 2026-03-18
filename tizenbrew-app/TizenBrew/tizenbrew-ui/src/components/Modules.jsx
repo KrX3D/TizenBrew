@@ -19,6 +19,10 @@ function Item({ children, module, id, state }) {
   }, [focused, ref]);
 
   function handleOnClick() {
+    const toast = window.__globalToast;
+    if (toast) {
+      toast.info(module.appPath, 3000);
+    }
     for (const key of module.keys) tizen.tvinputdevice.registerKey(key);
     state.client.send({ type: Events.LaunchModule, payload: module });
     if (!module.evaluateScriptOnDocumentStart) location.href = module.appPath;

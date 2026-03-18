@@ -19,6 +19,32 @@ const Events = {
     WebApisCode: 21
 };
 
+// Reconstruct the package.json URL that was actually used to resolve a module
+function getResolvedPackageUrl(module) {
+    const { fullName, versionedFullName, sourceMode, moduleType } = module;
+    const namePart = fullName.substring(fullName.indexOf('/') + 1);
+
+    if (moduleType === 'gh') {
+        // Extract branch from versionedFullName: "gh/user/repo@branch" → "branch"
+        const versionedNamePart = versionedFullName.substring(versionedFullName.indexOf('/') + 1);
+        const secondSlash = versionedNamePart.indexOf('/');
+        const repoAndBranch = secondSlash !== -1 ? versionedNamePart.substring(secondSlash + 1) : versionedNamePart;
+        const atIdx = repoAndBranch.indexOf('@');
+        const branch = atIdx !== -1 ? repoAndBranch.substring(atIdx + 1) : 'main';
+
+        if (sourceMode === 'direct') {
+            return `https://raw.githubusercontent.com/${namePart}/refs/heads/${branch}/package.json`;
+        }
+        return `https://cdn.jsdelivr.net/gh/${namePart}@${branch}/package.json`;
+    }
+
+    // npm
+    if (sourceMode === 'direct') {
+        return `https://unpkg.com/${namePart}/package.json`;
+    }
+    return `https://cdn.jsdelivr.net/${fullName}/package.json`;
+}
+
 class Client {
     constructor(context) {
         this.context = context;
@@ -29,6 +55,7 @@ class Client {
         this.pendingEvents = [];
         this.modulesLoaded = false;
         this.modules = [];
+        this.startupToastShown = false;
     }
 
     shouldRelaunchInDebug(payload) {
@@ -126,6 +153,22 @@ class Client {
                         .then(res => res.text())
                         .then(code => { this.send({ type: Events.WebApisCode, payload: code }); })
                         .catch(err => console.error('[WebSocketClient] Failed to fetch webapis code:', err));
+                }
+
+                // Show one toast per module on first load only
+                if (!this.startupToastShown && toast && payload.length > 0) {
+                    this.startupToastShown = true;
+                    payload.forEach((module, idx) => {
+                        setTimeout(() => {
+                            const pkgUrl = getResolvedPackageUrl(module);
+                            const label = module.appName && module.appName !== 'Unknown Module'
+                                ? module.appName
+                                : module.fullName;
+                            const status = module.appName === 'Unknown Module' ? '❌' : '✅';
+                            const src = (module.sourceMode || 'cdn').toUpperCase();
+                            toast.info(`${status} ${label} [${src}]\n${pkgUrl}`, 10000);
+                        }, idx * 400);
+                    });
                 }
 
                 this.processPendingEvents();
