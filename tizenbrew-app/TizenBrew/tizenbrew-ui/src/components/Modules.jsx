@@ -50,23 +50,25 @@ export default function Modules() {
   const { state } = useContext(GlobalStateContext);
 
   return (
-    <div className="relative isolate lg:px-8">
-      <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
+    // pt-6   — gap below the header so the first row never overlaps
+    // overflow-y-auto + max-h  — makes the grid scrollable when modules
+    //                            wrap to a second (or third) row
+    <div
+      className="relative isolate lg:px-8 pt-6 overflow-y-auto"
+      style={{ maxHeight: 'calc(100vh - 8vh)' }}
+    >
+      <div className="mx-auto flex flex-wrap justify-center gap-4 relative pb-6">
         {state?.sharedData?.modules?.map((module, moduleIdx) => (
           <Item module={module} id={moduleIdx} state={state}>
-            {/* Name + version */}
             <h3 className='text-indigo-400 text-base/7 font-semibold'>
               {module.appName} ({module.version})
             </h3>
-            {/* Source mode badge: "NPM CDN" / "GH DIRECT" etc */}
             <p className='text-gray-400 mt-2 text-sm'>
-              {`${getModuleTypeLabel(module)} ${(module.sourceMode || 'cdn').toUpperCase()}`}
+              {`${getModuleTypeLabel(module)} [${(module.sourceMode || 'cdn').toUpperCase()}]`}
             </p>
-            {/* Full module identifier, stripped of type prefix */}
             <p className='text-gray-400 mt-1 text-xs break-all'>
               {(module.fullName || '').replace(/^(npm|gh)\//, '')}
             </p>
-            {/* Description */}
             <p className='text-gray-300 mt-4 text-base/7'>
               {module.description}
             </p>

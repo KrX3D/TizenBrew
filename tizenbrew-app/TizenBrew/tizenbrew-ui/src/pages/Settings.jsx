@@ -47,7 +47,7 @@ export default function Settings() {
     const { t } = useTranslation();
 
     return (
-        <div className="relative isolate lg:px-8">
+        <div className="relative isolate lg:px-8 pt-6">
             <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
                 <ItemBasic onClick={() => {
                     if (state.sharedData.modules?.length === 0) return alert(t('settings.noModules'));

@@ -71,7 +71,7 @@ export default function UserAgentSettings() {
     const selectedUA = localStorage.getItem('userAgent') || '';
 
     return (
-        <div className="relative isolate lg:px-8">
+        <div className="relative isolate lg:px-8 pt-6">
             <div className="mx-auto flex flex-wrap justify-center gap-4 top-4 relative">
                 {UserAgents.map((ua, idx) => {
                     const isSelected = typeof ua.userAgent === 'string' && ua.userAgent === selectedUA;
