@@ -1,5 +1,5 @@
 const { readConfig, parseModuleEntry } = require('./configuration.js');
-const { getPackageJsonUrls, buildModuleFileUrl } = require('./moduleSource.js');
+const { getPackageJsonUrls } = require('./moduleSource.js');
 const fetch = require('node-fetch');
 
 function fetchFirstUrl(urls) {
@@ -33,10 +33,12 @@ function loadModules() {
                 ];
                 const moduleMetadata = { name: splitData[1], type: splitData[0] };
 
-                // Determine versioned name for cache-busting
+                // For versioned name: if user specified a branch (gh/user/repo@branch),
+                // keep the full string as-is. For npm use package version. For plain
+                // gh/ with no branch, tag with @main for cache-busting.
                 let versionedModule = module;
-                if (module.startsWith('gh/')) {
-                    versionedModule = `${module}@main`;
+                if (moduleMetadata.type === 'gh') {
+                    versionedModule = module.includes('@') ? module : `${module}@main`;
                 } else if (moduleJson.version) {
                     versionedModule = `${module}@${moduleJson.version}`;
                 }
