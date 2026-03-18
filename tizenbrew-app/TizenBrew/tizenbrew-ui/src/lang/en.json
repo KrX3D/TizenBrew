@@ -47,6 +47,27 @@
         "languageDesc": "Change the language of the app.",
         "selected": "Selected"
     },
+    "tizenBrewConfig": {
+        "checkButton": "Check Config",
+        "checkDesc": "Check if tizenbrewConfig.json exists and its permissions.",
+        "resetButton": "Reset Config",
+        "resetDesc": "Delete tizenbrewConfig.json — TizenBrew will recreate it on next launch.",
+        "resetConfirm": "Delete tizenbrewConfig.json?\nTizenBrew will recreate it on next launch.",
+        "notFound": "tizenbrewConfig.json was not found.",
+        "fileInfo": "tizenbrewConfig.json\nSize: {{sizeKb}} KB  •  Permissions: {{permStr}}\nLast modified: {{mtime}}",
+        "readable": "readable",
+        "writable": "writable",
+        "noPermissions": "no permissions",
+        "statError": "Could not read tizenbrewConfig.json: {{error}}",
+        "resetSuccess": "tizenbrewConfig.json deleted successfully.",
+        "permissionDenied": "Cannot delete tizenbrewConfig.json — permission denied.",
+        "resetError": "Failed to delete tizenbrewConfig.json: {{error}}",
+        "permFix": {
+            "noChange": "Permission fix: already at 0{{mode}} (no change needed)",
+            "applied": "Permission fix: applied (0{{before}} → 0{{after}})",
+            "failed": "Permission fix: failed (likely owner/app sandbox restriction)"
+        }
+    },
     "modal": {
         "ok": "OK",
         "cancel": "Cancel"

@@ -47,6 +47,27 @@
         "languageDesc": "Ändere die Sprache der App.",
         "selected": "Ausgewählt"
     },
+    "tizenBrewConfig": {
+        "checkButton": "Konfig prüfen",
+        "checkDesc": "Prüfen, ob tizenbrewConfig.json vorhanden ist und ihre Berechtigungen.",
+        "resetButton": "Konfig zurücksetzen",
+        "resetDesc": "tizenbrewConfig.json löschen — TizenBrew erstellt sie beim nächsten Start neu.",
+        "resetConfirm": "tizenbrewConfig.json wirklich löschen?\nTizenBrew erstellt sie beim nächsten Start neu.",
+        "notFound": "tizenbrewConfig.json wurde nicht gefunden.",
+        "fileInfo": "tizenbrewConfig.json\nGröße: {{sizeKb}} KB  •  Berechtigungen: {{permStr}}\nZuletzt geändert: {{mtime}}",
+        "readable": "lesbar",
+        "writable": "schreibbar",
+        "noPermissions": "keine Berechtigungen",
+        "statError": "tizenbrewConfig.json konnte nicht gelesen werden: {{error}}",
+        "resetSuccess": "tizenbrewConfig.json erfolgreich gelöscht.",
+        "permissionDenied": "tizenbrewConfig.json kann nicht gelöscht werden — Zugriff verweigert.",
+        "resetError": "tizenbrewConfig.json konnte nicht gelöscht werden: {{error}}",
+        "permFix": {
+            "noChange": "Berechtigungskorrektur: bereits bei 0{{mode}} (keine Änderung nötig)",
+            "applied": "Berechtigungskorrektur: angewendet (0{{before}} → 0{{after}})",
+            "failed": "Berechtigungskorrektur: fehlgeschlagen (Eigentümer/Sandbox-Einschränkung)"
+        }
+    },
     "modal": {
         "ok": "OK",
         "cancel": "Abbrechen"

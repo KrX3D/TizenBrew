@@ -28,9 +28,11 @@ const Events = {
     GetServiceStatuses: 7,
     Error: 8,
     CanLaunchModules: 9,
+    ModuleAction: 10,
+    CheckTizenBrewConfig: 11,
+    ResetTizenBrewConfig: 12,
     WebApisPath: 20,
-    WebApisCode: 21,
-    ModuleAction: 10
+    WebApisCode: 21
 };
 
 module.exports = {

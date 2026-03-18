@@ -12,14 +12,18 @@ import './components/i18n.js';
 import UserAgentSettings from './pages/UserAgentSettings.jsx';
 import { ExclamationCircleIcon } from '@heroicons/react/16/solid';
 import { useTranslation } from 'react-i18next';
+import { ToastContainer, useToast, setGlobalToast } from './components/Toast.jsx';
 
 export default function App() {
   const headerRef = useRef(null);
   const [headerHeight, setHeaderHeight] = useState(0);
   const context = useContext(GlobalStateContext);
   const { t } = useTranslation();
+  const { toasts, toast } = useToast();
   window.dispatch = context.dispatch;
   window.state = context.state;
+
+  useEffect(() => { setGlobalToast(toast); }, [toast]);
 
   useEffect(() => {
     if (context.state.sharedData.error.disappear) {
@@ -69,6 +73,7 @@ export default function App() {
             <Route component={About} path="/tizenbrew-ui/dist/index.html/about" />
           </Router>
         </div>
+        <ToastContainer toasts={toasts} onDismiss={toast.dismiss} />
       </LocationProvider>
     </ErrorBoundary>
   );

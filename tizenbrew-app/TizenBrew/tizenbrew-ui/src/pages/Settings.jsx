@@ -1,5 +1,5 @@
 import { setFocus, useFocusable } from '@noriginmedia/norigin-spatial-navigation'
-import { useEffect, useContext, useState } from 'react';
+import { useEffect, useContext, useState, useRef } from 'react';
 import { GlobalStateContext } from '../components/ClientContext.jsx';
 import { Events } from '../components/WebSocketClient.js';
 import { useLocation } from 'preact-iso';
@@ -34,11 +34,47 @@ export default function Settings() {
     const { state } = useContext(GlobalStateContext);
     const loc = useLocation();
     const { t } = useTranslation();
+    const [resetModal, setResetModal] = useState(false);
+    const lastCheckTs = useRef(0);
+    const lastResetTs = useRef(0);
+
+    function handleCheck() {
+        const now = Date.now();
+        if (now - lastCheckTs.current < 1000) return;
+        lastCheckTs.current = now;
+        if (state.client) state.client.send({ type: Events.CheckTizenBrewConfig });
+    }
+
+    function handleResetRequest() {
+        const now = Date.now();
+        if (now - lastResetTs.current < 1000) return;
+        lastResetTs.current = now;
+        setResetModal(true);
+    }
+
+    function handleResetConfirm() {
+        setResetModal(false);
+        if (state.client) state.client.send({ type: Events.ResetTizenBrewConfig });
+        setTimeout(() => setFocus('settings-card-reset'), 80);
+    }
+
+    function handleResetCancel() {
+        setResetModal(false);
+        setTimeout(() => setFocus('settings-card-reset'), 50);
+    }
 
     return (
         <div className="relative isolate lg:px-8 pt-6">
+            {resetModal && (
+                <ConfirmModal
+                    message={t('tizenBrewConfig.resetConfirm')}
+                    onConfirm={handleResetConfirm}
+                    onCancel={handleResetCancel}
+                />
+            )}
+
             <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative pb-6">
-                <ItemBasic onClick={() => {
+                <ItemBasic shouldFocus focusKey="settings-card-autolaunch" onClick={() => {
                     if (state.sharedData.modules?.length === 0) return alert(t('settings.noModules'));
                     loc.route('/tizenbrew-ui/dist/index.html/settings/change?type=autolaunch');
                 }}>
@@ -46,7 +82,7 @@ export default function Settings() {
                     <p className='text-gray-300 mt-6 text-base/7'>{t('settings.autolaunchDesc')}</p>
                 </ItemBasic>
 
-                <ItemBasic onClick={() => {
+                <ItemBasic focusKey="settings-card-autolaunchsvc" onClick={() => {
                     if (state.sharedData.modules?.length === 0) return alert(t('settings.noModules'));
                     loc.route('/tizenbrew-ui/dist/index.html/settings/change?type=autolaunchService');
                 }}>
@@ -54,11 +90,21 @@ export default function Settings() {
                     <p className='text-gray-300 mt-6 text-base/7'>{t('settings.autolaunchServiceDesc')}</p>
                 </ItemBasic>
 
-                <ItemBasic onClick={() => {
+                <ItemBasic focusKey="settings-card-ua" onClick={() => {
                     loc.route('/tizenbrew-ui/dist/index.html/settings/change-ua');
                 }}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>{t('settings.useragent')}</h3>
                     <p className='text-gray-300 mt-6 text-base/7'>{t('settings.useragentDesc')}</p>
+                </ItemBasic>
+
+                <ItemBasic focusKey="settings-card-check" onClick={handleCheck}>
+                    <h3 className='text-sky-400 text-base/7 font-semibold'>{t('tizenBrewConfig.checkButton')}</h3>
+                    <p className='text-gray-300 mt-6 text-base/7'>{t('tizenBrewConfig.checkDesc')}</p>
+                </ItemBasic>
+
+                <ItemBasic focusKey="settings-card-reset" onClick={handleResetRequest}>
+                    <h3 className='text-red-400 text-base/7 font-semibold'>{t('tizenBrewConfig.resetButton')}</h3>
+                    <p className='text-gray-300 mt-6 text-base/7'>{t('tizenBrewConfig.resetDesc')}</p>
                 </ItemBasic>
             </div>
         </div>

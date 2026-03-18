@@ -11,6 +11,7 @@ module.exports.onStart = function () {
     const { startDebugging, setWebApisPath } = require('./utils/debugger.js');
     const startService = require('./utils/serviceLauncher.js');
     const { Connection, Events } = require('./utils/wsCommunication.js');
+    const { existsSync, readFileSync, statSync, accessSync, constants, unlinkSync, chmodSync } = require('fs');
     let WebSocket;
     if (process.version === 'v4.4.3') {
         WebSocket = require('ws-old');
@@ -18,6 +19,11 @@ module.exports.onStart = function () {
         WebSocket = require('ws-new');
     }
 
+    const TB_CONFIG = '/home/owner/share/tizenbrewConfig.json';
+
+    function tryFixTBConfigPermissions(filePath) {
+        try { chmodSync(filePath, 0o666); return true; } catch (_) { return false; }
+    }
 
     const app = express();
     let deviceIP;
@@ -30,7 +36,6 @@ module.exports.onStart = function () {
             const encodedModuleName = splittedUrl[2];
             const moduleName = decodeURIComponent(encodedModuleName);
     
-            // Parse sourceMode from query string (?sourceMode=direct|cdn)
             const filePathWithQuery = req.url.replace(`/module/${encodedModuleName}/`, '');
             const queryIndex = filePathWithQuery.indexOf('?');
             const filePath = queryIndex === -1 ? filePathWithQuery : filePathWithQuery.substring(0, queryIndex);
@@ -148,7 +153,6 @@ module.exports.onStart = function () {
 
         adbClient._stream.on('connect', () => {
             console.log('ADB connection established');
-            //Launch app
             const tbPackageId = tizen.application.getAppInfo().packageId;
             const shellCmd = adbClient.createStream(`shell:0 debug ${tbPackageId}.TizenBrewStandalone${isTizen3 ? ' 0' : ''}`);
             shellCmd.on('data', function dataIncoming(data) {
@@ -306,7 +310,6 @@ module.exports.onStart = function () {
                     switch (action) {
                         case 'add': {
                             const normalizedMode = sourceMode === 'direct' ? 'direct' : 'cdn';
-                            // Check for duplicate (handle both old string entries and new object entries)
                             const exists = config.modules.some(m =>
                                 (typeof m === 'string' ? m : (m.name || m.module)) === module
                             );
@@ -339,6 +342,75 @@ module.exports.onStart = function () {
                     }
                     break;
                 }
+
+                case Events.CheckTizenBrewConfig: {
+                    if (!existsSync(TB_CONFIG)) {
+                        return wsConn.send(wsConn.Event(Events.CheckTizenBrewConfig, { exists: false }));
+                    }
+                    try {
+                        let stats = statSync(TB_CONFIG);
+                        const modeBefore = (stats.mode & 0o777).toString(8);
+                        let readable = false, writable = false;
+                        try { accessSync(TB_CONFIG, constants.R_OK); readable = true; } catch (_) {}
+                        try { accessSync(TB_CONFIG, constants.W_OK); writable = true; } catch (_) {}
+
+                        let attemptedPermissionFix = false;
+                        let permissionFixApplied = false;
+                        if (!readable || !writable) {
+                            attemptedPermissionFix = true;
+                            permissionFixApplied = tryFixTBConfigPermissions(TB_CONFIG);
+                            stats = statSync(TB_CONFIG);
+                            readable = false; writable = false;
+                            try { accessSync(TB_CONFIG, constants.R_OK); readable = true; } catch (_) {}
+                            try { accessSync(TB_CONFIG, constants.W_OK); writable = true; } catch (_) {}
+                        }
+
+                        let configContent = null;
+                        let configError = null;
+                        if (readable) {
+                            try {
+                                configContent = JSON.parse(readFileSync(TB_CONFIG, 'utf8'));
+                            } catch (e) {
+                                configError = 'JSON parse error: ' + e.message;
+                            }
+                        }
+
+                        wsConn.send(wsConn.Event(Events.CheckTizenBrewConfig, {
+                            exists: true,
+                            readable,
+                            writable,
+                            attemptedPermissionFix,
+                            permissionFixApplied,
+                            modeBefore,
+                            mode: (stats.mode & 0o777).toString(8),
+                            size: stats.size,
+                            mtime: stats.mtime.toISOString(),
+                            config: configContent,
+                            parseError: configError
+                        }));
+                    } catch (e) {
+                        wsConn.send(wsConn.Event(Events.CheckTizenBrewConfig, { exists: true, error: e.message }));
+                    }
+                    break;
+                }
+
+                case Events.ResetTizenBrewConfig: {
+                    if (!existsSync(TB_CONFIG)) {
+                        return wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'notFound' }));
+                    }
+                    try { accessSync(TB_CONFIG, constants.W_OK); }
+                    catch (_) {
+                        return wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'permissionDenied' }));
+                    }
+                    try {
+                        unlinkSync(TB_CONFIG);
+                        wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'success' }));
+                    } catch (e) {
+                        wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'error', message: e.message }));
+                    }
+                    break;
+                }
+
                 case Events.Ready: {
                     wsConn.isReady = true;
                     services.set('wsConn', wsConn);
