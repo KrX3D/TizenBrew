@@ -6,6 +6,7 @@ import { GlobalStateContext } from './ClientContext.jsx';
 import TBLogo from '../assets/tizenbrew.svg';
 import { useTranslation } from 'react-i18next';
 import { Events } from './WebSocketClient.js';
+import i18next from 'i18next';
 
 function Button({ children, route, focus, focusKey, onClick }) {
     const { ref, focusSelf, focused } = useFocusable();
@@ -48,7 +49,7 @@ export default function Header() {
         statusText = t('service.reloading');
     } else {
         const key = lastStateRef.current || 'service.connecting';
-        statusText = t(key);
+        statusText = i18next.isInitialized ? t(key) : '...';
     }
 
     return (

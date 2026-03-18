@@ -403,7 +403,16 @@ module.exports.onStart = function () {
                         return wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'permissionDenied' }));
                     }
                     try {
-                        unlinkSync(TB_CONFIG);
+                        // Cannot unlink — TizenBrew's UID lacks write on the parent directory.
+                        // Overwriting with the default config is functionally identical:
+                        // TizenBrew reads the file on launch, so an empty config == a fresh start.
+                        const defaultConfig = {
+                            modules: [],
+                            autoLaunchServiceList: [],
+                            autoLaunchModule: ''
+                        };
+                        writeFileSync(TB_CONFIG, JSON.stringify(defaultConfig, null, 4), { mode: 0o666 });
+                        chmodSync(TB_CONFIG, 0o666);
                         wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'success' }));
                     } catch (e) {
                         wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'error', message: e.message }));
