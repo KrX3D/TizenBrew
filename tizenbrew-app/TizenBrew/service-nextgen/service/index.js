@@ -399,12 +399,7 @@ module.exports.onStart = function () {
                         return wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'notFound' }));
                     }
                     try {
-                        const defaultConfig = {
-                            modules: [],
-                            autoLaunchServiceList: [],
-                            autoLaunchModule: ''
-                        };
-                        writeConfig(defaultConfig);   // already imported, handles mode 0666 + chmod
+                        unlinkSync(TB_CONFIG);
                         wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'success' }));
                     } catch (e) {
                         wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'error', message: e.message }));
