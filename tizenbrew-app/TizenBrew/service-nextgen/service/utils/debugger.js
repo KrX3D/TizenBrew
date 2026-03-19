@@ -79,8 +79,21 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                         sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                     } else {
                         const scriptUrl = buildScriptUrl(mdl);
+                        // Fallback CDN URL in case direct fetch fails (TLS issues on old Node.js)
+                        const fallbackUrl = `https://cdn.jsdelivr.net/gh/${
+                            (() => {
+                                const n = (mdl.versionedFullName || mdl.fullName);
+                                const parts = n.substring(n.indexOf('/') + 1);
+                                return parts;
+                            })()
+                        }/${mdl.mainFile}`;
+
                         fetch(scriptUrl)
-                            .then(res => res.text())
+                            .then(res => {
+                                if (!res.ok) throw new Error('HTTP ' + res.status);
+                                return res.text();
+                            })
+                            .catch(() => fetch(fallbackUrl).then(res => res.text()))
                             .then(modFile => {
                                 modulesCache.set(cacheKey, modFile);
                                 sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));

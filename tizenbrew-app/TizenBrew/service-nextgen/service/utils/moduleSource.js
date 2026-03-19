@@ -35,18 +35,27 @@ function getPackageJsonUrls(fullName, sourceMode) {
             if (meta.branch) {
                 return [
                     `https://raw.githubusercontent.com/${meta.name}/refs/heads/${meta.branch}/package.json`,
-                    `https://raw.githubusercontent.com/${meta.name}/${meta.branch}/package.json`
+                    `https://raw.githubusercontent.com/${meta.name}/${meta.branch}/package.json`,
+                    // CDN fallback in case raw.githubusercontent.com TLS fails (e.g. Node.js v4.4.3)
+                    `https://cdn.jsdelivr.net/gh/${meta.name}@${meta.branch}/package.json`
                 ];
             }
             return [
                 `https://raw.githubusercontent.com/${meta.name}/refs/heads/main/package.json`,
                 `https://raw.githubusercontent.com/${meta.name}/main/package.json`,
                 `https://raw.githubusercontent.com/${meta.name}/refs/heads/master/package.json`,
-                `https://raw.githubusercontent.com/${meta.name}/master/package.json`
+                `https://raw.githubusercontent.com/${meta.name}/master/package.json`,
+                // CDN fallbacks in case raw.githubusercontent.com TLS fails (e.g. Node.js v4.4.3)
+                `https://cdn.jsdelivr.net/gh/${meta.name}@main/package.json`,
+                `https://cdn.jsdelivr.net/gh/${meta.name}@master/package.json`
             ];
         }
         if (meta.type === 'npm') {
-            return [`https://unpkg.com/${meta.name}/package.json`];
+            return [
+                `https://unpkg.com/${meta.name}/package.json`,
+                // CDN fallback
+                `https://cdn.jsdelivr.net/npm/${meta.name}/package.json`
+            ];
         }
     }
 
