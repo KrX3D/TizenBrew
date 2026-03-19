@@ -1,4 +1,4 @@
-import { useFocusable, setFocus } from '@noriginmedia/norigin-spatial-navigation';
+import { useFocusable } from '@noriginmedia/norigin-spatial-navigation';
 import { useEffect } from 'preact/hooks';
 import { useTranslation } from 'react-i18next';
 
@@ -20,6 +20,15 @@ function ModalButton({ children, onClick, focusKey, autoFocus }) {
             {children}
         </button>
     );
+}
+
+function ModalButtonContainer({ children }) {
+    const { ref } = useFocusable({
+        focusKey: 'modal-boundary',
+        isFocusBoundary: true,
+        focusBoundaryDirections: ['left', 'right', 'up', 'down']
+    });
+    return <div ref={ref} className="flex gap-8">{children}</div>;
 }
 
 /**
@@ -44,7 +53,7 @@ export default function ConfirmModal({ message, onConfirm, onCancel }) {
         return () => window.removeEventListener('keydown', onKey, true);
     }, [onCancel]);
 
-    const lines   = (message || '').split('\n');
+    const lines    = (message || '').split('\n');
     const mainLine = lines[0];
     const subLines = lines.slice(1);
 
@@ -57,14 +66,14 @@ export default function ConfirmModal({ message, onConfirm, onCancel }) {
                         <p key={i} className="text-slate-400 text-lg mt-2 font-mono break-all">{line}</p>
                     ))}
                 </div>
-                <div className="flex gap-8">
+                <ModalButtonContainer>
                     <ModalButton focusKey="modal-cancel" autoFocus onClick={onCancel}>
                         {t('modal.cancel')}
                     </ModalButton>
                     <ModalButton focusKey="modal-confirm" onClick={onConfirm}>
                         {t('modal.ok')}
                     </ModalButton>
-                </div>
+                </ModalButtonContainer>
             </div>
         </div>
     );
