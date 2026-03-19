@@ -24,16 +24,12 @@ function Item({ children, module, id, state }) {
     const src = (module.sourceMode || 'cdn').toUpperCase();
 
     if (toast) {
-      toast.info(`🚀 ${module.appName} (${module.version || '?'}) [${src}]\n${pkgUrl}`, 3000);
+      toast.info(`🚀 ${module.appName} (${module.version || '?'}) [${src}]\n${pkgUrl}`, 8000);
     }
 
     for (const key of module.keys) tizen.tvinputdevice.registerKey(key);
     state.client.send({ type: Events.LaunchModule, payload: module });
-
-    if (!module.evaluateScriptOnDocumentStart) {
-      // Delay navigation so the toast is visible for ~3 seconds before leaving
-      setTimeout(() => { location.href = module.appPath; }, 3000);
-    }
+    if (!module.evaluateScriptOnDocumentStart) location.href = module.appPath;
   }
 
   return (

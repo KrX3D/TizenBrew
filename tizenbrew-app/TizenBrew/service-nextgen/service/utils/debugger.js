@@ -8,6 +8,50 @@ const WebSocket = require('ws');
 
 const modulesCache = new Map();
 
+// Build the URL to fetch the userscript, respecting sourceMode.
+// Mirrors the logic in moduleSource.js / the proxy.
+function buildScriptUrl(mdl) {
+    const fullName    = mdl.versionedFullName || mdl.fullName;
+    const sourceMode  = mdl.sourceMode || 'cdn';
+    const mainFile    = mdl.mainFile || '';
+
+    // Parse "gh/user/repo@branch" or "npm/@scope/pkg@version"
+    const firstSlash  = fullName.indexOf('/');
+    const type        = firstSlash !== -1 ? fullName.substring(0, firstSlash) : '';
+    const nameAndTag  = firstSlash !== -1 ? fullName.substring(firstSlash + 1) : fullName;
+
+    if (type === 'gh') {
+        // nameAndTag is "user/repo@branch"
+        const secondSlash   = nameAndTag.indexOf('/');
+        const repoAndBranch = secondSlash !== -1 ? nameAndTag.substring(secondSlash + 1) : nameAndTag;
+        const atIdx         = repoAndBranch.indexOf('@');
+        const branch        = atIdx !== -1 ? repoAndBranch.substring(atIdx + 1) : 'main';
+        const repoName      = atIdx !== -1
+            ? nameAndTag.substring(0, secondSlash + 1 + atIdx)
+            : nameAndTag;
+
+        if (sourceMode === 'direct') {
+            return `https://raw.githubusercontent.com/${repoName}/refs/heads/${branch}/${mainFile}`;
+        }
+        return `https://cdn.jsdelivr.net/gh/${repoName}@${branch}/${mainFile}`;
+    }
+
+    if (type === 'npm') {
+        // nameAndTag is "@scope/pkg@version" or "pkg@version"
+        const atIdx  = nameAndTag.lastIndexOf('@');
+        // only strip version if there's an @ after position 0 (scoped packages start with @)
+        const pkgName = (atIdx > 0) ? nameAndTag.substring(0, atIdx) : nameAndTag;
+
+        if (sourceMode === 'direct') {
+            return `https://unpkg.com/${pkgName}/${mainFile}`;
+        }
+        return `https://cdn.jsdelivr.net/npm/${pkgName}/${mainFile}`;
+    }
+
+    // Fallback — original behaviour
+    return `https://cdn.jsdelivr.net/${fullName}/${mainFile}`;
+}
+
 function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts) {
     if (!attempts) attempts = 1;
     if (!isAnotherApp) inDebug.tizenDebug = true;
@@ -25,20 +69,29 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     `;
                     client.Runtime.evaluate({ expression, contextId: msg.context.id });
                 } else if (mdl.name !== '' && mdl.evaluateScriptOnDocumentStart) {
-                    const cache = modulesCache.get(mdl.fullName);
+                    // Cache key includes sourceMode so cdn and direct don't share a stale entry
+                    const cacheKey = (mdl.versionedFullName || mdl.fullName) + ':' + (mdl.sourceMode || 'cdn');
+                    const cache = modulesCache.get(cacheKey);
                     const clientConnection = clientConn.get('wsConn');
+
                     if (cache) {
                         client.Page.addScriptToEvaluateOnNewDocument({ expression: cache });
                         sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                     } else {
-                        fetch(`https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.mainFile}`).then(res => res.text()).then(modFile => {
-                            modulesCache.set(mdl.fullName, modFile);
-                            sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
-                            client.Page.addScriptToEvaluateOnNewDocument({ expression: modFile });
-                        }).catch(e => {
-                            sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
-                            client.Page.addScriptToEvaluateOnNewDocument({ expression: `alert("Failed to load module: '${mdl.fullName}'. Please relaunch TizenBrew to try again.")` });
-                        });
+                        const scriptUrl = buildScriptUrl(mdl);
+                        fetch(scriptUrl)
+                            .then(res => res.text())
+                            .then(modFile => {
+                                modulesCache.set(cacheKey, modFile);
+                                sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
+                                client.Page.addScriptToEvaluateOnNewDocument({ expression: modFile });
+                            })
+                            .catch(e => {
+                                sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
+                                client.Page.addScriptToEvaluateOnNewDocument({
+                                    expression: `alert("Failed to load module: '${mdl.fullName}' from ${scriptUrl}. Please relaunch TizenBrew to try again.")`
+                                });
+                            });
                     }
                 }
             });
@@ -47,16 +100,16 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                 if (isAnotherApp) return;
 
                 inDebug.tizenDebug = false;
-                inDebug.webDebug = false;
-                inDebug.rwiDebug = false;
+                inDebug.webDebug   = false;
+                inDebug.rwiDebug   = false;
 
-                mdl.fullName = '';
-                mdl.name = '';
-                mdl.appPath = '';
-                mdl.moduleType = '';
-                mdl.packageType = '';
-                mdl.serviceFile = '';
-                mdl.mainFile = '';
+                mdl.fullName      = '';
+                mdl.name          = '';
+                mdl.appPath       = '';
+                mdl.moduleType    = '';
+                mdl.packageType   = '';
+                mdl.serviceFile   = '';
+                mdl.mainFile      = '';
             });
 
             if (!isAnotherApp) {
@@ -75,9 +128,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                             type: 'autolaunch',
                             module: config.autoLaunchModule
                         });
-
                         sendClientInformation(clientConn, data);
-
                     } else {
                         const data = clientConnection.Event(Events.CanLaunchModules, null);
                         sendClientInformation(clientConn, data);
@@ -95,7 +146,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                 } else return;
             }
             attempts++;
-            setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts), 750)
+            setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts), 750);
         });
     } catch (e) {
         if (attempts >= 15) {
@@ -106,7 +157,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             } else return;
         }
         attempts++;
-        setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts), 750)
+        setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts), 750);
         return;
     }
 }
@@ -121,7 +172,6 @@ function sendClientInformation(clientConn, data) {
     }, 500);
 }
 
-// Backward-compatible no-op APIs for newer UI events.
 function setWebApisPath() {}
 function setWebApisCode() {}
 function getWebApisCode() { return null; }
