@@ -244,7 +244,7 @@ function AddModule() {
                         {t('moduleManager.addModule')} ({moduleType.toUpperCase()})
                     </h3>
                     <input
-                        type="text"
+                        type="email"
                         ref={inputRef}
                         value={name}
                         className="w-full p-2 rounded-lg bg-gray-800 text-gray-200"
