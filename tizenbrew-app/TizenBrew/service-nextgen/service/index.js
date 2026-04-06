@@ -338,6 +338,8 @@ module.exports.onStart = function () {
                             );
                             if (idx !== -1) {
                                 config.modules.splice(idx, 1);
+                                // Clear default if it pointed at the removed module
+                                if (config.defaultModule === module) config.defaultModule = '';
                                 writeConfig(config);
                             }
                             break;

@@ -294,11 +294,7 @@ class Client {
             }
 
             case Events.GetRemoteLogging: {
-                // Store in context so RemoteLoggingSettings page can read it
-                this.context.dispatch({ type: 'SET_SHARED_DATA', payload: {
-                    ...this.context.state.sharedData,
-                    remoteLogging: payload
-                }});
+                this.context.dispatch({ type: 'SET_REMOTE_LOGGING', payload });
                 break;
             }
 
