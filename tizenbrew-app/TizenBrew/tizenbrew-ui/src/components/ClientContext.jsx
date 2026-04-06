@@ -10,6 +10,7 @@ const initialState = {
         },
         autoLaunchModule: '',
         autoLaunchServiceList: [],
+        defaultModule: '',
         modules: null,
         state: null,
         error: {
@@ -44,6 +45,8 @@ function reducer(state, action) {
                     autoLaunchServiceList: action.payload.autoLaunchServiceList ?? state.sharedData.autoLaunchServiceList,
                 }
             };
+        case 'SET_DEFAULT_MODULE':
+            return { ...state, sharedData: { ...state.sharedData, defaultModule: action.payload } };
         default:
             return state;
     }

@@ -2,6 +2,7 @@
 
 const vm = require('vm');
 const fetch = require('node-fetch');
+const logBus = require('./logBus.js');
 
 function startService(mdl, services) {
     let sandbox = {};
@@ -15,6 +16,15 @@ function startService(mdl, services) {
 
     sandbox['require'] = require;
     sandbox['tizen'] = global.tizen;
+
+    // Route module service console.* through logBus so remote logging captures them
+    const _moduleName = mdl.name;
+    sandbox['console'] = {
+        log:   function() { var msg = Array.prototype.slice.call(arguments).join(' '); logBus.log('INFO',  'module:' + _moduleName, msg); console.log.apply(console, arguments); },
+        info:  function() { var msg = Array.prototype.slice.call(arguments).join(' '); logBus.log('INFO',  'module:' + _moduleName, msg); console.info.apply(console, arguments); },
+        warn:  function() { var msg = Array.prototype.slice.call(arguments).join(' '); logBus.log('WARN',  'module:' + _moduleName, msg); console.warn.apply(console, arguments); },
+        error: function() { var msg = Array.prototype.slice.call(arguments).join(' '); logBus.log('ERROR', 'module:' + _moduleName, msg); console.error.apply(console, arguments); }
+    };
     sandbox['module'] = { exports: {} };
 
     // Strip jsDelivr prefixes to get clean GitHub user/repo

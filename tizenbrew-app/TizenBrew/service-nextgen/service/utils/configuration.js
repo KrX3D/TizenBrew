@@ -4,15 +4,22 @@ const fs = require('fs');
 
 const TB_CONFIG_PATH = '/home/owner/share/tizenbrewConfig.json';
 
+const REMOTE_LOGGING_DEFAULTS = { enabled: false, ip: '', port: 3030 };
+
 function readConfig() {
-    if (!fs.existsSync(TB_CONFIG_PATH)) {
-        return {
-            modules: [],
-            autoLaunchServiceList: [],
-            autoLaunchModule: ''
-        };
-    }
-    return JSON.parse(fs.readFileSync(TB_CONFIG_PATH, 'utf8'));
+    const defaults = {
+        modules: [],
+        autoLaunchServiceList: [],
+        autoLaunchModule: '',
+        defaultModule: '',
+        remoteLogging: Object.assign({}, REMOTE_LOGGING_DEFAULTS)
+    };
+    if (!fs.existsSync(TB_CONFIG_PATH)) return defaults;
+    const cfg = JSON.parse(fs.readFileSync(TB_CONFIG_PATH, 'utf8'));
+    // Back-fill fields missing from older config files
+    if (!cfg.remoteLogging) cfg.remoteLogging = Object.assign({}, REMOTE_LOGGING_DEFAULTS);
+    if (cfg.defaultModule === undefined) cfg.defaultModule = '';
+    return cfg;
 }
 
 function writeConfig(config) {

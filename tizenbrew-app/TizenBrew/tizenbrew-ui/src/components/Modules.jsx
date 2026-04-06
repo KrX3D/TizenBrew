@@ -1,5 +1,5 @@
 import { useFocusable } from '@noriginmedia/norigin-spatial-navigation'
-import { useEffect, useContext } from 'react';
+import { useEffect, useRef, useContext } from 'react';
 import { GlobalStateContext } from './ClientContext.jsx';
 import { Events, getResolvedPackageUrl } from './WebSocketClient.js';
 
@@ -12,11 +12,20 @@ function getModuleTypeLabel(module) {
   return module?.fullName?.startsWith('gh/') ? 'GH' : 'NPM';
 }
 
-function Item({ children, module, id, state }) {
-  const { ref, focused } = useFocusable();
+function Item({ children, module, id, state, isDefault, onFocused }) {
+  const { ref, focused, focusSelf } = useFocusable();
+
   useEffect(() => {
-    if (focused) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-  }, [focused, ref]);
+    if (focused) {
+      ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      onFocused(module);
+    }
+  }, [focused]);
+
+  // Auto-focus this card if it's the default module on first render
+  useEffect(() => {
+    if (isDefault) focusSelf();
+  }, []);
 
   function handleOnClick() {
     const toast = window.__globalToast;
@@ -40,16 +49,55 @@ function Item({ children, module, id, state }) {
       className={classNames(
         'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw] mb-4',
         focused ? 'focus' : '',
-        id === 0 ? 'ml-4' : ''
+        id === 0 ? 'ml-4' : '',
+        isDefault ? 'ring-2 ring-blue-400' : ''
       )}
     >
+      {isDefault && (
+        <span className='absolute top-3 right-3 text-xs bg-blue-600 text-white px-2 py-1 rounded'>
+          Default
+        </span>
+      )}
       {children}
     </div>
   );
 }
 
 export default function Modules() {
-  const { state } = useContext(GlobalStateContext);
+  const { state, dispatch } = useContext(GlobalStateContext);
+  const focusedModuleRef = useRef(null);
+  const defaultModule = state?.sharedData?.defaultModule || '';
+
+  // Register the blue button (ColorF3Blue = 406) and handle default toggling
+  useEffect(() => {
+    try { tizen.tvinputdevice.registerKey('ColorF3Blue'); } catch (_) {}
+
+    function onKeyDown(e) {
+      if (e.keyCode !== 406) return;
+      const mod = focusedModuleRef.current;
+      if (!mod || !state.client) return;
+
+      if (defaultModule === mod.name) {
+        // Blue on already-default → clear
+        state.client.send({ type: Events.ModuleAction, payload: { action: 'clearDefault', module: mod.name } });
+        dispatch({ type: 'SET_DEFAULT_MODULE', payload: '' });
+      } else {
+        // Blue on other module → set as default (clears previous automatically in service)
+        state.client.send({ type: Events.ModuleAction, payload: { action: 'setDefault', module: mod.name } });
+        dispatch({ type: 'SET_DEFAULT_MODULE', payload: mod.name });
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      try { tizen.tvinputdevice.unregisterKey('ColorF3Blue'); } catch (_) {}
+    };
+  }, [defaultModule, state.client]);
+
+  function handleFocused(module) {
+    focusedModuleRef.current = module;
+  }
 
   return (
     <div
@@ -58,7 +106,13 @@ export default function Modules() {
     >
       <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative pb-6">
         {state?.sharedData?.modules?.map((module, moduleIdx) => (
-          <Item module={module} id={moduleIdx} state={state}>
+          <Item
+            module={module}
+            id={moduleIdx}
+            state={state}
+            isDefault={defaultModule === module.name}
+            onFocused={handleFocused}
+          >
             <h3 className='text-indigo-400 text-base/7 font-semibold'>
               {module.appName} ({module.version})
             </h3>
