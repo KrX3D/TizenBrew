@@ -33,6 +33,8 @@
         "autolaunchServiceDesc": "Launch your favorite service automatically when you launch TizenBrew.",
         "useragent": "User-Agent Settings",
         "useragentDesc": "Change the User-Agent of TizenBrew modules for some effects like fixing the UI in TizenTube.",
+        "remoteLogging": "Remote Logging",
+        "remoteLoggingDesc": "Send service and module logs over HTTP to a receiver on your PC.",
         "enableAutolaunchPrompt": "Do you want to set {{packageName}} to launch on start?",
         "disableAutolaunchPrompt": "Do you want to disable autolaunch?",
         "disableAutolaunch": "Disable Autolaunch",

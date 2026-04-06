@@ -15,6 +15,9 @@ const Events = {
     ModuleAction: 10,
     CheckTizenBrewConfig: 11,
     ResetTizenBrewConfig: 12,
+    GetRemoteLogging: 13,
+    SetRemoteLogging: 14,
+    LogEvent: 15,
     WebApisPath: 20,
     WebApisCode: 21
 };
@@ -147,8 +150,15 @@ class Client {
                     return setTimeout(() => this.send({ type: Events.GetModules }), 500);
                 }
 
-                this.context.dispatch({ type: 'SET_MODULES', payload });
-                this.modules = payload;
+                // Payload is now { modules, defaultModule, rateLimitedModules }
+                // but service may send a plain array for backwards compat
+                const modules = Array.isArray(payload) ? payload : (payload.modules || []);
+                const defaultModule = Array.isArray(payload) ? '' : (payload.defaultModule || '');
+                const rateLimitedModules = Array.isArray(payload) ? [] : (payload.rateLimitedModules || []);
+
+                this.context.dispatch({ type: 'SET_MODULES', payload: modules });
+                this.context.dispatch({ type: 'SET_DEFAULT_MODULE', payload: defaultModule });
+                this.modules = modules;
                 this.modulesLoaded = true;
                 this.send({ type: Events.Ready });
 
@@ -162,12 +172,18 @@ class Client {
 
                 // Startup toasts — delay 800ms to ensure __globalToast is registered
                 // by the time we try to use it (race condition on first render).
-                if (!this.startupToastShown && payload.length > 0) {
+                if (!this.startupToastShown && modules.length > 0) {
                     this.startupToastShown = true;
                     setTimeout(() => {
                         const t = window.__globalToast;
                         if (!t) return;
-                        payload.forEach((module, idx) => {
+
+                        // Rate-limit warning first
+                        if (rateLimitedModules.length > 0) {
+                            t.error(`⚠️ GitHub rate limit hit — ${rateLimitedModules.join(', ')} loaded from CDN fallback`, 12000);
+                        }
+
+                        modules.forEach((module, idx) => {
                             setTimeout(() => {
                                 const pkgUrl = getResolvedPackageUrl(module);
                                 const label = module.appName && module.appName !== 'Unknown Module'
@@ -175,7 +191,8 @@ class Client {
                                     : module.fullName;
                                 const status = module.appName === 'Unknown Module' ? '❌' : '✅';
                                 const src = (module.sourceMode || 'cdn').toUpperCase();
-                                t.info(`${status} ${label} [${src}]\n${pkgUrl}`, 10000);
+                                const rl = module.rateLimited ? ' ⚠️RL' : '';
+                                t.info(`${status} ${label} [${src}${rl}]\n${pkgUrl}`, 10000);
                             }, idx * 500);
                         });
                     }, 800);
@@ -273,6 +290,20 @@ class Client {
                     error:            () => toast.error(i18next.t('tizenBrewConfig.resetError', { error: payload.message }), 8000),
                 };
                 (msgs[payload.status] ?? (() => {}))();
+                break;
+            }
+
+            case Events.GetRemoteLogging: {
+                // Store in context so RemoteLoggingSettings page can read it
+                this.context.dispatch({ type: 'SET_SHARED_DATA', payload: {
+                    ...this.context.state.sharedData,
+                    remoteLogging: payload
+                }});
+                break;
+            }
+
+            case Events.SetRemoteLogging: {
+                if (toast && payload && payload.ok) toast.success('Remote logging settings saved');
                 break;
             }
         }

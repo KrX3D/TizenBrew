@@ -1,4 +1,4 @@
-import { LocationProvider, ErrorBoundary, Router, Route } from 'preact-iso';
+import { LocationProvider, ErrorBoundary, Router, Route, useLocation } from 'preact-iso';
 import Home from './pages/Home.jsx';
 import ModuleManager, { AddModule } from './pages/ModuleManager.jsx';
 import Header from './components/Header.jsx';
@@ -6,13 +6,34 @@ import { GlobalStateContext } from './components/ClientContext.jsx';
 import { useRef } from 'preact/hooks';
 import { useEffect, useState, useContext } from 'react';
 import Client from './components/WebSocketClient.js';
+import { Events } from './components/WebSocketClient.js';
 import Settings, { Change } from './pages/Settings.jsx';
 import About from './pages/About.jsx';
 import './components/i18n.js';
 import UserAgentSettings from './pages/UserAgentSettings.jsx';
+import RemoteLoggingSettings from './pages/RemoteLoggingSettings.jsx';
 import { ExclamationCircleIcon } from '@heroicons/react/16/solid';
 import { useTranslation } from 'react-i18next';
 import { ToastContainer, useToast, setGlobalToast } from './components/Toast.jsx';
+
+function PageChangeLogger() {
+  const loc = useLocation();
+  const context = useContext(GlobalStateContext);
+  const prevPath = useRef('');
+
+  useEffect(() => {
+    const path = loc.path || '';
+    if (path && path !== prevPath.current && context.state.client) {
+      prevPath.current = path;
+      context.state.client.send({
+        type: Events.LogEvent,
+        payload: { level: 'INFO', source: 'ui', message: `Page: ${path}` }
+      });
+    }
+  }, [loc.path]);
+
+  return null;
+}
 
 export default function App() {
   const headerRef = useRef(null);
@@ -53,6 +74,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <LocationProvider>
+        <PageChangeLogger />
         <Header ref={headerRef} />
         <div className="bg-slate-800 text-white overflow-hidden" style={{ height: `calc(100vh - ${headerHeight}px)` }}>
           <div className={`flex justify-center ${!context.state.sharedData.error.message ? 'hidden' : ''}`}>
@@ -70,6 +92,7 @@ export default function App() {
             <Route component={Settings} path="/tizenbrew-ui/dist/index.html/settings" />
             <Route component={Change} path="/tizenbrew-ui/dist/index.html/settings/change" />
             <Route component={UserAgentSettings} path="/tizenbrew-ui/dist/index.html/settings/change-ua" />
+            <Route component={RemoteLoggingSettings} path="/tizenbrew-ui/dist/index.html/settings/remote-logging" />
             <Route component={About} path="/tizenbrew-ui/dist/index.html/about" />
           </Router>
         </div>

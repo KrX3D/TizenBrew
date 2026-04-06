@@ -1,7 +1,6 @@
 "use strict";
 
 module.exports.onStart = function () {
-    console.log('Service started');
     const adbhost = require('adbhost');
     const express = require('express');
     const fetch = require('node-fetch');
@@ -12,14 +11,18 @@ module.exports.onStart = function () {
     const startService = require('./utils/serviceLauncher.js');
     const { Connection, Events } = require('./utils/wsCommunication.js');
     const { existsSync, readFileSync, statSync, accessSync, constants, unlinkSync, chmodSync } = require('fs');
-    let WebSocket;
-    if (process.version === 'v4.4.3') {
-        WebSocket = require('ws-old');
-    } else {
-        WebSocket = require('ws-new');
-    }
+    const logBus = require('./utils/logBus.js');
+    const remoteLogger = require('./utils/remoteLogger.js');
+    // ws-old (ws@4) works on all Tizen Node runtimes (v4.4.3 through v8+).
+    // ws-new (ws@8) uses optional-chaining syntax that crashes on Node 6 (Tizen 4/5).
+    const WebSocket = require('ws-old');
 
     const TB_CONFIG = '/home/owner/share/tizenbrewConfig.json';
+
+    // Initialise remote logger from saved config
+    const _startupCfg = readConfig();
+    remoteLogger.start(_startupCfg.remoteLogging);
+    logBus.log('INFO', 'service', 'TizenBrew service started', { nodeVersion: process.version });
 
     function tryFixTBConfigPermissions(filePath) {
         try { chmodSync(filePath, 0o666); return true; } catch (_) { return false; }
@@ -82,10 +85,10 @@ module.exports.onStart = function () {
             }
     
             fetch(`${upstreamUrl}${cacheBuster}`)
-                .then(fetchRes => fetchRes.body.pipe(res))
-                .then(() => {
+                .then(fetchRes => {
                     res.setHeader('Access-Control-Allow-Origin', '*');
                     res.type(path.basename(filePath).split('.').slice(-1)[0].split('?')[0]);
+                    fetchRes.body.pipe(res);
                 });
         } else {
             res.send(deviceIP);
@@ -129,7 +132,8 @@ module.exports.onStart = function () {
 
     loadModules().then(modules => {
         modulesCache = modules;
-        const serviceModuleList = readConfig().autoLaunchServiceList;
+        const _initCfg = readConfig();
+        const serviceModuleList = _initCfg.autoLaunchServiceList;
         if (serviceModuleList.length > 0) {
             serviceModuleList.forEach(module => {
                 const service = modules.find(m => m.name === module);
@@ -141,12 +145,10 @@ module.exports.onStart = function () {
 
     function createAdbConnection(ip, mdl) {
         deviceIP = ip;
-        if (adbClient) {
-            if (!adbClient._stream) {
-                adbClient._stream.removeAllListeners('connect');
-                adbClient._stream.removeAllListeners('error');
-                adbClient._stream.removeAllListeners('close');
-            }
+        if (adbClient && adbClient._stream) {
+            adbClient._stream.removeAllListeners('connect');
+            adbClient._stream.removeAllListeners('error');
+            adbClient._stream.removeAllListeners('close');
         }
 
         adbClient = adbhost.createConnection({ host: '127.0.0.1', port: 26101 });
@@ -231,16 +233,27 @@ module.exports.onStart = function () {
                     wsConn.isReady = true;
                     services.set('wsConn', wsConn);
 
+                    function sendModules(modules) {
+                        const cfg = readConfig();
+                        const rateLimitedModules = modules.filter(m => m.rateLimited).map(m => m.name);
+                        wsConn.send(wsConn.Event(Events.GetModules, {
+                            modules,
+                            defaultModule: cfg.defaultModule || '',
+                            rateLimitedModules
+                        }));
+                    }
+
                     if (payload) {
                         loadModules().then(modules => {
                             modulesCache = modules;
-                            wsConn.send(wsConn.Event(Events.GetModules, modules));
+                            sendModules(modules);
                         });
-                    } else wsConn.send(wsConn.Event(Events.GetModules, modulesCache));
+                    } else sendModules(modulesCache || []);
                     break;
                 }
                 case Events.LaunchModule: {
                     const mdl = payload;
+                    logBus.log('INFO', 'service', 'Launching module', { name: mdl.name, fullName: mdl.fullName });
                     currentModule.fullName = mdl.fullName;
                     currentModule.versionedFullName = mdl.versionedFullName;
                     currentModule.name = mdl.name;
@@ -339,6 +352,16 @@ module.exports.onStart = function () {
                             writeConfig(config);
                             break;
                         }
+                        case 'setDefault': {
+                            config.defaultModule = module;
+                            writeConfig(config);
+                            break;
+                        }
+                        case 'clearDefault': {
+                            config.defaultModule = '';
+                            writeConfig(config);
+                            break;
+                        }
                     }
                     break;
                 }
@@ -393,6 +416,28 @@ module.exports.onStart = function () {
                     break;
                 }
 
+                case Events.GetRemoteLogging: {
+                    wsConn.send(wsConn.Event(Events.GetRemoteLogging, readConfig().remoteLogging));
+                    break;
+                }
+                case Events.SetRemoteLogging: {
+                    const cfg = readConfig();
+                    cfg.remoteLogging = {
+                        enabled: !!payload.enabled,
+                        ip: String(payload.ip || ''),
+                        port: Number(payload.port) || 3030
+                    };
+                    writeConfig(cfg);
+                    remoteLogger.start(cfg.remoteLogging);
+                    logBus.log('INFO', 'service', 'Remote logging updated', cfg.remoteLogging);
+                    wsConn.send(wsConn.Event(Events.SetRemoteLogging, { ok: true }));
+                    break;
+                }
+                case Events.LogEvent: {
+                    const { level, source, message } = payload || {};
+                    logBus.log(level || 'INFO', source || 'ui', message || '');
+                    break;
+                }
                 case Events.Ready: {
                     wsConn.isReady = true;
                     services.set('wsConn', wsConn);

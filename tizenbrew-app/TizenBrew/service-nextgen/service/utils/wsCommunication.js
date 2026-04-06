@@ -31,6 +31,9 @@ const Events = {
     ModuleAction: 10,
     CheckTizenBrewConfig: 11,
     ResetTizenBrewConfig: 12,
+    GetRemoteLogging: 13,
+    SetRemoteLogging: 14,
+    LogEvent: 15,
     WebApisPath: 20,
     WebApisCode: 21
 };
