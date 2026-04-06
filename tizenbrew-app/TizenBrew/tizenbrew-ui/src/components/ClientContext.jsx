@@ -11,6 +11,7 @@ const initialState = {
         autoLaunchModule: '',
         autoLaunchServiceList: [],
         defaultModule: '',
+        remoteLogging: null,
         modules: null,
         state: null,
         error: {
@@ -47,6 +48,8 @@ function reducer(state, action) {
             };
         case 'SET_DEFAULT_MODULE':
             return { ...state, sharedData: { ...state.sharedData, defaultModule: action.payload } };
+        case 'SET_REMOTE_LOGGING':
+            return { ...state, sharedData: { ...state.sharedData, remoteLogging: action.payload } };
         default:
             return state;
     }

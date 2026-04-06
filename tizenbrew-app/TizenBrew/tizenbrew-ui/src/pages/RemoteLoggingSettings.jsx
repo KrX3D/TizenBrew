@@ -29,21 +29,19 @@ function ItemBasic({ children, onClick, shouldFocus, selected }) {
     );
 }
 
-function InputCard({ label, value, onChange, placeholder, shouldFocus }) {
+function InputCard({ label, value, onChange, placeholder, inputType }) {
     const { ref, focused, focusSelf } = useFocusable();
     const inputRef = useRef(null);
-    const confirmedRef = useRef(false);
 
     useEffect(() => {
         if (focused) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }, [focused, ref]);
-    if (shouldFocus) { useEffect(() => { focusSelf(); }, []); }
 
     function handleKeyDown(e) {
+        // Let left/right move the cursor inside the input, not spatial nav
         if (e.keyCode === 37 || e.keyCode === 39) { e.stopPropagation(); return; }
         if (e.keyCode === 13 || e.keyCode === 65376) {
             e.preventDefault();
-            confirmedRef.current = true;
             inputRef.current?.blur();
         }
     }
@@ -65,7 +63,7 @@ function InputCard({ label, value, onChange, placeholder, shouldFocus }) {
             <h3 className='text-indigo-400 text-base/7 font-semibold mb-4'>{label}</h3>
             <input
                 ref={inputRef}
-                type="email"
+                type={inputType || 'tel'}
                 value={value}
                 placeholder={placeholder}
                 className="w-full p-2 rounded-lg bg-gray-800 text-gray-200 text-sm"
@@ -79,27 +77,33 @@ function InputCard({ label, value, onChange, placeholder, shouldFocus }) {
 
 export default function RemoteLoggingSettings() {
     const { state } = useContext(GlobalStateContext);
-    const remoteLogging = state?.sharedData?.remoteLogging;
+    const remoteLoggingInState = state?.sharedData?.remoteLogging;
 
-    const [enabled, setEnabled] = useState(false);
-    const [ip, setIp] = useState('');
-    const [port, setPort] = useState('3030');
-    const loaded = useRef(false);
+    // Initialise directly from whatever is already in state so fields
+    // are populated immediately on mount without waiting for WS round-trip.
+    const [enabled, setEnabled] = useState(() => !!(remoteLoggingInState?.enabled));
+    const [ip,      setIp]      = useState(() => remoteLoggingInState?.ip   || '');
+    const [port,    setPort]    = useState(() => String(remoteLoggingInState?.port || 3030));
 
-    // Request current config from service on mount
+    // If state didn't have the config yet (first ever visit), request it.
+    // When the response arrives it updates state; we sync local fields below.
     useEffect(() => {
-        if (state.client) state.client.send({ type: Events.GetRemoteLogging });
+        if (!remoteLoggingInState && state.client) {
+            state.client.send({ type: Events.GetRemoteLogging });
+        }
     }, []);
 
-    // Populate fields once service responds
+    // Sync local fields whenever the state value changes (WS response arrived).
+    // Only sync if the user hasn't started editing (i.e. fields are still at defaults).
+    const syncedRef = useRef(!!remoteLoggingInState);
     useEffect(() => {
-        if (remoteLogging && !loaded.current) {
-            loaded.current = true;
-            setEnabled(!!remoteLogging.enabled);
-            setIp(remoteLogging.ip || '');
-            setPort(String(remoteLogging.port || 3030));
+        if (remoteLoggingInState && !syncedRef.current) {
+            syncedRef.current = true;
+            setEnabled(!!remoteLoggingInState.enabled);
+            setIp(remoteLoggingInState.ip || '');
+            setPort(String(remoteLoggingInState.port || 3030));
         }
-    }, [remoteLogging]);
+    }, [remoteLoggingInState]);
 
     function save() {
         if (!state.client) return;
@@ -113,7 +117,6 @@ export default function RemoteLoggingSettings() {
         <div className="relative isolate lg:px-8 pt-6">
             <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative pb-6">
 
-                {/* Enable / Disable toggle */}
                 <ItemBasic shouldFocus selected={enabled} onClick={() => setEnabled(e => !e)}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>Enable Remote Logging</h3>
                     <p className='text-gray-300 mt-6 text-base/7'>
@@ -126,27 +129,26 @@ export default function RemoteLoggingSettings() {
                     )}
                 </ItemBasic>
 
-                {/* IP address input */}
                 <InputCard
                     label="Receiver IP Address"
                     value={ip}
                     placeholder="192.168.1.100"
                     onChange={setIp}
+                    inputType="tel"
                 />
 
-                {/* Port input */}
                 <InputCard
                     label="Receiver Port"
                     value={port}
                     placeholder="3030"
                     onChange={setPort}
+                    inputType="tel"
                 />
 
-                {/* Save button */}
                 <ItemBasic onClick={save}>
                     <h3 className='text-green-400 text-base/7 font-semibold'>Save Settings</h3>
                     <p className='text-gray-300 mt-6 text-base/7'>
-                        Apply the IP, port and enable/disable settings. Logs will be sent via HTTP POST to <code>/log</code>.
+                        Apply IP, port and enable/disable. Logs ship via HTTP POST to <code>/log</code>.
                     </p>
                 </ItemBasic>
 
