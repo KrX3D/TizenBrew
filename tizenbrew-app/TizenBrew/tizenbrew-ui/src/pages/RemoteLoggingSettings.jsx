@@ -1,5 +1,6 @@
 import { useFocusable } from '@noriginmedia/norigin-spatial-navigation';
 import { useContext, useEffect, useRef, useState } from 'react';
+import { useLocation } from 'preact-iso';
 import { GlobalStateContext } from '../components/ClientContext.jsx';
 import { Events } from '../components/WebSocketClient.js';
 
@@ -7,6 +8,9 @@ function classNames(...classes) {
     return classes.filter(Boolean).join(' ');
 }
 
+// Generic card — handles Enter/OK via both onEnterPress (spatial nav)
+// and a direct onKeyDown on the div, since some TV builds don't propagate
+// the spatial-nav callback reliably.
 function ItemBasic({ children, onClick, shouldFocus, selected }) {
     const { ref, focused, focusSelf } = useFocusable({ onEnterPress: onClick });
     useEffect(() => {
@@ -14,10 +18,19 @@ function ItemBasic({ children, onClick, shouldFocus, selected }) {
     }, [focused, ref]);
     if (shouldFocus) { useEffect(() => { focusSelf(); }, []); }
 
+    function handleKeyDown(e) {
+        if (e.keyCode === 13 || e.keyCode === 65376) {
+            e.preventDefault();
+            onClick && onClick();
+        }
+    }
+
     return (
         <div
             ref={ref}
+            tabIndex={-1}
             onClick={onClick}
+            onKeyDown={handleKeyDown}
             className={classNames(
                 'relative bg-gray-900 shadow-2xl rounded-3xl p-8 ring-1 ring-gray-900/10 sm:p-10 h-[35vh] w-[20vw] mb-4',
                 focused ? 'focus' : '',
@@ -29,7 +42,7 @@ function ItemBasic({ children, onClick, shouldFocus, selected }) {
     );
 }
 
-function InputCard({ label, value, onChange, placeholder, inputType }) {
+function InputCard({ label, value, onChange, placeholder }) {
     const { ref, focused, focusSelf } = useFocusable();
     const inputRef = useRef(null);
 
@@ -37,13 +50,19 @@ function InputCard({ label, value, onChange, placeholder, inputType }) {
         if (focused) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }, [focused, ref]);
 
+    function closeKeyboard() {
+        inputRef.current?.blur();
+        // Return spatial-nav focus to this card so left/right navigation works again
+        focusSelf();
+    }
+
     function handleKeyDown(e) {
-        // Let left/right move the cursor inside the input, not spatial nav
+        // Let cursor move inside the input without triggering spatial nav
         if (e.keyCode === 37 || e.keyCode === 39) { e.stopPropagation(); return; }
-        if (e.keyCode === 13 || e.keyCode === 65376) {
-            e.preventDefault();
-            inputRef.current?.blur();
-        }
+        // Enter / Samsung confirm key
+        if (e.keyCode === 13 || e.keyCode === 65376) { e.preventDefault(); closeKeyboard(); return; }
+        // Back button (Samsung TV keyCode 10009) — dismiss keyboard, don't navigate away
+        if (e.keyCode === 10009) { e.preventDefault(); e.stopPropagation(); closeKeyboard(); }
     }
 
     function handleClick() {
@@ -63,7 +82,7 @@ function InputCard({ label, value, onChange, placeholder, inputType }) {
             <h3 className='text-indigo-400 text-base/7 font-semibold mb-4'>{label}</h3>
             <input
                 ref={inputRef}
-                type={inputType || 'tel'}
+                type="tel"
                 value={value}
                 placeholder={placeholder}
                 className="w-full p-2 rounded-lg bg-gray-800 text-gray-200 text-sm"
@@ -77,24 +96,19 @@ function InputCard({ label, value, onChange, placeholder, inputType }) {
 
 export default function RemoteLoggingSettings() {
     const { state } = useContext(GlobalStateContext);
+    const loc = useLocation();
     const remoteLoggingInState = state?.sharedData?.remoteLogging;
 
-    // Initialise directly from whatever is already in state so fields
-    // are populated immediately on mount without waiting for WS round-trip.
     const [enabled, setEnabled] = useState(() => !!(remoteLoggingInState?.enabled));
     const [ip,      setIp]      = useState(() => remoteLoggingInState?.ip   || '');
     const [port,    setPort]    = useState(() => String(remoteLoggingInState?.port || 3030));
 
-    // If state didn't have the config yet (first ever visit), request it.
-    // When the response arrives it updates state; we sync local fields below.
     useEffect(() => {
         if (!remoteLoggingInState && state.client) {
             state.client.send({ type: Events.GetRemoteLogging });
         }
     }, []);
 
-    // Sync local fields whenever the state value changes (WS response arrived).
-    // Only sync if the user hasn't started editing (i.e. fields are still at defaults).
     const syncedRef = useRef(!!remoteLoggingInState);
     useEffect(() => {
         if (remoteLoggingInState && !syncedRef.current) {
@@ -111,6 +125,17 @@ export default function RemoteLoggingSettings() {
             type: Events.SetRemoteLogging,
             payload: { enabled, ip, port: Number(port) || 3030 }
         });
+        loc.route('/tizenbrew-ui/dist/index.html/settings');
+    }
+
+    function sendTest() {
+        if (!state.client) return;
+        state.client.send({
+            type: Events.LogEvent,
+            payload: { level: 'INFO', source: 'ui:test', message: 'Remote logging test message from TizenBrew UI' }
+        });
+        const toast = window.__globalToast;
+        if (toast) toast.info('Test log sent — check your receiver', 5000);
     }
 
     return (
@@ -134,7 +159,6 @@ export default function RemoteLoggingSettings() {
                     value={ip}
                     placeholder="192.168.1.100"
                     onChange={setIp}
-                    inputType="tel"
                 />
 
                 <InputCard
@@ -142,13 +166,19 @@ export default function RemoteLoggingSettings() {
                     value={port}
                     placeholder="3030"
                     onChange={setPort}
-                    inputType="tel"
                 />
 
                 <ItemBasic onClick={save}>
                     <h3 className='text-green-400 text-base/7 font-semibold'>Save Settings</h3>
                     <p className='text-gray-300 mt-6 text-base/7'>
-                        Apply IP, port and enable/disable. Logs ship via HTTP POST to <code>/log</code>.
+                        Apply and return to Settings.
+                    </p>
+                </ItemBasic>
+
+                <ItemBasic onClick={sendTest}>
+                    <h3 className='text-yellow-400 text-base/7 font-semibold'>Send Test Log</h3>
+                    <p className='text-gray-300 mt-6 text-base/7'>
+                        Sends a test entry to the receiver to verify the connection works.
                     </p>
                 </ItemBasic>
 
