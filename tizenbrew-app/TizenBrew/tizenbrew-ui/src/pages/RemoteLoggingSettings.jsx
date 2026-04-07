@@ -156,10 +156,10 @@ export default function RemoteLoggingSettings() {
         if (!state.client) return;
         const p = Number(port) || 3030;
         const newCfg = { enabled, ip, port: p };
-        // Update global synchronously so window.__tbLog can fire immediately after save.
-        window.__tbRemoteLogging = newCfg;
         if (window.__tbLog) window.__tbLog('INFO', 'ui:remote-log', 'Saved: enabled=' + enabled + ' ip=' + ip + ' port=' + p);
         state.client.send({ type: Events.SetRemoteLogging, payload: newCfg });
+        // Update state immediately so window.__tbLog sees the new enabled value
+        // before the user navigates away and triggers other logged actions.
         dispatch({ type: 'SET_REMOTE_LOGGING', payload: newCfg });
         history.back();
     }

@@ -36,16 +36,7 @@ function Item({ children, module, id, state, isDefault, onFocused }) {
       toast.info(`🚀 ${module.appName} (${module.version || '?'}) [${src}]\n${pkgUrl}`, 8000);
     }
 
-    if (window.__tbLog) {
-      const used = module.rateLimited ? 'CDN-FALLBACK' : src;
-      window.__tbLog('INFO', 'ui:home',
-        'Launch: ' + module.appName + ' ' + (module.version ? 'v' + module.version : '(no version)')
-        + ' | configured=' + src + ' used=' + used
-        + (module.rateLimited ? ' [rate-limited]' : '')
-        + '\n  pkg=' + pkgUrl
-        + '\n  app=' + (module.appPath || '(none)')
-      );
-    }
+    if (window.__tbLog) window.__tbLog('INFO', 'ui:home', 'Launch: ' + module.appName + ' (' + (module.version || '?') + ') [' + src + ']');
 
     for (const key of module.keys) tizen.tvinputdevice.registerKey(key);
     state.client.send({ type: Events.LaunchModule, payload: module });
