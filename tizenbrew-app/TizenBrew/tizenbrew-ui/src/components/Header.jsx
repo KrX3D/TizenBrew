@@ -39,6 +39,7 @@ export default function Header() {
     const handleReload = () => {
         if (state.client && !reloading) {
             setReloading(true);
+            window.__tbLog && window.__tbLog('INFO', 'modules', 'User triggered module reload');
             state.client.send({ type: Events.GetModules, payload: true });
             setTimeout(() => setReloading(false), 2000);
         }

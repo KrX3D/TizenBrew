@@ -10,12 +10,13 @@ function fetchFirstUrl(urls, state) {
         err.rateLimited = state.rateLimited;
         return Promise.reject(err);
     }
-    return fetch(urls[0])
+    const currentUrl = urls[0];
+    return fetch(currentUrl)
         .then(res => {
-            const isGitHub = urls[0].includes('githubusercontent.com');
+            const isGitHub = currentUrl.includes('githubusercontent.com');
             const isRateLimit = res.status === 429 || (res.status === 403 && isGitHub);
             if (isRateLimit) {
-                logBus.log('WARN', 'moduleLoader', 'GitHub rate limit — trying fallback', { url: urls[0] });
+                logBus.log('WARN', 'moduleLoader', 'GitHub rate limit — trying fallback', { url: currentUrl });
                 state.rateLimited = true;
                 if (urls.length > 1) return fetchFirstUrl(urls.slice(1), state);
                 const err = new Error('GitHub rate limit exceeded');
@@ -26,7 +27,7 @@ function fetchFirstUrl(urls, state) {
                 if (urls.length > 1) return fetchFirstUrl(urls.slice(1), state);
                 throw new Error('HTTP ' + res.status);
             }
-            return res.json().then(data => ({ data, rateLimited: state.rateLimited }));
+            return res.json().then(data => ({ data, rateLimited: state.rateLimited, resolvedUrl: currentUrl }));
         })
         .catch(err => {
             if (err.rateLimited !== undefined) throw err;
@@ -46,12 +47,21 @@ function loadModules() {
         const urls = getPackageJsonUrls(module, sourceMode);
 
         return fetchFirstUrl(urls)
-            .then(({ data: moduleJson, rateLimited }) => {
+            .then(({ data: moduleJson, rateLimited, resolvedUrl }) => {
                 const splitData = [
                     module.substring(0, module.indexOf('/')),
                     module.substring(module.indexOf('/') + 1)
                 ];
                 const moduleMetadata = { name: splitData[1], type: splitData[0] };
+
+                const usedMode = rateLimited ? 'cdn-fallback' : sourceMode;
+                logBus.log('INFO', 'moduleLoader', 'Package.json resolved', {
+                    module: module,
+                    configuredMode: sourceMode,
+                    usedMode: usedMode,
+                    rateLimited: rateLimited || false,
+                    packageJsonUrl: resolvedUrl
+                });
 
                 let versionedModule = module;
                 if (moduleMetadata.type === 'gh') {
@@ -62,6 +72,12 @@ function loadModules() {
 
                 const proxyBase = 'http://127.0.0.1:8081/module/' + encodeURIComponent(versionedModule);
                 const appProxyUrl = proxyBase + '/' + moduleJson.appPath + '?sourceMode=' + sourceMode;
+
+                logBus.log('INFO', 'moduleLoader', 'Module app URL resolved', {
+                    module: module,
+                    appPath: appProxyUrl,
+                    packageType: moduleJson.packageType || 'app'
+                });
 
                 const base = {
                     fullName: module,
