@@ -8,10 +8,12 @@ function classNames(...classes) {
     return classes.filter(Boolean).join(' ');
 }
 
-// Plain action card. Reports itself as focused via onFocused(action) so the
-// page-level global keydown handler can call the right action on Enter.
-function ItemBasic({ children, onClick, shouldFocus, selected, onFocused }) {
-    const { ref, focused, focusSelf } = useFocusable();
+// Action card — three layers for TV compatibility:
+//   1. global window keydown (most reliable on Samsung TVs)
+//   2. onEnterPress via spatial nav (works on most firmware)
+//   3. onClick on div (works for pointer/touch)
+function ItemBasic({ children, onClick, shouldFocus, selected, onFocused, focusKey }) {
+    const { ref, focused, focusSelf } = useFocusable({ focusKey, onEnterPress: onClick });
     useEffect(() => {
         if (focused) {
             ref.current.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
@@ -31,11 +33,10 @@ function ItemBasic({ children, onClick, shouldFocus, selected, onFocused }) {
     );
 }
 
-// Text-entry card. Read-only by default so spatial nav can move over it
-// freely. Pressing Enter (via global handler) or clicking opens the keyboard.
-// Enter or Back closes the keyboard and restores spatial nav focus to the card.
-function InputCard({ label, value, onChange, placeholder, onFocused, isEditingRef }) {
-    const { ref, focused, focusSelf } = useFocusable();
+// Input card — read-only by default so spatial nav moves over it freely.
+// OK / click opens the keyboard. Enter or Back closes it and restores focus.
+function InputCard({ label, value, onChange, placeholder, onFocused, isEditingRef, focusKey }) {
+    const { ref, focused, focusSelf } = useFocusable({ focusKey });
     const inputRef = useRef(null);
     const [editing, setEditing] = useState(false);
 
@@ -49,7 +50,6 @@ function InputCard({ label, value, onChange, placeholder, onFocused, isEditingRe
     function openKeyboard() {
         setEditing(true);
         isEditingRef.current = true;
-        // Small delay so readOnly is removed before focus() is called
         setTimeout(() => {
             inputRef.current?.focus();
             inputRef.current?.select();
@@ -60,16 +60,12 @@ function InputCard({ label, value, onChange, placeholder, onFocused, isEditingRe
         setEditing(false);
         isEditingRef.current = false;
         inputRef.current?.blur();
-        // Return spatial nav focus to this card so left/right works again
         focusSelf();
     }
 
     function handleInputKeyDown(e) {
-        // Let cursor move inside the input without triggering spatial nav
         if (e.keyCode === 37 || e.keyCode === 39) { e.stopPropagation(); return; }
-        // Enter / Samsung confirm
         if (e.keyCode === 13 || e.keyCode === 65376) { e.preventDefault(); closeKeyboard(); return; }
-        // Back button — close keyboard, don't navigate away from the page
         if (e.keyCode === 10009) { e.preventDefault(); e.stopPropagation(); closeKeyboard(); }
     }
 
@@ -107,13 +103,11 @@ export default function RemoteLoggingSettings() {
     const [ip,      setIp]      = useState(() => remoteLoggingInState?.ip   || '');
     const [port,    setPort]    = useState(() => String(remoteLoggingInState?.port || 3030));
 
-    // Shared ref so global Enter handler knows whether an input is active
-    const isEditingRef = useRef(false);
-    // Stores the action for the currently spatially-focused card
+    const isEditingRef     = useRef(false);
     const focusedActionRef = useRef(null);
 
-    // Samsung TV: all key events go to window, not to div elements.
-    // This mirrors exactly how Modules.jsx handles the blue button.
+    // Global Enter handler — Samsung TVs send all key events to window,
+    // not to the spatially-focused div element.
     useEffect(() => {
         function onKeyDown(e) {
             if (e.keyCode === 13 && !isEditingRef.current && focusedActionRef.current) {
@@ -124,14 +118,12 @@ export default function RemoteLoggingSettings() {
         return () => window.removeEventListener('keydown', onKeyDown);
     }, []);
 
-    // Request config from service if it isn't already in state
     useEffect(() => {
         if (!remoteLoggingInState && state.client) {
             state.client.send({ type: Events.GetRemoteLogging });
         }
     }, []);
 
-    // Sync fields when config arrives for the first time
     const syncedRef = useRef(!!remoteLoggingInState);
     useEffect(() => {
         if (remoteLoggingInState && !syncedRef.current) {
@@ -151,15 +143,32 @@ export default function RemoteLoggingSettings() {
         loc.route('/tizenbrew-ui/dist/index.html/settings');
     }
 
-    // Direct HTTP POST from the UI browser — works regardless of whether
-    // remote logging is enabled in the service config.
+    // Direct POST from the UI browser to /tv-log — same endpoint as TizenYouTube.
+    // Works regardless of whether remote logging is enabled in the service config.
     async function sendTest() {
         const toast = window.__globalToast;
         if (!ip) { if (toast) toast.error('Enter an IP address first'); return; }
-        const url = 'http://' + ip + ':' + (Number(port) || 3030) + '/log';
+        const targetPort = Number(port) || 3030;
+        const url = 'http://' + ip + ':' + targetPort + '/tv-log';
+        const now = new Date();
+        const ts = now.getFullYear() + '-'
+            + String(now.getMonth()+1).padStart(2,'0') + '-'
+            + String(now.getDate()).padStart(2,'0') + ' '
+            + String(now.getHours()).padStart(2,'0') + ':'
+            + String(now.getMinutes()).padStart(2,'0') + ':'
+            + String(now.getSeconds()).padStart(2,'0') + '.'
+            + String(now.getMilliseconds()).padStart(3,'0');
+        const msg = 'Remote logging test from TizenBrew UI';
         const body = JSON.stringify({
-            ts: Date.now(), level: 'INFO', source: 'ui:test',
-            message: 'Remote logging test from TizenBrew UI'
+            _formatted: '\n─────────────────────────────────────────────────────────────────────\n'
+                + '[' + ts + '] ▶ UI:TEST\n'
+                + '─────────────────────────────────────────────────────────────────────\n'
+                + '  [INFO ] ' + ts.slice(11) + '  ' + msg,
+            app:     'TizenBrew',
+            ts,
+            level:   'INFO',
+            context: 'ui:test',
+            message: msg
         });
         try {
             const res = await fetch(url, {
@@ -168,7 +177,7 @@ export default function RemoteLoggingSettings() {
                 body
             });
             if (toast) {
-                if (res.ok || res.status === 0) toast.success('Test sent to ' + url);
+                if (res.ok || res.status === 204) toast.success('Test sent to ' + url);
                 else toast.error('Receiver returned HTTP ' + res.status);
             }
         } catch (e) {
@@ -182,7 +191,7 @@ export default function RemoteLoggingSettings() {
         <div className="relative isolate lg:px-8 pt-6">
             <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative pb-6">
 
-                <ItemBasic shouldFocus selected={enabled}
+                <ItemBasic shouldFocus selected={enabled} focusKey="rl-toggle"
                     onClick={() => setEnabled(e => !e)}
                     onFocused={setFocusedAction}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>Enable Remote Logging</h3>
@@ -197,20 +206,23 @@ export default function RemoteLoggingSettings() {
                 </ItemBasic>
 
                 <InputCard label="Receiver IP Address" value={ip} placeholder="192.168.1.100"
-                    onChange={setIp} isEditingRef={isEditingRef} onFocused={setFocusedAction} />
+                    onChange={setIp} isEditingRef={isEditingRef}
+                    onFocused={setFocusedAction} focusKey="rl-ip" />
 
                 <InputCard label="Receiver Port" value={port} placeholder="3030"
-                    onChange={setPort} isEditingRef={isEditingRef} onFocused={setFocusedAction} />
+                    onChange={setPort} isEditingRef={isEditingRef}
+                    onFocused={setFocusedAction} focusKey="rl-port" />
 
-                <ItemBasic onClick={save} onFocused={setFocusedAction}>
+                <ItemBasic onClick={save} focusKey="rl-save" onFocused={setFocusedAction}>
                     <h3 className='text-green-400 text-base/7 font-semibold'>Save Settings</h3>
                     <p className='text-gray-300 mt-6 text-base/7'>Apply and return to Settings.</p>
                 </ItemBasic>
 
-                <ItemBasic onClick={sendTest} onFocused={setFocusedAction}>
+                <ItemBasic onClick={sendTest} focusKey="rl-test" onFocused={setFocusedAction}>
                     <h3 className='text-yellow-400 text-base/7 font-semibold'>Send Test Log</h3>
                     <p className='text-gray-300 mt-6 text-base/7'>
-                        POSTs directly to the receiver to verify the connection. Works even when logging is disabled.
+                        POSTs directly to the receiver to verify the connection.
+                        Works even when logging is disabled.
                     </p>
                 </ItemBasic>
 
