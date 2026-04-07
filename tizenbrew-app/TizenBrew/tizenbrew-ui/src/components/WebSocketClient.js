@@ -81,7 +81,8 @@ class Client {
     }
 
     onOpen() {
-        window.__tbLog && window.__tbLog('INFO', 'startup', 'UI connected to service WebSocket');
+        // Fetch remote logging config immediately so window.__tbLog works for all subsequent actions.
+        this.send({ type: Events.GetRemoteLogging });
         const data = tizen.application.getCurrentApplication().getRequestedAppControl().appControl.data;
         if (data.length > 0 && data[0].value.length > 0) {
             try {
@@ -303,6 +304,13 @@ class Client {
 
             case Events.GetRemoteLogging: {
                 this.context.dispatch({ type: 'SET_REMOTE_LOGGING', payload });
+                // Log startup message now that remoteLogging state is known.
+                // Use setTimeout so the dispatch above has flushed into logStateRef.
+                if (payload && payload.enabled) {
+                    setTimeout(function() {
+                        window.__tbLog && window.__tbLog('INFO', 'startup', 'TizenBrew UI connected — remote logging active');
+                    }, 0);
+                }
                 break;
             }
 
