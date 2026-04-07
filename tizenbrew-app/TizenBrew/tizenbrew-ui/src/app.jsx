@@ -40,17 +40,13 @@ export default function App() {
   window.dispatch = context.dispatch;
   window.state = context.state;
 
-  // Keep a ref with the latest state so window.__tbLog never closes over stale values
-  const logStateRef = useRef({ remoteLogging: null });
-  logStateRef.current = {
-    remoteLogging: context.state.sharedData?.remoteLogging
-  };
-
-  // Global log helper — direct HTTP POST to the PS1 receiver (same path as the
-  // test button, which is confirmed working). Bypasses the WS→service chain.
+  // window.__tbRemoteLogging is set synchronously by WebSocketClient when the
+  // GetRemoteLogging response arrives — no React render cycle dependency.
+  // window.__tbLog reads it directly so it works even during startup before
+  // Preact has had a chance to commit a re-render.
   useEffect(() => {
     window.__tbLog = function(level, source, message) {
-      var rl = logStateRef.current.remoteLogging;
+      var rl = window.__tbRemoteLogging;
       if (!rl || !rl.enabled || !rl.ip) return;
       var now = new Date();
       function p2(n) { return n < 10 ? '0' + n : '' + n; }
@@ -61,10 +57,11 @@ export default function App() {
       var lvl = (level || 'INFO').toUpperCase();
       var ctx = (source || 'ui').toUpperCase();
       var msg = String(message);
+      var pad = lvl.length < 5 ? new Array(6 - lvl.length).join(' ') : '';
       var formatted = '\n─────────────────────────────────────────────────────────────────────'
         + '\n[' + ts + '] ▶ ' + ctx
         + '\n─────────────────────────────────────────────────────────────────────'
-        + '\n  [' + lvl + (lvl.length < 5 ? ' '.repeat(5 - lvl.length) : '') + '] ' + ts.slice(11) + '  ' + msg;
+        + '\n  [' + lvl + pad + '] ' + ts.slice(11) + '  ' + msg;
       var url = 'http://' + rl.ip + ':' + (rl.port || 3030) + '/tv-log';
       fetch(url, {
         method: 'POST',
