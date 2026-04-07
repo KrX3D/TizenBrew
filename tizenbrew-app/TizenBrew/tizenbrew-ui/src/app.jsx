@@ -41,23 +41,36 @@ export default function App() {
   window.state = context.state;
 
   // Keep a ref with the latest state so window.__tbLog never closes over stale values
-  const logStateRef = useRef({ client: null, remoteLogging: null });
+  const logStateRef = useRef({ remoteLogging: null });
   logStateRef.current = {
-    client: context.state.client,
     remoteLogging: context.state.sharedData?.remoteLogging
   };
 
-  // Global log helper — only ships the log if remote logging is enabled.
-  // Components call window.__tbLog(level, source, message) without needing
-  // to import anything or check the enabled flag themselves.
+  // Global log helper — direct HTTP POST to the PS1 receiver (same path as the
+  // test button, which is confirmed working). Bypasses the WS→service chain.
   useEffect(() => {
     window.__tbLog = function(level, source, message) {
-      const { client, remoteLogging } = logStateRef.current;
-      if (!remoteLogging || !remoteLogging.enabled || !client) return;
-      client.send({
-        type: Events.LogEvent,
-        payload: { level: level || 'INFO', source: source || 'ui', message: String(message) }
-      });
+      var rl = logStateRef.current.remoteLogging;
+      if (!rl || !rl.enabled || !rl.ip) return;
+      var now = new Date();
+      function p2(n) { return n < 10 ? '0' + n : '' + n; }
+      function p3(n) { return n < 100 ? (n < 10 ? '00' : '0') + n : '' + n; }
+      var ts = now.getFullYear() + '-' + p2(now.getMonth()+1) + '-' + p2(now.getDate())
+        + ' ' + p2(now.getHours()) + ':' + p2(now.getMinutes()) + ':' + p2(now.getSeconds())
+        + '.' + p3(now.getMilliseconds());
+      var lvl = (level || 'INFO').toUpperCase();
+      var ctx = (source || 'ui').toUpperCase();
+      var msg = String(message);
+      var formatted = '\n─────────────────────────────────────────────────────────────────────'
+        + '\n[' + ts + '] ▶ ' + ctx
+        + '\n─────────────────────────────────────────────────────────────────────'
+        + '\n  [' + lvl + (lvl.length < 5 ? ' '.repeat(5 - lvl.length) : '') + '] ' + ts.slice(11) + '  ' + msg;
+      var url = 'http://' + rl.ip + ':' + (rl.port || 3030) + '/tv-log';
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _formatted: formatted, app: 'TizenBrew', ts: ts, level: lvl, context: source || 'ui', message: msg })
+      }).catch(function() {});
     };
     return () => { window.__tbLog = null; };
   }, []);
