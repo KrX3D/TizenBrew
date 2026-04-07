@@ -136,11 +136,15 @@ export default function RemoteLoggingSettings() {
 
     function save() {
         if (!state.client) return;
+        const p = Number(port) || 3030;
+        if (window.__tbLog) window.__tbLog('INFO', 'ui:remote-log', 'Saved: enabled=' + enabled + ' ip=' + ip + ' port=' + p);
         state.client.send({
             type: Events.SetRemoteLogging,
-            payload: { enabled, ip, port: Number(port) || 3030 }
+            payload: { enabled, ip, port: p }
         });
-        loc.route('/tizenbrew-ui/dist/index.html/settings');
+        // Use history.back() so remote-logging is popped from the stack —
+        // pressing Back on Settings then correctly returns to the main menu.
+        history.back();
     }
 
     // Direct POST from the UI browser to /tv-log — same endpoint as TizenYouTube.
@@ -177,7 +181,7 @@ export default function RemoteLoggingSettings() {
                 body
             });
             if (toast) {
-                if (res.ok || res.status === 204) toast.success('Test sent to ' + url);
+                if (res.ok || res.status === 204) { toast.success('Test sent to ' + url); if (window.__tbLog) window.__tbLog('INFO', 'ui:remote-log', 'Test log sent to ' + url); }
                 else toast.error('Receiver returned HTTP ' + res.status);
             }
         } catch (e) {
@@ -192,7 +196,7 @@ export default function RemoteLoggingSettings() {
             <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative pb-6">
 
                 <ItemBasic shouldFocus selected={enabled} focusKey="rl-toggle"
-                    onClick={() => setEnabled(e => !e)}
+                    onClick={() => setEnabled(e => { const next = !e; if (window.__tbLog) window.__tbLog('INFO', 'ui:remote-log', 'Toggle: ' + (next ? 'enabled' : 'disabled')); return next; })}
                     onFocused={setFocusedAction}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>Enable Remote Logging</h3>
                     <p className='text-gray-300 mt-6 text-base/7'>

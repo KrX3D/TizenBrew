@@ -18,17 +18,13 @@ import { ToastContainer, useToast, setGlobalToast } from './components/Toast.jsx
 
 function PageChangeLogger() {
   const loc = useLocation();
-  const context = useContext(GlobalStateContext);
   const prevPath = useRef('');
 
   useEffect(() => {
     const path = loc.path || '';
-    if (path && path !== prevPath.current && context.state.client) {
+    if (path && path !== prevPath.current) {
       prevPath.current = path;
-      context.state.client.send({
-        type: Events.LogEvent,
-        payload: { level: 'INFO', source: 'ui', message: `Page: ${path}` }
-      });
+      if (window.__tbLog) window.__tbLog('INFO', 'ui:nav', 'Page: ' + path);
     }
   }, [loc.path]);
 
@@ -43,6 +39,28 @@ export default function App() {
   const { toasts, toast } = useToast();
   window.dispatch = context.dispatch;
   window.state = context.state;
+
+  // Keep a ref with the latest state so window.__tbLog never closes over stale values
+  const logStateRef = useRef({ client: null, remoteLogging: null });
+  logStateRef.current = {
+    client: context.state.client,
+    remoteLogging: context.state.sharedData?.remoteLogging
+  };
+
+  // Global log helper — only ships the log if remote logging is enabled.
+  // Components call window.__tbLog(level, source, message) without needing
+  // to import anything or check the enabled flag themselves.
+  useEffect(() => {
+    window.__tbLog = function(level, source, message) {
+      const { client, remoteLogging } = logStateRef.current;
+      if (!remoteLogging || !remoteLogging.enabled || !client) return;
+      client.send({
+        type: Events.LogEvent,
+        payload: { level: level || 'INFO', source: source || 'ui', message: String(message) }
+      });
+    };
+    return () => { window.__tbLog = null; };
+  }, []);
 
   useEffect(() => { setGlobalToast(toast); }, [toast]);
 

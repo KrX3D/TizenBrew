@@ -110,6 +110,7 @@ export default function ModuleManager() {
             },
             onConfirm: () => {
                 setModal(null);
+                if (window.__tbLog) window.__tbLog('INFO', 'ui:modules', 'Remove: ' + module.fullName);
                 state.client.send({ type: Events.ModuleAction, payload: { action: 'remove', module: module.fullName } });
                 state.client.send({ type: Events.GetModules, payload: true });
                 // After the module list re-renders, focus the card at the same
@@ -157,6 +158,7 @@ export default function ModuleManager() {
 
                 <ItemBasic focusKey="mm-add-npm" onClick={() => {
                     const mode = localStorage.getItem('addModuleSourceMode') || 'cdn';
+                    if (window.__tbLog) window.__tbLog('INFO', 'ui:modules', 'Open add NPM form [' + mode + ']');
                     loc.route(`/tizenbrew-ui/dist/index.html/module-manager/add?type=npm&sourceMode=${mode}`);
                 }}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>{t('moduleManager.addNPM')}</h3>
@@ -165,6 +167,7 @@ export default function ModuleManager() {
 
                 <ItemBasic focusKey="mm-add-gh" onClick={() => {
                     const mode = localStorage.getItem('addModuleSourceMode') || 'cdn';
+                    if (window.__tbLog) window.__tbLog('INFO', 'ui:modules', 'Open add GitHub form [' + mode + ']');
                     loc.route(`/tizenbrew-ui/dist/index.html/module-manager/add?type=gh&sourceMode=${mode}`);
                 }}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>{t('moduleManager.addGH')}</h3>
@@ -201,7 +204,11 @@ function AddModule() {
 
     useEffect(() => {
         function onKeyDown(e) {
-            if (e.keyCode === 405) setSourceMode(prev => prev === 'cdn' ? 'direct' : 'cdn');
+            if (e.keyCode === 405) setSourceMode(prev => {
+                const next = prev === 'cdn' ? 'direct' : 'cdn';
+                if (window.__tbLog) window.__tbLog('INFO', 'ui:modules', 'Source mode: ' + next);
+                return next;
+            });
         }
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
@@ -212,6 +219,7 @@ function AddModule() {
         submittedRef.current = true;
         const normalized = moduleType === 'gh' ? normalizeGitHubModule(name) : normalizeNpmModule(name);
         if (normalized) {
+            if (window.__tbLog) window.__tbLog('INFO', 'ui:modules', 'Add: ' + normalized + ' [' + sourceMode + ']');
             state.client.send({ type: Events.ModuleAction, payload: { action: 'add', module: normalized, sourceMode } });
         }
         state.client.send({ type: Events.GetModules, payload: true });
