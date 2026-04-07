@@ -70,6 +70,7 @@ export default function UserAgentSettings() {
                         <ItemBasic key={idx} selected={isSelected} shouldFocus={idx === 0} onClick={() => {
                             const userAgent = typeof ua.userAgent === 'function' ? ua.userAgent() : ua.userAgent;
                             if (confirm(`${t('settings.setUaTo', { userAgent })}\n\n${t('settings.uaNegativeEffects')}`)) {
+                                if (window.__tbLog) window.__tbLog('INFO', 'ui:settings', 'User-Agent set: ' + ua.name);
                                 localStorage.setItem('userAgent', userAgent);
                                 alert(t('settings.uaSetRelaunch'));
                                 tizen.application.getCurrentApplication().exit();
@@ -90,6 +91,7 @@ export default function UserAgentSettings() {
 
                 {/* Default — selected when no UA override is set */}
                 <ItemBasic selected={!selectedUA} onClick={() => {
+                    if (window.__tbLog) window.__tbLog('INFO', 'ui:settings', 'User-Agent: default (cleared)');
                     localStorage.removeItem('userAgent');
                     alert(t('settings.uaSetRelaunch'));
                     tizen.application.getCurrentApplication().exit();

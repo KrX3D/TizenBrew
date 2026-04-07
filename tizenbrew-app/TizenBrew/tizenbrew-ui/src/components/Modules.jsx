@@ -36,6 +36,8 @@ function Item({ children, module, id, state, isDefault, onFocused }) {
       toast.info(`🚀 ${module.appName} (${module.version || '?'}) [${src}]\n${pkgUrl}`, 8000);
     }
 
+    if (window.__tbLog) window.__tbLog('INFO', 'ui:home', 'Launch: ' + module.appName + ' (' + (module.version || '?') + ') [' + src + ']');
+
     for (const key of module.keys) tizen.tvinputdevice.registerKey(key);
     state.client.send({ type: Events.LaunchModule, payload: module });
     if (!module.evaluateScriptOnDocumentStart) location.href = module.appPath;
@@ -79,10 +81,12 @@ export default function Modules() {
 
       if (defaultModule === mod.name) {
         // Blue on already-default → clear
+        if (window.__tbLog) window.__tbLog('INFO', 'ui:home', 'Default module cleared: ' + mod.name);
         state.client.send({ type: Events.ModuleAction, payload: { action: 'clearDefault', module: mod.name } });
         dispatch({ type: 'SET_DEFAULT_MODULE', payload: '' });
       } else {
         // Blue on other module → set as default (clears previous automatically in service)
+        if (window.__tbLog) window.__tbLog('INFO', 'ui:home', 'Default module set: ' + mod.name);
         state.client.send({ type: Events.ModuleAction, payload: { action: 'setDefault', module: mod.name } });
         dispatch({ type: 'SET_DEFAULT_MODULE', payload: mod.name });
       }

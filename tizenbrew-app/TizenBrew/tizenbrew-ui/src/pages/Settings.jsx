@@ -42,6 +42,7 @@ export default function Settings() {
         const now = Date.now();
         if (now - lastCheckTs.current < 1000) return;
         lastCheckTs.current = now;
+        if (window.__tbLog) window.__tbLog('INFO', 'ui:settings', 'Check config');
         if (state.client) state.client.send({ type: Events.CheckTizenBrewConfig });
     }
 
@@ -54,6 +55,7 @@ export default function Settings() {
 
     function handleResetConfirm() {
         setResetModal(false);
+        if (window.__tbLog) window.__tbLog('WARN', 'ui:settings', 'Config reset confirmed');
         if (state.client) state.client.send({ type: Events.ResetTizenBrewConfig });
         setTimeout(() => setFocus('settings-card-reset'), 80);
     }
@@ -76,6 +78,7 @@ export default function Settings() {
             <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative pb-6">
                 <ItemBasic shouldFocus focusKey="settings-card-autolaunch" onClick={() => {
                     if (state.sharedData.modules?.length === 0) return alert(t('settings.noModules'));
+                    if (window.__tbLog) window.__tbLog('INFO', 'ui:settings', 'Open: Autolaunch');
                     loc.route('/tizenbrew-ui/dist/index.html/settings/change?type=autolaunch');
                 }}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>{t('settings.autolaunch')}</h3>
@@ -84,6 +87,7 @@ export default function Settings() {
 
                 <ItemBasic focusKey="settings-card-autolaunchsvc" onClick={() => {
                     if (state.sharedData.modules?.length === 0) return alert(t('settings.noModules'));
+                    if (window.__tbLog) window.__tbLog('INFO', 'ui:settings', 'Open: Autolaunch Service');
                     loc.route('/tizenbrew-ui/dist/index.html/settings/change?type=autolaunchService');
                 }}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>{t('settings.autolaunchService')}</h3>
@@ -91,6 +95,7 @@ export default function Settings() {
                 </ItemBasic>
 
                 <ItemBasic focusKey="settings-card-ua" onClick={() => {
+                    if (window.__tbLog) window.__tbLog('INFO', 'ui:settings', 'Open: User-Agent');
                     loc.route('/tizenbrew-ui/dist/index.html/settings/change-ua');
                 }}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>{t('settings.useragent')}</h3>
@@ -98,6 +103,7 @@ export default function Settings() {
                 </ItemBasic>
 
                 <ItemBasic focusKey="settings-card-remote-logging" onClick={() => {
+                    if (window.__tbLog) window.__tbLog('INFO', 'ui:settings', 'Open: Remote Logging');
                     loc.route('/tizenbrew-ui/dist/index.html/settings/remote-logging');
                 }}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>{t('settings.remoteLogging')}</h3>
@@ -145,6 +151,7 @@ function Change() {
             returnFocusKey: cardKey,
             onConfirm: () => {
                 setModal(null);
+                if (window.__tbLog) window.__tbLog('INFO', 'ui:settings', 'Autolaunch set: ' + module.appName + ' (' + loc.query.type + ')');
                 state.client.send({ type: Events.ModuleAction, payload: { action: loc.query.type, module: module.fullName } });
                 if (loc.query.type === 'autolaunch') {
                     dispatch({ type: 'SET_AUTOLAUNCH', payload: { autoLaunchModule: module.fullName } });
@@ -163,6 +170,7 @@ function Change() {
             returnFocusKey: disableKey,
             onConfirm: () => {
                 setModal(null);
+                if (window.__tbLog) window.__tbLog('INFO', 'ui:settings', 'Autolaunch disabled (' + loc.query.type + ')');
                 state.client.send({ type: Events.ModuleAction, payload: { action: loc.query.type, module: '' } });
                 if (loc.query.type === 'autolaunch') {
                     dispatch({ type: 'SET_AUTOLAUNCH', payload: { autoLaunchModule: '' } });
