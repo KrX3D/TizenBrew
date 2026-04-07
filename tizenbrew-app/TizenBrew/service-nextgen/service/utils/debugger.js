@@ -177,12 +177,13 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
 
 function sendClientInformation(clientConn, data) {
     const clientConnection = clientConn.get('wsConn');
-    if ((clientConnection && clientConnection.connection && (clientConnection.connection.readyState !== WebSocket.OPEN && !clientConnection.isReady)) || !clientConnection) {
+    if (!clientConnection ||
+        !clientConnection.connection ||
+        clientConnection.connection.readyState !== WebSocket.OPEN ||
+        !clientConnection.isReady) {
         return setTimeout(() => sendClientInformation(clientConn, data), 50);
     }
-    setTimeout(() => {
-        clientConnection.send(data);
-    }, 500);
+    clientConnection.send(data);
 }
 
 function setWebApisPath() {}
