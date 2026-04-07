@@ -177,12 +177,17 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
 
 function sendClientInformation(clientConn, data) {
     const clientConnection = clientConn.get('wsConn');
-    if ((clientConnection && clientConnection.connection && (clientConnection.connection.readyState !== WebSocket.OPEN && !clientConnection.isReady)) || !clientConnection) {
+    // Require the connection to be open AND marked ready (isReady is set only after
+    // the client sends GetModules/Ready). This prevents sending to a closed old
+    // connection that still has isReady=true from a previous session, which would
+    // silently drop the message and leave the UI hung.
+    if (!clientConnection ||
+        !clientConnection.connection ||
+        clientConnection.connection.readyState !== WebSocket.OPEN ||
+        !clientConnection.isReady) {
         return setTimeout(() => sendClientInformation(clientConn, data), 50);
     }
-    setTimeout(() => {
-        clientConnection.send(data);
-    }, 500);
+    clientConnection.send(data);
 }
 
 function setWebApisPath() {}

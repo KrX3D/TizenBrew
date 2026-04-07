@@ -160,6 +160,7 @@ function startService(context) {
   }
 
   testWS.onopen = () => {
+    testWS.close();
     context.dispatch({
       type: 'SET_STATE',
       payload: 'service.alreadyRunning'
