@@ -8,10 +8,9 @@ function classNames(...classes) {
     return classes.filter(Boolean).join(' ');
 }
 
-// Action card — three layers for TV compatibility:
-//   1. global window keydown (most reliable on Samsung TVs)
-//   2. onEnterPress via spatial nav (works on most firmware)
-//   3. onClick on div (works for pointer/touch)
+// Action card. onClick is pre-debounced by the page before being passed in,
+// so we only need onEnterPress + div onClick (no separate global keydown needed
+// here — the page-level global handler calls the same debounced function).
 function ItemBasic({ children, onClick, shouldFocus, selected, onFocused, focusKey }) {
     const { ref, focused, focusSelf } = useFocusable({ focusKey, onEnterPress: onClick });
     useEffect(() => {
@@ -34,7 +33,6 @@ function ItemBasic({ children, onClick, shouldFocus, selected, onFocused, focusK
 }
 
 // Input card — read-only by default so spatial nav moves over it freely.
-// OK / click opens the keyboard. Enter or Back closes it and restores focus.
 function InputCard({ label, value, onChange, placeholder, onFocused, isEditingRef, focusKey }) {
     const { ref, focused, focusSelf } = useFocusable({ focusKey });
     const inputRef = useRef(null);
@@ -95,7 +93,7 @@ function InputCard({ label, value, onChange, placeholder, onFocused, isEditingRe
 }
 
 export default function RemoteLoggingSettings() {
-    const { state } = useContext(GlobalStateContext);
+    const { state, dispatch } = useContext(GlobalStateContext);
     const loc = useLocation();
     const remoteLoggingInState = state?.sharedData?.remoteLogging;
 
@@ -106,8 +104,20 @@ export default function RemoteLoggingSettings() {
     const isEditingRef     = useRef(false);
     const focusedActionRef = useRef(null);
 
-    // Global Enter handler — Samsung TVs send all key events to window,
-    // not to the spatially-focused div element.
+    // Debounce: prevents multi-fire when global keydown + onEnterPress + onClick
+    // all trigger on the same remote-control OK press (especially on Tizen 6.x
+    // which simulates a DOM click on the focused element in addition to keydown).
+    const lastActionTs = useRef(0);
+    function debounce(fn) {
+        return function () {
+            const now = Date.now();
+            if (now - lastActionTs.current < 300) return;
+            lastActionTs.current = now;
+            fn.apply(this, arguments);
+        };
+    }
+
+    // Global Enter handler — catches keydowns the spatial nav lib might miss.
     useEffect(() => {
         function onKeyDown(e) {
             if (e.keyCode === 13 && !isEditingRef.current && focusedActionRef.current) {
@@ -134,21 +144,27 @@ export default function RemoteLoggingSettings() {
         }
     }, [remoteLoggingInState]);
 
+    // Debounced actions — shared debounce ref so any layer that fires first
+    // wins and the other layers are silently ignored within the 300ms window.
+    const doToggle = debounce(() => setEnabled(e => {
+        const next = !e;
+        if (window.__tbLog) window.__tbLog('INFO', 'ui:remote-log', 'Toggle: ' + (next ? 'enabled' : 'disabled'));
+        return next;
+    }));
+
     function save() {
         if (!state.client) return;
         const p = Number(port) || 3030;
+        const newCfg = { enabled, ip, port: p };
         if (window.__tbLog) window.__tbLog('INFO', 'ui:remote-log', 'Saved: enabled=' + enabled + ' ip=' + ip + ' port=' + p);
-        state.client.send({
-            type: Events.SetRemoteLogging,
-            payload: { enabled, ip, port: p }
-        });
-        // Use history.back() so remote-logging is popped from the stack —
-        // pressing Back on Settings then correctly returns to the main menu.
+        state.client.send({ type: Events.SetRemoteLogging, payload: newCfg });
+        // Update state immediately so window.__tbLog sees the new enabled value
+        // before the user navigates away and triggers other logged actions.
+        dispatch({ type: 'SET_REMOTE_LOGGING', payload: newCfg });
         history.back();
     }
+    const doSave = debounce(save);
 
-    // Direct POST from the UI browser to /tv-log — same endpoint as TizenYouTube.
-    // Works regardless of whether remote logging is enabled in the service config.
     async function sendTest() {
         const toast = window.__globalToast;
         if (!ip) { if (toast) toast.error('Enter an IP address first'); return; }
@@ -168,11 +184,7 @@ export default function RemoteLoggingSettings() {
                 + '[' + ts + '] ▶ UI:TEST\n'
                 + '─────────────────────────────────────────────────────────────────────\n'
                 + '  [INFO ] ' + ts.slice(11) + '  ' + msg,
-            app:     'TizenBrew',
-            ts,
-            level:   'INFO',
-            context: 'ui:test',
-            message: msg
+            app: 'TizenBrew', ts, level: 'INFO', context: 'ui:test', message: msg
         });
         try {
             const res = await fetch(url, {
@@ -181,13 +193,18 @@ export default function RemoteLoggingSettings() {
                 body
             });
             if (toast) {
-                if (res.ok || res.status === 204) { toast.success('Test sent to ' + url); if (window.__tbLog) window.__tbLog('INFO', 'ui:remote-log', 'Test log sent to ' + url); }
-                else toast.error('Receiver returned HTTP ' + res.status);
+                if (res.ok || res.status === 204) {
+                    toast.success('Test sent to ' + url);
+                    if (window.__tbLog) window.__tbLog('INFO', 'ui:remote-log', 'Test log sent to ' + url);
+                } else {
+                    toast.error('Receiver returned HTTP ' + res.status);
+                }
             }
         } catch (e) {
             if (toast) toast.error('Connection failed: ' + (e.message || 'network error'));
         }
     }
+    const doTest = debounce(sendTest);
 
     function setFocusedAction(fn) { focusedActionRef.current = fn; }
 
@@ -196,8 +213,7 @@ export default function RemoteLoggingSettings() {
             <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative pb-6">
 
                 <ItemBasic shouldFocus selected={enabled} focusKey="rl-toggle"
-                    onClick={() => setEnabled(e => { const next = !e; if (window.__tbLog) window.__tbLog('INFO', 'ui:remote-log', 'Toggle: ' + (next ? 'enabled' : 'disabled')); return next; })}
-                    onFocused={setFocusedAction}>
+                    onClick={doToggle} onFocused={setFocusedAction}>
                     <h3 className='text-indigo-400 text-base/7 font-semibold'>Enable Remote Logging</h3>
                     <p className='text-gray-300 mt-6 text-base/7'>
                         {enabled ? 'Enabled — logs are sent to the receiver.' : 'Disabled — no logs are sent.'}
@@ -217,12 +233,12 @@ export default function RemoteLoggingSettings() {
                     onChange={setPort} isEditingRef={isEditingRef}
                     onFocused={setFocusedAction} focusKey="rl-port" />
 
-                <ItemBasic onClick={save} focusKey="rl-save" onFocused={setFocusedAction}>
+                <ItemBasic onClick={doSave} focusKey="rl-save" onFocused={setFocusedAction}>
                     <h3 className='text-green-400 text-base/7 font-semibold'>Save Settings</h3>
                     <p className='text-gray-300 mt-6 text-base/7'>Apply and return to Settings.</p>
                 </ItemBasic>
 
-                <ItemBasic onClick={sendTest} focusKey="rl-test" onFocused={setFocusedAction}>
+                <ItemBasic onClick={doTest} focusKey="rl-test" onFocused={setFocusedAction}>
                     <h3 className='text-yellow-400 text-base/7 font-semibold'>Send Test Log</h3>
                     <p className='text-gray-300 mt-6 text-base/7'>
                         POSTs directly to the receiver to verify the connection.
