@@ -165,21 +165,19 @@ class Client {
                 this.modulesLoaded = true;
                 this.send({ type: Events.Ready });
 
-                // Defer all logging so fetch() calls fire AFTER this WS handler returns.
-                // Calling fetch() synchronously inside onMessage blocks Tizen's WS event loop.
-                var _modules = modules, _defaultModule = defaultModule, _rateLimited = rateLimitedModules, _wasFirst = wasFirstLoad;
-                setTimeout(function() {
-                    if (!window.__tbLog) return;
+                // Log summary + per-module details (window.__tbRemoteLogging is set
+                // synchronously so this fires correctly even during startup).
+                if (window.__tbLog) {
                     window.__tbLog('INFO', 'modules',
-                        (_wasFirst ? 'Startup' : 'Reload') + ': ' + _modules.length + ' module(s)'
-                        + (_defaultModule ? ' | default=' + _defaultModule : '')
-                        + (_rateLimited.length > 0 ? ' | rateLimited=' + _rateLimited.join(', ') : '')
+                        (wasFirstLoad ? 'Startup' : 'Reload') + ': ' + modules.length + ' module(s)'
+                        + (defaultModule ? ' | default=' + defaultModule : '')
+                        + (rateLimitedModules.length > 0 ? ' | rateLimited=' + rateLimitedModules.join(', ') : '')
                     );
-                    _modules.forEach(function(m) {
-                        var pkgUrl = getResolvedPackageUrl(m);
-                        var configured = (m.sourceMode || 'cdn').toUpperCase();
-                        var used = m.rateLimited ? 'CDN-FALLBACK' : configured;
-                        var ok = m.appName && m.appName !== 'Unknown Module';
+                    modules.forEach(function(m) {
+                        const pkgUrl = getResolvedPackageUrl(m);
+                        const configured = (m.sourceMode || 'cdn').toUpperCase();
+                        const used = m.rateLimited ? 'CDN-FALLBACK' : configured;
+                        const ok = m.appName && m.appName !== 'Unknown Module';
                         window.__tbLog(ok ? 'INFO' : 'WARN', 'modules',
                             (ok ? '' : '[UNKNOWN] ') + (m.appName || m.fullName) + ' ' + (m.version ? 'v' + m.version : '(no version)')
                             + ' | configured=' + configured + ' used=' + used
@@ -188,7 +186,7 @@ class Client {
                             + '\n  app=' + (m.appPath || '(none)')
                         );
                     });
-                }, 0);
+                }
 
                 if (window.TIZEN_WEBAPIS_PATH) {
                     this.send({ type: Events.WebApisPath, payload: window.TIZEN_WEBAPIS_PATH });
@@ -305,10 +303,7 @@ class Client {
                 toast.info(msg, 12000);
 
                 if (payload.config !== null && payload.config !== undefined) {
-                    var _cfg = payload.config;
-                    setTimeout(function() {
-                        window.__tbLog && window.__tbLog('INFO', 'config-check', 'Full config: ' + JSON.stringify(_cfg));
-                    }, 0);
+                    window.__tbLog && window.__tbLog('INFO', 'config-check', 'Full config: ' + JSON.stringify(payload.config));
                 }
                 break;
             }
@@ -333,10 +328,7 @@ class Client {
                 window.__tbRemoteLogging = payload || null;
                 this.context.dispatch({ type: 'SET_REMOTE_LOGGING', payload });
                 if (payload && payload.enabled) {
-                    // Defer so fetch() fires after this WS handler returns (avoids blocking WS event loop).
-                    setTimeout(function() {
-                        window.__tbLog && window.__tbLog('INFO', 'startup', 'TizenBrew UI connected | remote logging active | receiver=' + payload.ip + ':' + (payload.port || 3030));
-                    }, 0);
+                    window.__tbLog && window.__tbLog('INFO', 'startup', 'TizenBrew UI connected | remote logging active | receiver=' + payload.ip + ':' + (payload.port || 3030));
                 }
                 break;
             }
