@@ -165,7 +165,28 @@ class Client {
                 this.modulesLoaded = true;
                 this.send({ type: Events.Ready });
 
-                window.__tbLog && window.__tbLog('INFO', 'modules', (wasFirstLoad ? 'Startup' : 'Reload') + ': ' + modules.length + ' module(s) loaded' + (defaultModule ? ', default=' + defaultModule : '') + (rateLimitedModules.length > 0 ? ', rateLimited=' + rateLimitedModules.join(',') : ''));
+                // Log summary + per-module details (window.__tbRemoteLogging is set
+                // synchronously so this fires correctly even during startup).
+                if (window.__tbLog) {
+                    window.__tbLog('INFO', 'modules',
+                        (wasFirstLoad ? 'Startup' : 'Reload') + ': ' + modules.length + ' module(s)'
+                        + (defaultModule ? ' | default=' + defaultModule : '')
+                        + (rateLimitedModules.length > 0 ? ' | rateLimited=' + rateLimitedModules.join(', ') : '')
+                    );
+                    modules.forEach(function(m) {
+                        const pkgUrl = getResolvedPackageUrl(m);
+                        const configured = (m.sourceMode || 'cdn').toUpperCase();
+                        const used = m.rateLimited ? 'CDN-FALLBACK' : configured;
+                        const ok = m.appName && m.appName !== 'Unknown Module';
+                        window.__tbLog(ok ? 'INFO' : 'WARN', 'modules',
+                            (ok ? '' : '[UNKNOWN] ') + (m.appName || m.fullName) + ' ' + (m.version ? 'v' + m.version : '(no version)')
+                            + ' | configured=' + configured + ' used=' + used
+                            + (m.rateLimited ? ' [rate-limited]' : '')
+                            + '\n  pkg=' + pkgUrl
+                            + '\n  app=' + (m.appPath || '(none)')
+                        );
+                    });
+                }
 
                 if (window.TIZEN_WEBAPIS_PATH) {
                     this.send({ type: Events.WebApisPath, payload: window.TIZEN_WEBAPIS_PATH });
@@ -303,13 +324,11 @@ class Client {
             }
 
             case Events.GetRemoteLogging: {
+                // Set synchronously so window.__tbLog works immediately (no React render needed).
+                window.__tbRemoteLogging = payload || null;
                 this.context.dispatch({ type: 'SET_REMOTE_LOGGING', payload });
-                // Log startup message now that remoteLogging state is known.
-                // Use setTimeout so the dispatch above has flushed into logStateRef.
                 if (payload && payload.enabled) {
-                    setTimeout(function() {
-                        window.__tbLog && window.__tbLog('INFO', 'startup', 'TizenBrew UI connected — remote logging active');
-                    }, 0);
+                    window.__tbLog && window.__tbLog('INFO', 'startup', 'TizenBrew UI connected | remote logging active | receiver=' + payload.ip + ':' + (payload.port || 3030));
                 }
                 break;
             }
