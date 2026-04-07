@@ -81,6 +81,7 @@ class Client {
     }
 
     onOpen() {
+        window.__tbLog && window.__tbLog('INFO', 'startup', 'UI connected to service WebSocket');
         const data = tizen.application.getCurrentApplication().getRequestedAppControl().appControl.data;
         if (data.length > 0 && data[0].value.length > 0) {
             try {
@@ -159,8 +160,11 @@ class Client {
                 this.context.dispatch({ type: 'SET_MODULES', payload: modules });
                 this.context.dispatch({ type: 'SET_DEFAULT_MODULE', payload: defaultModule });
                 this.modules = modules;
+                const wasFirstLoad = !this.modulesLoaded;
                 this.modulesLoaded = true;
                 this.send({ type: Events.Ready });
+
+                window.__tbLog && window.__tbLog('INFO', 'modules', (wasFirstLoad ? 'Startup' : 'Reload') + ': ' + modules.length + ' module(s) loaded' + (defaultModule ? ', default=' + defaultModule : '') + (rateLimitedModules.length > 0 ? ', rateLimited=' + rateLimitedModules.join(',') : ''));
 
                 if (window.TIZEN_WEBAPIS_PATH) {
                     this.send({ type: Events.WebApisPath, payload: window.TIZEN_WEBAPIS_PATH });
@@ -275,6 +279,10 @@ class Client {
                 }
 
                 toast.info(msg, 12000);
+
+                if (payload.config !== null && payload.config !== undefined) {
+                    window.__tbLog && window.__tbLog('INFO', 'config-check', 'Full config: ' + JSON.stringify(payload.config));
+                }
                 break;
             }
 
