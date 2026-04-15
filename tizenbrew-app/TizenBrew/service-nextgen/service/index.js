@@ -201,6 +201,7 @@ module.exports.onStart = function () {
 
 
     wsServer.on('connection', (ws) => {
+        logBus.log('DEBUG', 'ws', 'new client connected');
         const wsConn = new Connection(ws);
         for (const event of queuedEvents) {
             wsConn.send(event);
@@ -461,6 +462,7 @@ module.exports.onStart = function () {
                 }
                 case Events.LogEvent: {
                     const { level, source, message } = payload || {};
+                    logBus.log('DEBUG', 'ws', 'LogEvent from ' + String(source) + ': ' + String(message || '').slice(0, 100));
                     logBus.log(level || 'INFO', source || 'ui', message || '');
                     break;
                 }
