@@ -1,5 +1,6 @@
 import { useFocusable } from '@noriginmedia/norigin-spatial-navigation'
 import { useEffect, useRef, useContext } from 'react';
+import { useTranslation } from 'react-i18next';
 import { GlobalStateContext } from './ClientContext.jsx';
 import { Events, getResolvedPackageUrl } from './WebSocketClient.js';
 
@@ -13,7 +14,9 @@ function getModuleTypeLabel(module) {
 }
 
 function Item({ children, module, id, state, isDefault, onFocused }) {
+  const { t } = useTranslation();
   const { ref, focused, focusSelf } = useFocusable();
+  const lastClickTs = useRef(0);
 
   useEffect(() => {
     if (focused) {
@@ -28,9 +31,16 @@ function Item({ children, module, id, state, isDefault, onFocused }) {
   }, []);
 
   function handleOnClick() {
+    // Debounce: Tizen 6.x fires both the global keydown handler click and a
+    // native simulated DOM click on OK press, which would double-launch.
+    const now = Date.now();
+    if (now - lastClickTs.current < 300) return;
+    lastClickTs.current = now;
+
     const toast = window.__globalToast;
     const pkgUrl = getResolvedPackageUrl(module);
     const src = (module.sourceMode || 'cdn').toUpperCase();
+    const ua = localStorage.getItem('userAgent') || '(default)';
 
     if (toast) {
       toast.info(`🚀 ${module.appName} (${module.version || '?'}) [${src}]\n${pkgUrl}`, 8000);
@@ -42,6 +52,7 @@ function Item({ children, module, id, state, isDefault, onFocused }) {
         'Launch: ' + module.appName + ' ' + (module.version ? 'v' + module.version : '(no version)')
         + ' | configured=' + src + ' used=' + used
         + (module.rateLimited ? ' [rate-limited]' : '')
+        + ' | ua=' + (ua.length > 80 ? ua.substring(0, 80) + '…' : ua)
         + '\n  pkg=' + pkgUrl
         + '\n  app=' + (module.appPath || '(none)')
       );
@@ -66,7 +77,7 @@ function Item({ children, module, id, state, isDefault, onFocused }) {
     >
       {isDefault && (
         <span className='absolute top-3 right-3 text-xs bg-blue-600 text-white px-2 py-1 rounded'>
-          Default
+          {t('settings.default')}
         </span>
       )}
       {children}

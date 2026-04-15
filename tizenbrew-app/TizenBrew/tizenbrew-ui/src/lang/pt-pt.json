@@ -38,7 +38,24 @@
         "uaSetRelaunch": "User-Agent definido. Reinicie a aplicação para aplicar as alterações.",
         "uaNegativeEffects": "Note que, mesmo que isso possa ter efeitos positivos, também poderá ter efeitos negativos.",
         "language": "Definições de idioma",
-        "languageDesc": "Mudar o idioma do aplicação."
+        "languageDesc": "Mudar o idioma do aplicação.",
+        "selected": "Selecionado",
+        "remoteLogging": "Registo remoto",
+        "remoteLoggingDesc": "Enviar registos do serviço e módulos via HTTP para um receptor no seu PC."
+    },
+    "remoteLogPage": {
+        "enableTitle": "Ativar registo remoto",
+        "enabledDesc": "Ativado — registos são enviados ao receptor.",
+        "disabledDesc": "Desativado — nenhum registo é enviado.",
+        "on": "ON",
+        "receiverIp": "Endereço IP do receptor",
+        "receiverPort": "Porta do receptor",
+        "saveTitle": "Guardar definições",
+        "saveDesc": "Aplicar e voltar às definições.",
+        "testTitle": "Enviar registo de teste",
+        "testDesc": "Envia diretamente ao receptor para verificar a ligação. Funciona mesmo com o registo desativado.",
+        "enterIpFirst": "Introduza primeiro um endereço IP",
+        "enterToConfirm": "Enter para confirmar"
     },
     "__contributors": [
         "patricncosta"

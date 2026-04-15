@@ -34,6 +34,23 @@
     "uaSetRelaunch": "Se ha configurado el agente de usuario. Reinicie la aplicación para aplicar los cambios.",
     "uaNegativeEffects": "Ten en cuenta que, aunque esto podría tener efectos positivos, también podría tener efectos negativos.",
     "language": "Ajustes de idioma",
-    "languageDesc": "Cambia el idioma de la aplicación."
+    "languageDesc": "Cambia el idioma de la aplicación.",
+    "selected": "Seleccionado",
+    "remoteLogging": "Registro remoto",
+    "remoteLoggingDesc": "Enviar registros del servicio y módulos por HTTP a un receptor en tu PC."
+  },
+  "remoteLogPage": {
+    "enableTitle": "Activar el registro remoto",
+    "enabledDesc": "Activado — los registros se envían al receptor.",
+    "disabledDesc": "Desactivado — no se envían registros.",
+    "on": "ON",
+    "receiverIp": "Dirección IP del receptor",
+    "receiverPort": "Puerto del receptor",
+    "saveTitle": "Guardar ajustes",
+    "saveDesc": "Aplicar y volver a ajustes.",
+    "testTitle": "Enviar registro de prueba",
+    "testDesc": "Envía directamente al receptor para verificar la conexión. Funciona aunque el registro esté desactivado.",
+    "enterIpFirst": "Introduce primero una dirección IP",
+    "enterToConfirm": "Enter para confirmar"
   }
 }

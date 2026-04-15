@@ -52,7 +52,24 @@
         "uaSetRelaunch": "User-Agent set. Relaunch the app to apply changes.",
         "uaNegativeEffects": "Let op er zijn positieve effecten, maar ook negatieve effecten.",
         "language": "Taal Instellingen",
-        "languageDesc": "Verander de taal van TizenBrew."
+        "languageDesc": "Verander de taal van TizenBrew.",
+        "selected": "Geselecteerd",
+        "remoteLogging": "Remote Logging",
+        "remoteLoggingDesc": "Dienst- en modulelogs via HTTP sturen naar een ontvanger op je pc."
+    },
+    "remoteLogPage": {
+        "enableTitle": "Remote Logging inschakelen",
+        "enabledDesc": "Ingeschakeld — logs worden naar de ontvanger gestuurd.",
+        "disabledDesc": "Uitgeschakeld — er worden geen logs gestuurd.",
+        "on": "AAN",
+        "receiverIp": "Ontvanger IP-adres",
+        "receiverPort": "Ontvanger poort",
+        "saveTitle": "Instellingen opslaan",
+        "saveDesc": "Toepassen en terug naar instellingen.",
+        "testTitle": "Testlog versturen",
+        "testDesc": "Verstuurt direct naar de ontvanger om de verbinding te testen. Werkt ook als logging uitgeschakeld is.",
+        "enterIpFirst": "Voer eerst een IP-adres in",
+        "enterToConfirm": "Enter om te bevestigen"
     },
     "__contributors": [
         "Owen Ramaekers"

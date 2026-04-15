@@ -60,18 +60,23 @@ function ItemBasic({ children, onClick, shouldFocus, selected }) {
 export default function UserAgentSettings() {
     const { t } = useTranslation();
     const selectedUA = localStorage.getItem('userAgent') || '';
+    const selectedUAName = localStorage.getItem('userAgentName') || '';
 
     return (
         <div className="relative isolate lg:px-8 pt-6">
             <div className="mx-auto flex flex-wrap justify-center gap-x-2 relative pb-6">
                 {UserAgents.map((ua, idx) => {
-                    const isSelected = typeof ua.userAgent === 'string' && ua.userAgent === selectedUA;
+                    // For string UAs match by value; for function UAs match by stored name.
+                    const isSelected = typeof ua.userAgent === 'function'
+                        ? selectedUAName === ua.name
+                        : ua.userAgent === selectedUA;
                     return (
                         <ItemBasic key={idx} selected={isSelected} shouldFocus={idx === 0} onClick={() => {
                             const userAgent = typeof ua.userAgent === 'function' ? ua.userAgent() : ua.userAgent;
                             if (confirm(`${t('settings.setUaTo', { userAgent })}\n\n${t('settings.uaNegativeEffects')}`)) {
-                                if (window.__tbLog) window.__tbLog('INFO', 'ui:settings', 'User-Agent set: ' + ua.name);
+                                if (window.__tbLog) window.__tbLog('INFO', 'ui:settings', 'User-Agent set: ' + t(ua.name));
                                 localStorage.setItem('userAgent', userAgent);
+                                localStorage.setItem('userAgentName', ua.name);
                                 alert(t('settings.uaSetRelaunch'));
                                 tizen.application.getCurrentApplication().exit();
                             }
@@ -93,6 +98,7 @@ export default function UserAgentSettings() {
                 <ItemBasic selected={!selectedUA} onClick={() => {
                     if (window.__tbLog) window.__tbLog('INFO', 'ui:settings', 'User-Agent: default (cleared)');
                     localStorage.removeItem('userAgent');
+                    localStorage.removeItem('userAgentName');
                     alert(t('settings.uaSetRelaunch'));
                     tizen.application.getCurrentApplication().exit();
                 }}>

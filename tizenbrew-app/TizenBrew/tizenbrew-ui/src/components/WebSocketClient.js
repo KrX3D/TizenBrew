@@ -119,9 +119,7 @@ class Client {
             }
 
             case Events.GetDebugStatus: {
-                const state = this.context.state;
-                state.sharedData.debugStatus = payload;
-                this.context.dispatch({ type: 'SET_SHARED_DATA', payload: state.sharedData });
+                this.context.dispatch({ type: 'SET_DEBUG_STATUS', payload });
 
                 if (this.shouldRelaunchInDebug(payload)) {
                     this.send({ type: Events.CanLaunchInDebug });
