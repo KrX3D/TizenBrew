@@ -45,10 +45,13 @@ module.exports.onStart = function () {
         let body = '';
         req.on('data', (chunk) => { body += chunk; });
         req.on('end', () => {
+            logBus.log('DEBUG', 'tv-log', 'POST received, body length: ' + body.length + ', body: ' + body.slice(0, 300));
             try {
                 const entry = JSON.parse(body);
                 logBus.log(entry.level || 'INFO', entry.context || 'TizenTube', entry._formatted || entry.message || '');
-            } catch (_) {}
+            } catch (err) {
+                logBus.log('ERROR', 'tv-log', 'JSON.parse failed: ' + String(err) + ' | raw: ' + JSON.stringify(body.slice(0, 200)));
+            }
             res.end('{"ok":true}');
         });
     });
