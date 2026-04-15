@@ -32,7 +32,22 @@ module.exports.onStart = function () {
     let deviceIP;
     const isTizen3 = tizen.systeminfo.getCapability('http://tizen.org/feature/platform.version').startsWith('3.0');
 
-    // HTTP Proxy for modules 
+    // Log relay — TizenTube POSTs log entries here; we pipe them into logBus
+    // so remoteLogger forwards them to the PS1 receiver over native http.request.
+    app.post('/tv-log', (req, res) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        let body = '';
+        req.on('data', (chunk) => { body += chunk; });
+        req.on('end', () => {
+            try {
+                const entry = JSON.parse(body);
+                logBus.log(entry.level || 'INFO', entry.context || 'TizenTube', entry._formatted || entry.message || '');
+            } catch (_) {}
+            res.end('{"ok":true}');
+        });
+    });
+
+    // HTTP Proxy for modules
     app.all('*', (req, res) => {
         if (req.url.startsWith('/module/')) {
             const splittedUrl = req.url.split('/');
