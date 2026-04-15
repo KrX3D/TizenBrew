@@ -1,5 +1,6 @@
 import { useFocusable } from '@noriginmedia/norigin-spatial-navigation';
 import { useContext, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLocation } from 'preact-iso';
 import { GlobalStateContext } from '../components/ClientContext.jsx';
 import { Events } from '../components/WebSocketClient.js';
@@ -34,6 +35,7 @@ function ItemBasic({ children, onClick, shouldFocus, selected, onFocused, focusK
 
 // Input card — read-only by default so spatial nav moves over it freely.
 function InputCard({ label, value, onChange, placeholder, onFocused, isEditingRef, focusKey }) {
+    const { t } = useTranslation();
     const { ref, focused, focusSelf } = useFocusable({ focusKey });
     const inputRef = useRef(null);
     const [editing, setEditing] = useState(false);
@@ -86,13 +88,14 @@ function InputCard({ label, value, onChange, placeholder, onFocused, isEditingRe
                 onBlur={() => { if (editing) closeKeyboard(); }}
             />
             {editing && (
-                <span className='absolute bottom-3 right-3 text-xs text-gray-500'>Enter to confirm</span>
+                <span className='absolute bottom-3 right-3 text-xs text-gray-500'>{t('remoteLogPage.enterToConfirm')}</span>
             )}
         </div>
     );
 }
 
 export default function RemoteLoggingSettings() {
+    const { t } = useTranslation();
     const { state, dispatch } = useContext(GlobalStateContext);
     const loc = useLocation();
     const remoteLoggingInState = state?.sharedData?.remoteLogging;
@@ -167,7 +170,7 @@ export default function RemoteLoggingSettings() {
 
     async function sendTest() {
         const toast = window.__globalToast;
-        if (!ip) { if (toast) toast.error('Enter an IP address first'); return; }
+        if (!ip) { if (toast) toast.error(t('remoteLogPage.enterIpFirst')); return; }
         const targetPort = Number(port) || 3030;
         const url = 'http://' + ip + ':' + targetPort + '/tv-log';
         const now = new Date();
@@ -214,35 +217,34 @@ export default function RemoteLoggingSettings() {
 
                 <ItemBasic shouldFocus selected={enabled} focusKey="rl-toggle"
                     onClick={doToggle} onFocused={setFocusedAction}>
-                    <h3 className='text-indigo-400 text-base/7 font-semibold'>Enable Remote Logging</h3>
+                    <h3 className='text-indigo-400 text-base/7 font-semibold'>{t('remoteLogPage.enableTitle')}</h3>
                     <p className='text-gray-300 mt-6 text-base/7'>
-                        {enabled ? 'Enabled — logs are sent to the receiver.' : 'Disabled — no logs are sent.'}
+                        {enabled ? t('remoteLogPage.enabledDesc') : t('remoteLogPage.disabledDesc')}
                     </p>
                     {enabled && (
                         <span className='absolute top-3 right-3 text-xs bg-indigo-600 text-white px-2 py-1 rounded'>
-                            ON
+                            {t('remoteLogPage.on')}
                         </span>
                     )}
                 </ItemBasic>
 
-                <InputCard label="Receiver IP Address" value={ip} placeholder="192.168.1.100"
+                <InputCard label={t('remoteLogPage.receiverIp')} value={ip} placeholder="192.168.1.100"
                     onChange={setIp} isEditingRef={isEditingRef}
                     onFocused={setFocusedAction} focusKey="rl-ip" />
 
-                <InputCard label="Receiver Port" value={port} placeholder="3030"
+                <InputCard label={t('remoteLogPage.receiverPort')} value={port} placeholder="3030"
                     onChange={setPort} isEditingRef={isEditingRef}
                     onFocused={setFocusedAction} focusKey="rl-port" />
 
                 <ItemBasic onClick={doSave} focusKey="rl-save" onFocused={setFocusedAction}>
-                    <h3 className='text-green-400 text-base/7 font-semibold'>Save Settings</h3>
-                    <p className='text-gray-300 mt-6 text-base/7'>Apply and return to Settings.</p>
+                    <h3 className='text-green-400 text-base/7 font-semibold'>{t('remoteLogPage.saveTitle')}</h3>
+                    <p className='text-gray-300 mt-6 text-base/7'>{t('remoteLogPage.saveDesc')}</p>
                 </ItemBasic>
 
                 <ItemBasic onClick={doTest} focusKey="rl-test" onFocused={setFocusedAction}>
-                    <h3 className='text-yellow-400 text-base/7 font-semibold'>Send Test Log</h3>
+                    <h3 className='text-yellow-400 text-base/7 font-semibold'>{t('remoteLogPage.testTitle')}</h3>
                     <p className='text-gray-300 mt-6 text-base/7'>
-                        POSTs directly to the receiver to verify the connection.
-                        Works even when logging is disabled.
+                        {t('remoteLogPage.testDesc')}
                     </p>
                 </ItemBasic>
 

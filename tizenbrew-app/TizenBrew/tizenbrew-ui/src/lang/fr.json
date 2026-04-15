@@ -38,7 +38,24 @@
         "uaSetRelaunch": "User-Agent set. Relaunch the app to apply changes.",
         "uaNegativeEffects": "Notice : ceci peut avoir des effets aussi bien positifs que négatifs.",
         "language": "Paramètres de langue",
-        "languageDesc": "Changer le langage de votre application."
+        "languageDesc": "Changer le langage de votre application.",
+        "selected": "Sélectionné",
+        "remoteLogging": "Journalisation à distance",
+        "remoteLoggingDesc": "Envoyer les journaux du service et des modules via HTTP à un récepteur sur votre PC."
+    },
+    "remoteLogPage": {
+        "enableTitle": "Activer la journalisation à distance",
+        "enabledDesc": "Activé — les journaux sont envoyés au récepteur.",
+        "disabledDesc": "Désactivé — aucun journal n'est envoyé.",
+        "on": "ON",
+        "receiverIp": "Adresse IP du récepteur",
+        "receiverPort": "Port du récepteur",
+        "saveTitle": "Enregistrer les paramètres",
+        "saveDesc": "Appliquer et retourner aux paramètres.",
+        "testTitle": "Envoyer un journal de test",
+        "testDesc": "Envoie directement au récepteur pour vérifier la connexion. Fonctionne même si la journalisation est désactivée.",
+        "enterIpFirst": "Entrez d'abord une adresse IP",
+        "enterToConfirm": "Entrée pour confirmer"
     },
     "__contributors": [
         "Red2Je"

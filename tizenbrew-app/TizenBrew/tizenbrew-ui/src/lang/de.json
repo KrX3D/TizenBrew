@@ -45,7 +45,23 @@
         "uaNegativeEffects": "Beachte: Dies könnte sowohl positive als auch negative Effekte haben.",
         "language": "Spracheinstellungen",
         "languageDesc": "Ändere die Sprache der App.",
-        "selected": "Ausgewählt"
+        "selected": "Ausgewählt",
+        "remoteLogging": "Fernprotokollierung",
+        "remoteLoggingDesc": "Dienst- und Modulprotokolle per HTTP an einen Empfänger auf dem PC senden."
+    },
+    "remoteLogPage": {
+        "enableTitle": "Fernprotokollierung aktivieren",
+        "enabledDesc": "Aktiviert — Protokolle werden an den Empfänger gesendet.",
+        "disabledDesc": "Deaktiviert — keine Protokolle werden gesendet.",
+        "on": "AN",
+        "receiverIp": "Empfänger-IP-Adresse",
+        "receiverPort": "Empfänger-Port",
+        "saveTitle": "Einstellungen speichern",
+        "saveDesc": "Anwenden und zu den Einstellungen zurückkehren.",
+        "testTitle": "Testprotokoll senden",
+        "testDesc": "Sendet direkt an den Empfänger, um die Verbindung zu überprüfen. Funktioniert auch wenn die Protokollierung deaktiviert ist.",
+        "enterIpFirst": "Zuerst eine IP-Adresse eingeben",
+        "enterToConfirm": "Enter zum Bestätigen"
     },
     "tizenBrewConfig": {
         "checkButton": "Konfig prüfen",

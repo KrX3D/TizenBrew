@@ -38,7 +38,24 @@
         "uaSetRelaunch": "User-Agent set. Relaunch the app to apply changes.",
         "uaNegativeEffects": "請注意,這有可能會造成好效果,但也有造成負面影響",
         "language": "語言設定",
-        "languageDesc": "改變程式語言"
+        "languageDesc": "改變程式語言",
+        "selected": "已選擇",
+        "remoteLogging": "遠端記錄",
+        "remoteLoggingDesc": "透過 HTTP 將服務和模組記錄傳送至電腦上的接收器。"
+    },
+    "remoteLogPage": {
+        "enableTitle": "啟用遠端記錄",
+        "enabledDesc": "已啟用 — 記錄將傳送至接收器。",
+        "disabledDesc": "已停用 — 不傳送任何記錄。",
+        "on": "開",
+        "receiverIp": "接收器 IP 位址",
+        "receiverPort": "接收器連接埠",
+        "saveTitle": "儲存設定",
+        "saveDesc": "套用並返回設定。",
+        "testTitle": "傳送測試記錄",
+        "testDesc": "直接傳送至接收器以驗證連線。即使記錄停用時仍可運作。",
+        "enterIpFirst": "請先輸入 IP 位址",
+        "enterToConfirm": "按 Enter 確認"
     },
     "__contributors": [
         "kai"
