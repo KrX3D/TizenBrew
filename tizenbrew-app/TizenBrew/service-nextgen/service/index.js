@@ -34,6 +34,12 @@ module.exports.onStart = function () {
 
     // Log relay — TizenTube POSTs log entries here; we pipe them into logBus
     // so remoteLogger forwards them to the PS1 receiver over native http.request.
+    app.options('/tv-log', (req, res) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        res.end();
+    });
     app.post('/tv-log', (req, res) => {
         res.setHeader('Access-Control-Allow-Origin', '*');
         let body = '';
