@@ -5,6 +5,7 @@ const fetch = require('node-fetch');
 const { Events } = require('./wsCommunication.js');
 const { readConfig } = require('./configuration.js');
 const WebSocket = require('ws');
+const logBus = require('./logBus.js');
 
 const modulesCache = new Map();
 
@@ -60,6 +61,28 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             client.Runtime.enable();
             client.Debugger.enable();
 
+            // Poll window.__ttLogQueue every second to drain TizenTube log entries.
+            // Cobalt blocks XHR/WS from the HTTPS YouTube TV context to localhost,
+            // so TizenTube pushes entries into this queue and we read them via CDP.
+            var logPollInterval = setInterval(function () {
+                client.Runtime.evaluate({
+                    expression: '(function(){ try { var q=window.__ttLogQueue; if(!Array.isArray(q)||q.length===0) return null; return JSON.stringify(q.splice(0)); } catch(e) { return null; } })()',
+                    returnByValue: true
+                }).then(function (res) {
+                    var val = res && res.result && res.result.value;
+                    if (!val) return;
+                    try {
+                        var entries = JSON.parse(val);
+                        for (var i = 0; i < entries.length; i++) {
+                            var e = entries[i];
+                            if (e && typeof e === 'object') {
+                                logBus.log(e.level || 'INFO', e.context || 'TizenTube', e._formatted || e.message || '');
+                            }
+                        }
+                    } catch (_) {}
+                }).catch(function () {});
+            }, 1000);
+
             client.on('Runtime.executionContextCreated', (msg) => {
                 if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
                     const expression = `
@@ -110,6 +133,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             });
 
             client.on('disconnect', () => {
+                clearInterval(logPollInterval);
                 if (isAnotherApp) return;
 
                 inDebug.tizenDebug = false;
