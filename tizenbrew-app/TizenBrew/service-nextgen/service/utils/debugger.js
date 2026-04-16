@@ -56,6 +56,7 @@ function buildScriptUrl(mdl) {
 function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts) {
     if (!attempts) attempts = 1;
     if (!isAnotherApp) inDebug.tizenDebug = true;
+    logBus.log('DEBUG', 'cdp', 'startDebugging called on port ' + port + ' for ' + (mdl.name || '(none)'));
     try {
         CDP({ port, host: ip, local: true }, (client) => {
             client.Runtime.enable();
@@ -64,13 +65,22 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             // Poll window.__ttLogQueue every second to drain TizenTube log entries.
             // Cobalt blocks XHR/WS from the HTTPS YouTube TV context to localhost,
             // so TizenTube pushes entries into this queue and we read them via CDP.
+            logBus.log('DEBUG', 'cdp', 'log poll starting');
+            var pollCount = 0;
             var logPollInterval = setInterval(function () {
+                pollCount++;
+                // Log first 3 ticks to confirm the poll is running
+                if (pollCount <= 3) logBus.log('DEBUG', 'cdp', 'poll tick ' + pollCount);
                 client.Runtime.evaluate({
-                    expression: '(function(){ try { var q=window.__ttLogQueue; if(!Array.isArray(q)||q.length===0) return null; return JSON.stringify(q.splice(0)); } catch(e) { return null; } })()',
+                    expression: '(function(){ try { var q=window.__ttLogQueue; if(!Array.isArray(q)||q.length===0) return null; return JSON.stringify(q.splice(0)); } catch(e) { return "err:"+String(e); } })()',
                     returnByValue: true
                 }).then(function (res) {
                     var val = res && res.result && res.result.value;
                     if (!val) return;
+                    if (String(val).startsWith('err:')) {
+                        logBus.log('ERROR', 'cdp', 'queue eval error: ' + val);
+                        return;
+                    }
                     try {
                         var entries = JSON.parse(val);
                         for (var i = 0; i < entries.length; i++) {
