@@ -126,7 +126,12 @@ module.exports.onStart = function () {
     
     fetch('http://127.0.0.1:8001/api/v2/').then(res => res.json())
         .then(json => {
+            logBus.log('DEBUG', 'debug', 'startup canLaunchInDebug device: ' + JSON.stringify(json.device));
             canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
+            logBus.log('DEBUG', 'debug', 'startup canLaunchInDebug: ' + canLaunchInDebug);
+        })
+        .catch(err => {
+            logBus.log('ERROR', 'debug', 'startup 8001 fetch failed: ' + err);
         });
 
     const inDebug = {
@@ -243,9 +248,15 @@ module.exports.onStart = function () {
                 case Events.CanLaunchInDebug: {
                     fetch('http://127.0.0.1:8001/api/v2/').then(res => res.json())
                         .then(json => {
+                            logBus.log('DEBUG', 'debug', 'canLaunchInDebug device: ' + JSON.stringify(json.device));
                             canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
+                            logBus.log('DEBUG', 'debug', 'canLaunchInDebug resolved: ' + canLaunchInDebug);
+                            wsConn.send(wsConn.Event(Events.CanLaunchInDebug, canLaunchInDebug));
+                        })
+                        .catch(err => {
+                            logBus.log('ERROR', 'debug', '8001 fetch failed: ' + err);
+                            wsConn.send(wsConn.Event(Events.CanLaunchInDebug, false));
                         });
-                    wsConn.send(wsConn.Event(Events.CanLaunchInDebug, canLaunchInDebug));
                     break;
                 }
                 case Events.ReLaunchInDebug: {
