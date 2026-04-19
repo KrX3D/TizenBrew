@@ -93,6 +93,32 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                 }).catch(function () {});
             }, 1000);
 
+            // Fallback: if CDP connected after the page was already loaded,
+            // executionContextCreated was missed and the script was never injected.
+            // YouTube TV is a SPA so navigating within it won't create a new context.
+            // After a short delay we check whether the page is already up and inject if needed.
+            setTimeout(function () {
+                if (!mdl.name || mdl.evaluateScriptOnDocumentStart) return;
+                var scriptSrc = 'https://cdn.jsdelivr.net/' + mdl.fullName + '/' + mdl.mainFile;
+                var mainFile = mdl.mainFile;
+                client.Runtime.evaluate({
+                    expression: '(function(){' +
+                        'try {' +
+                        'if (!document.head) return "no-head";' +
+                        'if (document.querySelector(\'script[src*="' + mainFile + '"]\')) return "already";' +
+                        'var s=document.createElement("script");' +
+                        's.src="' + scriptSrc + '?v="+Date.now();' +
+                        'document.head.appendChild(s);' +
+                        'return "injected";' +
+                        '} catch(e){return "err:"+String(e);}' +
+                        '})()',
+                    returnByValue: true
+                }).then(function (res) {
+                    var val = res && res.result && res.result.value;
+                    logBus.log('DEBUG', 'cdp', 'fallback injection: ' + val);
+                }).catch(function () {});
+            }, 500);
+
             client.on('Runtime.executionContextCreated', (msg) => {
                 if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
                     const expression = `
