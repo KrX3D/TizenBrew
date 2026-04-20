@@ -148,7 +148,10 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             }, 1000);
 
             client.on('Runtime.executionContextCreated', (msg) => {
-                logBus.log('DEBUG', 'cdp', 'executionContextCreated contextId=' + msg.context.id + ' name=' + (mdl.name || '(none)'));
+                const auxData = msg.context.auxData || {};
+                logBus.log('DEBUG', 'cdp', 'executionContextCreated contextId=' + msg.context.id + ' type=' + (auxData.type || '?') + ' isDefault=' + auxData.isDefault + ' name=' + (mdl.name || '(none)'));
+                // Only inject into the main frame context — skip workers, iframes, isolated worlds
+                if (!auxData.isDefault) return;
                 if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
                     const scriptUrl = buildScriptUrl(mdl);
                     logBus.log('DEBUG', 'cdp', 'injecting userscript via script tag: ' + scriptUrl);
