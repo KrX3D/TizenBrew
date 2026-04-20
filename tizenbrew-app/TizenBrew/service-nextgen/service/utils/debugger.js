@@ -9,6 +9,12 @@ const logBus = require('./logBus.js');
 
 const modulesCache = new Map();
 
+// Monotonically increasing counter. Bumped each time a new non-isAnotherApp
+// startDebugging call arrives. Old retry loops compare their captured sessionId
+// against this and abort if they've been superseded, preventing multiple
+// concurrent CDP clients from all injecting when Cobalt finally accepts connections.
+let _activeSessionId = 0;
+
 // Build the URL to fetch the userscript, respecting sourceMode.
 // Mirrors the logic in moduleSource.js / the proxy.
 function buildScriptUrl(mdl) {
@@ -53,12 +59,31 @@ function buildScriptUrl(mdl) {
     return `https://cdn.jsdelivr.net/${fullName}/${mainFile}`;
 }
 
-function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts) {
+function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts, sessionId) {
     if (!attempts) attempts = 1;
-    if (!isAnotherApp) inDebug.tizenDebug = true;
+    if (!isAnotherApp) {
+        if (!sessionId) {
+            // New top-level call: assign a fresh session, superseding any prior retry loops.
+            _activeSessionId++;
+            sessionId = _activeSessionId;
+            logBus.log('DEBUG', 'cdp', 'startDebugging new session ' + sessionId + ' on port ' + port);
+        } else if (sessionId !== _activeSessionId) {
+            // This retry belongs to a superseded session; abort silently.
+            logBus.log('DEBUG', 'cdp', 'startDebugging session ' + sessionId + ' superseded by ' + _activeSessionId + ', aborting retry');
+            return;
+        }
+        inDebug.tizenDebug = true;
+    }
     logBus.log('DEBUG', 'cdp', 'startDebugging called on port ' + port + ' for ' + (mdl.name || '(none)'));
     try {
         CDP({ port, host: ip, local: true }, (client) => {
+            // By the time CDP calls back, a newer session may have been started.
+            // Close this stale client immediately so it doesn't inject.
+            if (!isAnotherApp && sessionId !== _activeSessionId) {
+                logBus.log('DEBUG', 'cdp', 'CDP connected for superseded session ' + sessionId + ', closing');
+                client.close();
+                return;
+            }
             client.Runtime.enable();
             client.Debugger.enable();
 
@@ -276,7 +301,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                 } else return;
             }
             attempts++;
-            setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts), 750);
+            setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts, sessionId), 750);
         });
     } catch (e) {
         if (attempts >= 15) {
@@ -287,7 +312,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             } else return;
         }
         attempts++;
-        setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts), 750);
+        setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts, sessionId), 750);
         return;
     }
 }
