@@ -97,27 +97,50 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             // executionContextCreated was missed and the script was never injected.
             // mdl.name is empty at CDP-connect time and only set when LaunchModule fires
             // (~3s later), so we poll until it's populated then inject if needed.
+            // We eval the script source directly instead of creating a <script> tag
+            // because Tizen 6.5 Cobalt enforces Trusted Types (blocks script.src assignment).
             var fallbackInterval = setInterval(function () {
                 if (!mdl.name || mdl.evaluateScriptOnDocumentStart) return;
-                var mainFile = mdl.mainFile;
-                var scriptSrc = buildScriptUrl(mdl);
+                var cacheKey = (mdl.versionedFullName || mdl.fullName) + ':' + (mdl.sourceMode || 'cdn');
+                var scriptUrl = buildScriptUrl(mdl);
+
                 client.Runtime.evaluate({
-                    expression: '(function(){' +
-                        'try {' +
-                        'if (!document.head) return "no-head";' +
-                        'if (document.querySelector(\'script[src*="' + mainFile + '"]\')) return "already";' +
-                        'var s=document.createElement("script");' +
-                        's.src="' + scriptSrc + '?v="+Date.now();' +
-                        'document.head.appendChild(s);' +
-                        'return "injected";' +
-                        '} catch(e){return "err:"+String(e);}' +
-                        '})()',
+                    expression: '(function(){try{if(!document.head)return "no-head";if(window.__tbInjected)return "already";return "ready";}catch(e){return "err:"+String(e);}})()',
                     returnByValue: true
                 }).then(function (res) {
                     var val = res && res.result && res.result.value;
                     if (!val || val === 'no-head') return;
-                    logBus.log('DEBUG', 'cdp', 'fallback injection: ' + val);
-                    clearInterval(fallbackInterval);
+                    if (val === 'already') {
+                        logBus.log('DEBUG', 'cdp', 'fallback injection: already');
+                        clearInterval(fallbackInterval);
+                        return;
+                    }
+                    function doEval(code) {
+                        client.Runtime.evaluate({
+                            expression: '(function(){window.__tbInjected=true;' + code + '})()',
+                            returnByValue: false
+                        }).then(function () {
+                            logBus.log('DEBUG', 'cdp', 'fallback injection: injected');
+                            clearInterval(fallbackInterval);
+                        }).catch(function (err) {
+                            logBus.log('ERROR', 'cdp', 'fallback eval error: ' + err);
+                            clearInterval(fallbackInterval);
+                        });
+                    }
+                    var cached = modulesCache.get(cacheKey);
+                    if (cached) {
+                        doEval(cached);
+                    } else {
+                        fetch(scriptUrl)
+                            .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+                            .then(function (code) {
+                                modulesCache.set(cacheKey, code);
+                                doEval(code);
+                            })
+                            .catch(function (e) {
+                                logBus.log('ERROR', 'cdp', 'fallback fetch error: ' + e);
+                            });
+                    }
                 }).catch(function () {});
             }, 1000);
 
