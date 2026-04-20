@@ -108,11 +108,17 @@ module.exports.onStart = function () {
                 }
             }
     
+            logBus.log('DEBUG', 'proxy', req.method + ' /' + filePath + ' (' + sourceMode + ') → ' + upstreamUrl);
             fetch(`${upstreamUrl}${cacheBuster}`)
                 .then(fetchRes => {
+                    logBus.log('DEBUG', 'proxy', 'HTTP ' + fetchRes.status + ' ← ' + upstreamUrl);
                     res.setHeader('Access-Control-Allow-Origin', '*');
                     res.type(path.basename(filePath).split('.').slice(-1)[0].split('?')[0]);
                     fetchRes.body.pipe(res);
+                })
+                .catch(err => {
+                    logBus.log('ERROR', 'proxy', 'upstream fetch failed: ' + err + ' for ' + upstreamUrl);
+                    res.status(502).end();
                 });
         } else {
             res.send(deviceIP);
