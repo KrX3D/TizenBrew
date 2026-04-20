@@ -100,6 +100,11 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             // (~3s later), so we poll until it's populated then inject if needed.
             // We eval the script source directly instead of creating a <script> tag
             // because Tizen 6.5 Cobalt enforces Trusted Types (blocks script.src assignment).
+            // Tracks whether we have already committed to injecting in this CDP session.
+            // YouTube TV creates two default contexts (initial load + post-DIAL navigation).
+            // Without this flag both get injected, causing double toasts on Tizen 5.5.
+            var contextHasBeenInjected = false;
+
             var fallbackInterval = setInterval(function () {
                 if (!mdl.name || mdl.evaluateScriptOnDocumentStart) return;
                 var cacheKey = (mdl.versionedFullName || mdl.fullName) + ':' + (mdl.sourceMode || 'cdn');
@@ -122,6 +127,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                             returnByValue: false
                         }).then(function () {
                             logBus.log('DEBUG', 'cdp', 'fallback injection: injected');
+                            contextHasBeenInjected = true;
                             clearInterval(fallbackInterval);
                         }).catch(function (err) {
                             logBus.log('ERROR', 'cdp', 'fallback eval error: ' + err);
@@ -153,6 +159,11 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                 // Only inject into the main frame context — skip workers, iframes, isolated worlds
                 if (!auxData.isDefault) return;
                 if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
+                    if (contextHasBeenInjected) {
+                        logBus.log('DEBUG', 'cdp', 'executionContextCreated contextId=' + msg.context.id + ': skipping, already injected this session');
+                        return;
+                    }
+                    contextHasBeenInjected = true;
                     const scriptUrl = buildScriptUrl(mdl);
                     logBus.log('DEBUG', 'cdp', 'injecting userscript via script tag: ' + scriptUrl);
                     // __tbInjected is set AFTER appendChild so that on Tizen 6.5 where
@@ -214,6 +225,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             client.on('disconnect', () => {
                 clearInterval(logPollInterval);
                 clearInterval(fallbackInterval);
+                contextHasBeenInjected = false;
                 if (isAnotherApp) return;
 
                 inDebug.tizenDebug = false;
