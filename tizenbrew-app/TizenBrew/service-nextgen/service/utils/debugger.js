@@ -155,10 +155,18 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                 if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
                     const scriptUrl = buildScriptUrl(mdl);
                     logBus.log('DEBUG', 'cdp', 'injecting userscript via script tag: ' + scriptUrl);
+                    // __tbInjected is set AFTER appendChild so that on Tizen 6.5 where
+                    // Trusted Types throws on script.src, the flag stays unset and the
+                    // fallback eval path correctly takes over. On 5.5 (no Trusted Types)
+                    // it succeeds and the fallback interval sees the flag and stops.
                     const expression = `
-                    const script = document.createElement('script');
-                    script.src = '${scriptUrl}?v=${Date.now()}';
-                    document.head.appendChild(script);
+                    (function(){
+                        if (window.__tbInjected) return;
+                        var s = document.createElement('script');
+                        s.src = '${scriptUrl}?v=${Date.now()}';
+                        document.head.appendChild(s);
+                        window.__tbInjected = true;
+                    })();
                     `;
                     client.Runtime.evaluate({ expression, contextId: msg.context.id });
                 } else if (mdl.name !== '' && mdl.evaluateScriptOnDocumentStart) {
