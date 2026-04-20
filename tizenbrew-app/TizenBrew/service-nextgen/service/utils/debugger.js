@@ -95,12 +95,12 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
 
             // Fallback: if CDP connected after the page was already loaded,
             // executionContextCreated was missed and the script was never injected.
-            // YouTube TV is a SPA so navigating within it won't create a new context.
-            // After a short delay we check whether the page is already up and inject if needed.
-            setTimeout(function () {
+            // mdl.name is empty at CDP-connect time and only set when LaunchModule fires
+            // (~3s later), so we poll until it's populated then inject if needed.
+            var fallbackInterval = setInterval(function () {
                 if (!mdl.name || mdl.evaluateScriptOnDocumentStart) return;
-                var scriptSrc = 'https://cdn.jsdelivr.net/' + mdl.fullName + '/' + mdl.mainFile;
                 var mainFile = mdl.mainFile;
+                var scriptSrc = buildScriptUrl(mdl);
                 client.Runtime.evaluate({
                     expression: '(function(){' +
                         'try {' +
@@ -115,9 +115,11 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     returnByValue: true
                 }).then(function (res) {
                     var val = res && res.result && res.result.value;
+                    if (!val || val === 'no-head') return;
                     logBus.log('DEBUG', 'cdp', 'fallback injection: ' + val);
+                    clearInterval(fallbackInterval);
                 }).catch(function () {});
-            }, 500);
+            }, 1000);
 
             client.on('Runtime.executionContextCreated', (msg) => {
                 if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
@@ -170,6 +172,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
 
             client.on('disconnect', () => {
                 clearInterval(logPollInterval);
+                clearInterval(fallbackInterval);
                 if (isAnotherApp) return;
 
                 inDebug.tizenDebug = false;
