@@ -125,13 +125,21 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             // (~3s later), so we poll until it's populated then inject if needed.
             // We eval the script source directly instead of creating a <script> tag
             // because Tizen 6.5 Cobalt enforces Trusted Types (blocks script.src assignment).
-            // Tracks whether we have already committed to injecting in this CDP session.
+            // contextHasBeenInjected: set only AFTER injection is confirmed successful.
+            // scriptTagAttempted: set synchronously when the script-tag path starts, cleared
+            // on failure so the fallback can take over (needed on Tizen 6.5 Trusted Types).
             // YouTube TV creates two default contexts (initial load + post-DIAL navigation).
-            // Without this flag both get injected, causing double toasts on Tizen 5.5.
+            // These two flags together prevent any second context or the fallback from
+            // injecting again after one path has already committed.
             var contextHasBeenInjected = false;
+            var scriptTagAttempted = false;
 
             var fallbackInterval = setInterval(function () {
                 if (!mdl.name || mdl.evaluateScriptOnDocumentStart) return;
+                // Stop if any path already confirmed a successful injection.
+                if (contextHasBeenInjected) { clearInterval(fallbackInterval); return; }
+                // Stop if a script-tag attempt is in-flight; wait for its result first.
+                if (scriptTagAttempted) return;
                 var cacheKey = (mdl.versionedFullName || mdl.fullName) + ':' + (mdl.sourceMode || 'cdn');
                 var scriptUrl = buildScriptUrl(mdl);
 
@@ -148,7 +156,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     }
                     function doEval(code) {
                         client.Runtime.evaluate({
-                            expression: '(function(){window.__tbInjected=true;' + code + '})()',
+                            expression: '(function(){if(window.__tbInjected)return;window.__tbInjected=true;' + code + '})()',
                             returnByValue: false
                         }).then(function () {
                             logBus.log('DEBUG', 'cdp', 'fallback injection: injected');
@@ -184,17 +192,13 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                 // Only inject into the main frame context — skip workers, iframes, isolated worlds
                 if (!auxData.isDefault) return;
                 if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
-                    if (contextHasBeenInjected) {
-                        logBus.log('DEBUG', 'cdp', 'executionContextCreated contextId=' + msg.context.id + ': skipping, already injected this session');
+                    if (contextHasBeenInjected || scriptTagAttempted) {
+                        logBus.log('DEBUG', 'cdp', 'executionContextCreated contextId=' + msg.context.id + ': skipping, already injected/attempting this session');
                         return;
                     }
-                    contextHasBeenInjected = true;
+                    scriptTagAttempted = true;
                     const scriptUrl = buildScriptUrl(mdl);
                     logBus.log('DEBUG', 'cdp', 'injecting userscript via script tag: ' + scriptUrl);
-                    // __tbInjected is set AFTER appendChild so that on Tizen 6.5 where
-                    // Trusted Types throws on script.src, the flag stays unset and the
-                    // fallback eval path correctly takes over. On 5.5 (no Trusted Types)
-                    // it succeeds and the fallback interval sees the flag and stops.
                     const expression = `
                     (function(){
                         if (window.__tbInjected) return;
@@ -204,7 +208,22 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                         window.__tbInjected = true;
                     })();
                     `;
-                    client.Runtime.evaluate({ expression, contextId: msg.context.id });
+                    client.Runtime.evaluate({ expression, contextId: msg.context.id })
+                    .then(function(result) {
+                        if (result && result.exceptionDetails) {
+                            // Script-tag blocked (Trusted Types on Tizen 6.5). Reset so fallback can inject via eval.
+                            logBus.log('DEBUG', 'cdp', 'script tag blocked (Trusted Types?), fallback will inject via eval');
+                            scriptTagAttempted = false;
+                        } else {
+                            logBus.log('DEBUG', 'cdp', 'script tag injection confirmed');
+                            contextHasBeenInjected = true;
+                            clearInterval(fallbackInterval);
+                        }
+                    })
+                    .catch(function(err) {
+                        logBus.log('DEBUG', 'cdp', 'script tag eval error: ' + err + ', fallback will inject');
+                        scriptTagAttempted = false;
+                    });
                 } else if (mdl.name !== '' && mdl.evaluateScriptOnDocumentStart) {
                     // Cache key includes sourceMode so cdn and direct don't share a stale entry
                     const cacheKey = (mdl.versionedFullName || mdl.fullName) + ':' + (mdl.sourceMode || 'cdn');
@@ -251,6 +270,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                 clearInterval(logPollInterval);
                 clearInterval(fallbackInterval);
                 contextHasBeenInjected = false;
+                scriptTagAttempted = false;
                 if (isAnotherApp) return;
 
                 inDebug.tizenDebug = false;
