@@ -151,7 +151,8 @@ module.exports.onStart = function () {
         appPath: '',
         moduleType: '',
         packageType: '',
-        serviceFile: ''
+        serviceFile: '',
+        sourceMode: ''
     };
 
     const appControlData = {
@@ -297,6 +298,7 @@ module.exports.onStart = function () {
                     currentModule.moduleType = mdl.moduleType;
                     currentModule.packageType = mdl.packageType;
                     currentModule.serviceFile = mdl.serviceFile;
+                    currentModule.sourceMode = mdl.sourceMode;
 
                     if (mdl.packageType === 'app') {
                         inDebug.webDebug = false;

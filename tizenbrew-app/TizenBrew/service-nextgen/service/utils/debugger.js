@@ -216,6 +216,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                 mdl.packageType   = '';
                 mdl.serviceFile   = '';
                 mdl.mainFile      = '';
+                mdl.sourceMode    = '';
             });
 
             if (!isAnotherApp) {
