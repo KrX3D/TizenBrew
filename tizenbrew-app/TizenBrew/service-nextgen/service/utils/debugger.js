@@ -83,6 +83,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     }
                     try {
                         var entries = JSON.parse(val);
+                        if (entries.length > 0) logBus.log('DEBUG', 'cdp', 'draining ' + entries.length + ' TizenTube log entr' + (entries.length === 1 ? 'y' : 'ies'));
                         for (var i = 0; i < entries.length; i++) {
                             var e = entries[i];
                             if (e && typeof e === 'object') {
@@ -129,8 +130,10 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     }
                     var cached = modulesCache.get(cacheKey);
                     if (cached) {
+                        logBus.log('DEBUG', 'cdp', 'fallback injection: using cached userscript');
                         doEval(cached);
                     } else {
+                        logBus.log('DEBUG', 'cdp', 'fallback injection: fetching userscript from ' + scriptUrl.split('?')[0]);
                         fetch(scriptUrl)
                             .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
                             .then(function (code) {
@@ -145,10 +148,13 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             }, 1000);
 
             client.on('Runtime.executionContextCreated', (msg) => {
+                logBus.log('DEBUG', 'cdp', 'executionContextCreated contextId=' + msg.context.id + ' name=' + (mdl.name || '(none)'));
                 if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
+                    const scriptUrl = buildScriptUrl(mdl);
+                    logBus.log('DEBUG', 'cdp', 'injecting userscript via script tag: ' + scriptUrl);
                     const expression = `
                     const script = document.createElement('script');
-                    script.src = 'https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.mainFile}?v=${Date.now()}';
+                    script.src = '${scriptUrl}?v=${Date.now()}';
                     document.head.appendChild(script);
                     `;
                     client.Runtime.evaluate({ expression, contextId: msg.context.id });
@@ -163,6 +169,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                         sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                     } else {
                         const scriptUrl = buildScriptUrl(mdl);
+                        logBus.log('DEBUG', 'cdp', 'fetching userscript (evaluateOnDocStart): ' + scriptUrl);
                         // Fallback CDN URL in case direct fetch fails (TLS issues on old Node.js)
                         const fallbackUrl = `https://cdn.jsdelivr.net/gh/${
                             (() => {
