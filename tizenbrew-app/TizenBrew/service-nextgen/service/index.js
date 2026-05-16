@@ -116,6 +116,9 @@ module.exports.onStart = function () {
                 .then(fetchRes => {
                     logBus.log('DEBUG', 'proxy', 'HTTP ' + fetchRes.status + ' ← ' + upstreamUrl);
                     res.setHeader('Access-Control-Allow-Origin', '*');
+                    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                    res.setHeader('Pragma', 'no-cache');
+                    res.setHeader('Expires', '0');
                     res.type(path.basename(filePath).split('.').slice(-1)[0].split('?')[0]);
                     fetchRes.body.pipe(res);
                 })
