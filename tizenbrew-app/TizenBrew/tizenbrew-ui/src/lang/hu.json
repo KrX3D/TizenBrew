@@ -38,7 +38,24 @@
         "uaSetRelaunch": "User-Agent set. Relaunch the app to apply changes.",
         "uaNegativeEffects": "Vedd figyelembe hogy ennek lehetnek pozitív hatásai de ugyan így negatívak is.",
         "language": "Nyelvi beállítások",
-        "languageDesc": "Változtad meg az app nyelvét."
+        "languageDesc": "Változtad meg az app nyelvét.",
+        "selected": "Kiválasztott",
+        "remoteLogging": "Távoli naplózás",
+        "remoteLoggingDesc": "Szolgáltatás- és modulnaplók küldése HTTP-n keresztül egy fogadónak a PC-n."
+    },
+    "remoteLogPage": {
+        "enableTitle": "Távoli naplózás engedélyezése",
+        "enabledDesc": "Engedélyezve — naplók elküldve a fogadónak.",
+        "disabledDesc": "Letiltva — nem kerülnek naplók elküldésre.",
+        "on": "BE",
+        "receiverIp": "Fogadó IP-cím",
+        "receiverPort": "Fogadó port",
+        "saveTitle": "Beállítások mentése",
+        "saveDesc": "Alkalmaz és visszatér a beállításokhoz.",
+        "testTitle": "Teszt napló küldése",
+        "testDesc": "Közvetlenül a fogadónak küldi a kapcsolat ellenőrzéséhez. Akkor is működik, ha a naplózás le van tiltva.",
+        "enterIpFirst": "Először adjon meg egy IP-címet",
+        "enterToConfirm": "Enter a megerősítéshez"
     },
     "__contributors": [
         "TheFr0zenOne"

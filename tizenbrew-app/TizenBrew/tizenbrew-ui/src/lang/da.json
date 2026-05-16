@@ -38,7 +38,24 @@
         "uaSetRelaunch": "User-Agent set. Relaunch the app to apply changes.",
         "uaNegativeEffects": "Bemærk, at selvom dette kan have positive effekter, kan der også være negative effekter.",
         "language": "Sprog Indstillinger",
-        "languageDesc": "Skift sproget i appen."
+        "languageDesc": "Skift sproget i appen.",
+        "selected": "Valgt",
+        "remoteLogging": "Fjernlogning",
+        "remoteLoggingDesc": "Send service- og modullogfiler via HTTP til en modtager på din PC."
+    },
+    "remoteLogPage": {
+        "enableTitle": "Aktiver fjernlogning",
+        "enabledDesc": "Aktiveret — logfiler sendes til modtageren.",
+        "disabledDesc": "Deaktiveret — ingen logfiler sendes.",
+        "on": "ON",
+        "receiverIp": "Modtager IP-adresse",
+        "receiverPort": "Modtager port",
+        "saveTitle": "Gem indstillinger",
+        "saveDesc": "Anvend og vend tilbage til indstillinger.",
+        "testTitle": "Send testlogfil",
+        "testDesc": "Sender direkte til modtageren for at verificere forbindelsen. Virker selv når logning er deaktiveret.",
+        "enterIpFirst": "Indtast en IP-adresse først",
+        "enterToConfirm": "Enter for at bekræfte"
     },
     "__contributors": [
         "loui771w"

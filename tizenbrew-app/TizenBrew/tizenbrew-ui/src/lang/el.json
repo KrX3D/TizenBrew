@@ -38,7 +38,24 @@
         "uaSetRelaunch": "User-Agent set. Relaunch the app to apply changes.",
         "uaNegativeEffects": "Σημειώστε ότι ενώ αυτό θα μπορούσε να έχει θετικά αποτελέσματα, θα μπορούσε επίσης να επιφέρει και αρνητικά αποτελέμσατα.",
         "language": "Ρυθμίσεις Γλώσσας",
-        "languageDesc": "Αλλαγή της γλώσσας της εφαρμογής."
+        "languageDesc": "Αλλαγή της γλώσσας της εφαρμογής.",
+        "selected": "Επιλεγμένο",
+        "remoteLogging": "Απομακρυσμένη καταγραφή",
+        "remoteLoggingDesc": "Αποστολή αρχείων καταγραφής υπηρεσίας και modules μέσω HTTP σε δέκτη στον υπολογιστή σας."
+    },
+    "remoteLogPage": {
+        "enableTitle": "Enable Remote Logging",
+        "enabledDesc": "Enabled — logs are sent to the receiver.",
+        "disabledDesc": "Disabled — no logs are sent.",
+        "on": "ON",
+        "receiverIp": "Receiver IP Address",
+        "receiverPort": "Receiver Port",
+        "saveTitle": "Save Settings",
+        "saveDesc": "Apply and return to Settings.",
+        "testTitle": "Send Test Log",
+        "testDesc": "POSTs directly to the receiver to verify the connection. Works even when logging is disabled.",
+        "enterIpFirst": "Enter an IP address first",
+        "enterToConfirm": "Enter to confirm"
     },
     "__contributors": [
         "Sotirisdim4"

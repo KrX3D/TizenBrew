@@ -38,7 +38,24 @@
         "uaSetRelaunch": "User-Agent set. Relaunch the app to apply changes.",
         "uaNegativeEffects": "Zwróć uwagę, że choć to może przynieść pozytywne efekty, mogą również wystąpić efekty negatywne.",
         "language": "Ustawienia języka",
-        "languageDesc": "Zmień język aplikacji."
+        "languageDesc": "Zmień język aplikacji.",
+        "selected": "Zaznaczony",
+        "remoteLogging": "Zdalne logowanie",
+        "remoteLoggingDesc": "Wysyłaj logi usługi i modułów przez HTTP do odbiornika na komputerze."
+    },
+    "remoteLogPage": {
+        "enableTitle": "Włącz zdalne logowanie",
+        "enabledDesc": "Włączone — logi są wysyłane do odbiornika.",
+        "disabledDesc": "Wyłączone — żadne logi nie są wysyłane.",
+        "on": "WŁ",
+        "receiverIp": "Adres IP odbiornika",
+        "receiverPort": "Port odbiornika",
+        "saveTitle": "Zapisz ustawienia",
+        "saveDesc": "Zastosuj i wróć do ustawień.",
+        "testTitle": "Wyślij testowy log",
+        "testDesc": "Wysyła bezpośrednio do odbiornika w celu weryfikacji połączenia. Działa nawet gdy logowanie jest wyłączone.",
+        "enterIpFirst": "Najpierw wprowadź adres IP",
+        "enterToConfirm": "Enter aby potwierdzić"
     },
     "__contributors": [
         "Kamil Sienicki (sienikam)"

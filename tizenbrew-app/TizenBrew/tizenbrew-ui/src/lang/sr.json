@@ -38,7 +38,24 @@
         "uaSetRelaunch": "User-Agent подешен. Поново покрените апликацију како би промене биле видљиве.",
         "uaNegativeEffects": "Обратити пажњу да, поред потенцијалних позитивних, може такође бити и негативних ефеката.",
         "language": "Подешавања језика",
-        "languageDesc": "Промените језик апликације."
+        "languageDesc": "Промените језик апликације.",
+        "selected": "Изабрано",
+        "remoteLogging": "Удаљено бележење",
+        "remoteLoggingDesc": "Слање записа службе и модула путем HTTP-а на пријемник на рачунару."
+    },
+    "remoteLogPage": {
+        "enableTitle": "Enable Remote Logging",
+        "enabledDesc": "Enabled — logs are sent to the receiver.",
+        "disabledDesc": "Disabled — no logs are sent.",
+        "on": "ON",
+        "receiverIp": "Receiver IP Address",
+        "receiverPort": "Receiver Port",
+        "saveTitle": "Save Settings",
+        "saveDesc": "Apply and return to Settings.",
+        "testTitle": "Send Test Log",
+        "testDesc": "POSTs directly to the receiver to verify the connection. Works even when logging is disabled.",
+        "enterIpFirst": "Enter an IP address first",
+        "enterToConfirm": "Enter to confirm"
     },
     "__contributors": [
         "milovanovic"

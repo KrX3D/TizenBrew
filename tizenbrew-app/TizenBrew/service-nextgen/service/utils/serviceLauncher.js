@@ -2,6 +2,7 @@
 
 const vm = require('vm');
 const fetch = require('node-fetch');
+const logBus = require('./logBus.js');
 
 function startService(mdl, services) {
     let sandbox = {};
@@ -15,6 +16,15 @@ function startService(mdl, services) {
 
     sandbox['require'] = require;
     sandbox['tizen'] = global.tizen;
+
+    // Route module service console.* through logBus so remote logging captures them
+    const _moduleName = mdl.name;
+    sandbox['console'] = {
+        log:   function() { var msg = Array.prototype.slice.call(arguments).join(' '); logBus.log('INFO',  'module:' + _moduleName, msg); console.log.apply(console, arguments); },
+        info:  function() { var msg = Array.prototype.slice.call(arguments).join(' '); logBus.log('INFO',  'module:' + _moduleName, msg); console.info.apply(console, arguments); },
+        warn:  function() { var msg = Array.prototype.slice.call(arguments).join(' '); logBus.log('WARN',  'module:' + _moduleName, msg); console.warn.apply(console, arguments); },
+        error: function() { var msg = Array.prototype.slice.call(arguments).join(' '); logBus.log('ERROR', 'module:' + _moduleName, msg); console.error.apply(console, arguments); }
+    };
     sandbox['module'] = { exports: {} };
 
     // Strip jsDelivr prefixes to get clean GitHub user/repo
@@ -24,27 +34,49 @@ function startService(mdl, services) {
         return name;
     }
 
-    // Construct Raw GitHub fetch URL
+    // Construct service file fetch URL, respecting sourceMode
     let fetchUrl;
+    const sourceMode = mdl.sourceMode || 'cdn';
     const cleanName = mdl.versionedFullName || mdl.fullName;
     if (cleanName.includes('@')) {
         const [rawRepo, tag] = cleanName.split('@');
         const repo = getGitHubRepo(rawRepo);
         if (repo) {
-            fetchUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${mdl.serviceFile}`;
+            // GitHub module
+            if (sourceMode === 'direct') {
+                fetchUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${mdl.serviceFile}`;
+            } else {
+                fetchUrl = `https://cdn.jsdelivr.net/gh/${repo}@${tag}/${mdl.serviceFile}`;
+            }
         } else {
-            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.serviceFile}`;
+            // npm module — strip "npm/" prefix to get bare package name+version
+            const pkgAndVersion = cleanName.substring('npm/'.length);
+            if (sourceMode === 'direct') {
+                fetchUrl = `https://unpkg.com/${pkgAndVersion}/${mdl.serviceFile}`;
+            } else {
+                fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.serviceFile}`;
+            }
         }
     } else {
         const repo = getGitHubRepo(cleanName);
         if (repo) {
-            fetchUrl = `https://raw.githubusercontent.com/${repo}/main/${mdl.serviceFile}`;
+            if (sourceMode === 'direct') {
+                fetchUrl = `https://raw.githubusercontent.com/${repo}/main/${mdl.serviceFile}`;
+            } else {
+                fetchUrl = `https://cdn.jsdelivr.net/gh/${repo}@main/${mdl.serviceFile}`;
+            }
         } else {
-            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.serviceFile}`;
+            const pkgName = cleanName.substring('npm/'.length);
+            if (sourceMode === 'direct') {
+                fetchUrl = `https://unpkg.com/${pkgName}/${mdl.serviceFile}`;
+            } else {
+                fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.serviceFile}`;
+            }
         }
     }
     // Append cache buster
     fetchUrl += `?v=${Date.now()}`;
+    logBus.log('DEBUG', 'service-launcher', 'fetching service from: ' + fetchUrl.split('?')[0]);
 
     fetch(fetchUrl)
         .then(res => res.text())

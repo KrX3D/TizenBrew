@@ -2,7 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Use box-shadow instead of outline so the focus ring follows the element's
+   border-radius. outline is always a rectangle regardless of border-radius.
+   box-shadow respects border-radius natively. */
 .focus {
-    outline: #1ca7ca solid 2px;
-    box-shadow: #2396b3 0px 0px 10px 3px;
+    box-shadow: 0 0 0 2px #1ca7ca, 0 0 12px 3px #2396b3;
+}
+
+.hover-effect:hover {
+    box-shadow: 0 0 0 2px #1ca7ca, 0 0 10px 3px #2396b3;
+    transition: box-shadow 0.1s ease-in-out;
 }

@@ -52,7 +52,24 @@
         "uaSetRelaunch": "User-Agent set. Relaunch the app to apply changes.",
         "uaNegativeEffects": "Nota che sebbene questo possa avere effetti positivi, è possibile possa averne anche di negativi.",
         "language": "Impostazioni lingua",
-        "languageDesc": "Cambia la lingua dell'app"
+        "languageDesc": "Cambia la lingua dell'app",
+        "selected": "Selezionato",
+        "remoteLogging": "Registrazione remota",
+        "remoteLoggingDesc": "Inviare i log del servizio e dei moduli tramite HTTP a un ricevitore sul PC."
+    },
+    "remoteLogPage": {
+        "enableTitle": "Abilita registrazione remota",
+        "enabledDesc": "Abilitato — i log vengono inviati al ricevitore.",
+        "disabledDesc": "Disabilitato — nessun log viene inviato.",
+        "on": "ON",
+        "receiverIp": "Indirizzo IP del ricevitore",
+        "receiverPort": "Porta del ricevitore",
+        "saveTitle": "Salva impostazioni",
+        "saveDesc": "Applica e torna alle impostazioni.",
+        "testTitle": "Invia log di test",
+        "testDesc": "Invia direttamente al ricevitore per verificare la connessione. Funziona anche se la registrazione è disabilitata.",
+        "enterIpFirst": "Inserisci prima un indirizzo IP",
+        "enterToConfirm": "Invio per confermare"
     },
     "__contributors": [
         "desko21",

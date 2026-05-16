@@ -1,4 +1,4 @@
-import { LocationProvider, ErrorBoundary, Router, Route } from 'preact-iso';
+import { LocationProvider, ErrorBoundary, Router, Route, useLocation } from 'preact-iso';
 import Home from './pages/Home.jsx';
 import ModuleManager, { AddModule } from './pages/ModuleManager.jsx';
 import Header from './components/Header.jsx';
@@ -6,20 +6,76 @@ import { GlobalStateContext } from './components/ClientContext.jsx';
 import { useRef } from 'preact/hooks';
 import { useEffect, useState, useContext } from 'react';
 import Client from './components/WebSocketClient.js';
+import { Events } from './components/WebSocketClient.js';
 import Settings, { Change } from './pages/Settings.jsx';
 import About from './pages/About.jsx';
 import './components/i18n.js';
 import UserAgentSettings from './pages/UserAgentSettings.jsx';
+import RemoteLoggingSettings from './pages/RemoteLoggingSettings.jsx';
 import { ExclamationCircleIcon } from '@heroicons/react/16/solid';
 import { useTranslation } from 'react-i18next';
+import { ToastContainer, useToast, setGlobalToast } from './components/Toast.jsx';
+
+function PageChangeLogger() {
+  const loc = useLocation();
+  const prevPath = useRef('');
+
+  useEffect(() => {
+    const path = loc.path || '';
+    if (path && path !== prevPath.current) {
+      prevPath.current = path;
+      if (window.__tbLog) window.__tbLog('INFO', 'ui:nav', 'Page: ' + path);
+    }
+  }, [loc.path]);
+
+  return null;
+}
 
 export default function App() {
   const headerRef = useRef(null);
   const [headerHeight, setHeaderHeight] = useState(0);
   const context = useContext(GlobalStateContext);
   const { t } = useTranslation();
+  const { toasts, toast } = useToast();
   window.dispatch = context.dispatch;
   window.state = context.state;
+
+  // Keep a ref with the latest state so window.__tbLog never closes over stale values
+  const logStateRef = useRef({ remoteLogging: null });
+  logStateRef.current = {
+    remoteLogging: context.state.sharedData?.remoteLogging
+  };
+
+  // Global log helper — direct HTTP POST to the PS1 receiver (same path as the
+  // test button, which is confirmed working). Bypasses the WS→service chain.
+  useEffect(() => {
+    window.__tbLog = function(level, source, message) {
+      var rl = logStateRef.current.remoteLogging;
+      if (!rl || !rl.enabled || !rl.ip) return;
+      var now = new Date();
+      function p2(n) { return n < 10 ? '0' + n : '' + n; }
+      function p3(n) { return n < 100 ? (n < 10 ? '00' : '0') + n : '' + n; }
+      var ts = now.getFullYear() + '-' + p2(now.getMonth()+1) + '-' + p2(now.getDate())
+        + ' ' + p2(now.getHours()) + ':' + p2(now.getMinutes()) + ':' + p2(now.getSeconds())
+        + '.' + p3(now.getMilliseconds());
+      var lvl = (level || 'INFO').toUpperCase();
+      var ctx = (source || 'ui').toUpperCase();
+      var msg = String(message);
+      var formatted = '\n─────────────────────────────────────────────────────────────────────'
+        + '\n[' + ts + '] ▶ ' + ctx
+        + '\n─────────────────────────────────────────────────────────────────────'
+        + '\n  [' + lvl + (lvl.length < 5 ? ' '.repeat(5 - lvl.length) : '') + '] ' + ts.slice(11) + '  ' + msg;
+      var url = 'http://' + rl.ip + ':' + (rl.port || 3030) + '/tv-log';
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _formatted: formatted, app: 'TizenBrew', ts: ts, level: lvl, context: source || 'ui', message: msg })
+      }).catch(function() {});
+    };
+    return () => { window.__tbLog = null; };
+  }, []);
+
+  useEffect(() => { setGlobalToast(toast); }, [toast]);
 
   useEffect(() => {
     if (context.state.sharedData.error.disappear) {
@@ -49,6 +105,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <LocationProvider>
+        <PageChangeLogger />
         <Header ref={headerRef} />
         <div className="bg-slate-800 text-white overflow-hidden" style={{ height: `calc(100vh - ${headerHeight}px)` }}>
           <div className={`flex justify-center ${!context.state.sharedData.error.message ? 'hidden' : ''}`}>
@@ -66,9 +123,11 @@ export default function App() {
             <Route component={Settings} path="/tizenbrew-ui/dist/index.html/settings" />
             <Route component={Change} path="/tizenbrew-ui/dist/index.html/settings/change" />
             <Route component={UserAgentSettings} path="/tizenbrew-ui/dist/index.html/settings/change-ua" />
+            <Route component={RemoteLoggingSettings} path="/tizenbrew-ui/dist/index.html/settings/remote-logging" />
             <Route component={About} path="/tizenbrew-ui/dist/index.html/about" />
           </Router>
         </div>
+        <ToastContainer toasts={toasts} onDismiss={toast.dismiss} />
       </LocationProvider>
     </ErrorBoundary>
   );
@@ -101,6 +160,7 @@ function startService(context) {
   }
 
   testWS.onopen = () => {
+    testWS.close();
     context.dispatch({
       type: 'SET_STATE',
       payload: 'service.alreadyRunning'

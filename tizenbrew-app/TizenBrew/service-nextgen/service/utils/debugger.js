@@ -5,207 +5,355 @@ const fetch = require('node-fetch');
 const { Events } = require('./wsCommunication.js');
 const { readConfig } = require('./configuration.js');
 const WebSocket = require('ws');
+const logBus = require('./logBus.js');
 
 const modulesCache = new Map();
 
-let cachedWebApisPath = null;
-let bridgedWebApisCode = null;
+// Monotonically increasing counter. Bumped each time a new non-isAnotherApp
+// startDebugging call arrives. Old retry loops compare their captured sessionId
+// against this and abort if they've been superseded, preventing multiple
+// concurrent CDP clients from all injecting when Cobalt finally accepts connections.
+let _activeSessionId = 0;
 
-function setWebApisPath(path) {
-    if (!path) return;
-    console.log('[Debugger] Caching webapis.js path:', path);
-    if (path.startsWith('file://')) {
-        cachedWebApisPath = path.replace('file://', '');
-    } else {
-        cachedWebApisPath = path;
+// Build the URL to fetch the userscript, respecting sourceMode.
+// Mirrors the logic in moduleSource.js / the proxy.
+function buildScriptUrl(mdl) {
+    const fullName    = mdl.versionedFullName || mdl.fullName;
+    const sourceMode  = mdl.sourceMode || 'cdn';
+    const mainFile    = mdl.mainFile || '';
+
+    // Parse "gh/user/repo@branch" or "npm/@scope/pkg@version"
+    const firstSlash  = fullName.indexOf('/');
+    const type        = firstSlash !== -1 ? fullName.substring(0, firstSlash) : '';
+    const nameAndTag  = firstSlash !== -1 ? fullName.substring(firstSlash + 1) : fullName;
+
+    if (type === 'gh') {
+        // nameAndTag is "user/repo@branch"
+        const secondSlash   = nameAndTag.indexOf('/');
+        const repoAndBranch = secondSlash !== -1 ? nameAndTag.substring(secondSlash + 1) : nameAndTag;
+        const atIdx         = repoAndBranch.indexOf('@');
+        const branch        = atIdx !== -1 ? repoAndBranch.substring(atIdx + 1) : 'main';
+        const repoName      = atIdx !== -1
+            ? nameAndTag.substring(0, secondSlash + 1 + atIdx)
+            : nameAndTag;
+
+        if (sourceMode === 'direct') {
+            return `https://raw.githubusercontent.com/${repoName}/refs/heads/${branch}/${mainFile}`;
+        }
+        return `https://cdn.jsdelivr.net/gh/${repoName}@${branch}/${mainFile}`;
     }
+
+    if (type === 'npm') {
+        // nameAndTag is "@scope/pkg@version" or "pkg@version"
+        const atIdx  = nameAndTag.lastIndexOf('@');
+        // only strip version if there's an @ after position 0 (scoped packages start with @)
+        const pkgName = (atIdx > 0) ? nameAndTag.substring(0, atIdx) : nameAndTag;
+
+        if (sourceMode === 'direct') {
+            return `https://unpkg.com/${pkgName}/${mainFile}`;
+        }
+        return `https://cdn.jsdelivr.net/npm/${pkgName}/${mainFile}`;
+    }
+
+    // Fallback — original behaviour
+    return `https://cdn.jsdelivr.net/${fullName}/${mainFile}`;
 }
 
-function setWebApisCode(code) {
-    if (!code) return;
-    console.log('[Debugger] Caching bridged webapis.js code (length: ' + code.length + ')');
-    bridgedWebApisCode = code;
-}
-
-function getWebApisCode() {
-    return bridgedWebApisCode;
-}
-
-function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts) {
+function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts, sessionId) {
     if (!attempts) attempts = 1;
-    if (!isAnotherApp) inDebug.tizenDebug = true;
+    if (!isAnotherApp) {
+        if (!sessionId) {
+            // New top-level call: assign a fresh session, superseding any prior retry loops.
+            _activeSessionId++;
+            sessionId = _activeSessionId;
+            logBus.log('DEBUG', 'cdp', 'startDebugging new session ' + sessionId + ' on port ' + port);
+        } else if (sessionId !== _activeSessionId) {
+            // This retry belongs to a superseded session; abort silently.
+            logBus.log('DEBUG', 'cdp', 'startDebugging session ' + sessionId + ' superseded by ' + _activeSessionId + ', aborting retry');
+            return;
+        }
+        inDebug.tizenDebug = true;
+    }
+    logBus.log('DEBUG', 'cdp', 'startDebugging called on port ' + port + ' for ' + (mdl.name || '(none)'));
     try {
         CDP({ port, host: ip, local: true }, (client) => {
+            // By the time CDP calls back, a newer session may have been started.
+            // Close this stale client immediately so it doesn't inject.
+            if (!isAnotherApp && sessionId !== _activeSessionId) {
+                logBus.log('DEBUG', 'cdp', 'CDP connected for superseded session ' + sessionId + ', closing');
+                client.close();
+                return;
+            }
             client.Runtime.enable();
-            client.Page.enable();
+            client.Debugger.enable();
 
-            client.on('Runtime.executionContextCreated', (msg) => {
-                // Ensure we only inject into the main YouTube TV frame, not iframes or workers
-                const origin = msg.context.origin || '';
-                const isMainFrame = (origin.includes('youtube.com') || origin.includes('googlevideo.com')) && !msg.context.name;
-                if (!isMainFrame) return;
-
-                let webapisContent = bridgedWebApisCode;
-                const fs = require('fs');
-
-                if (!webapisContent) {
-                    const possiblePaths = [
-                        cachedWebApisPath,
-                        '/usr/share/nginx/html/webapis/webapis.js',
-                        '/usr/tv/webapis/webapis.js',
-                        '/usr/share/webapis/webapis.js',
-                        '/usr/bin/webapis/webapis.js',
-                        '/opt/share/webapp/webapis/webapis.js',
-                        '/usr/lib/tizen-webapis/webapis.js'
-                    ].filter(p => p);
-
-                    for (const p of possiblePaths) {
-                        try {
-                            if (fs.existsSync(p)) {
-                                console.log('[Debugger] Found webapis.js at ' + p);
-                                webapisContent = fs.readFileSync(p, 'utf8');
-                                break;
+            // Poll window.__ttLogQueue every second to drain TizenTube log entries.
+            // Cobalt blocks XHR/WS from the HTTPS YouTube TV context to localhost,
+            // so TizenTube pushes entries into this queue and we read them via CDP.
+            logBus.log('DEBUG', 'cdp', 'log poll starting');
+            var pollCount = 0;
+            var logPollInterval = setInterval(function () {
+                pollCount++;
+                // Log first 3 ticks to confirm the poll is running
+                if (pollCount <= 3) logBus.log('DEBUG', 'cdp', 'poll tick ' + pollCount);
+                client.Runtime.evaluate({
+                    expression: '(function(){ try { var q=window.__ttLogQueue; if(!Array.isArray(q)||q.length===0) return null; return JSON.stringify(q.splice(0)); } catch(e) { return "err:"+String(e); } })()',
+                    returnByValue: true
+                }).then(function (res) {
+                    var val = res && res.result && res.result.value;
+                    if (!val) return;
+                    if (String(val).startsWith('err:')) {
+                        logBus.log('ERROR', 'cdp', 'queue eval error: ' + val);
+                        return;
+                    }
+                    try {
+                        var entries = JSON.parse(val);
+                        if (entries.length > 0) logBus.log('DEBUG', 'cdp', 'draining ' + entries.length + ' TizenTube log entr' + (entries.length === 1 ? 'y' : 'ies'));
+                        for (var i = 0; i < entries.length; i++) {
+                            var e = entries[i];
+                            if (e && typeof e === 'object') {
+                                logBus.log(e.level || 'INFO', e.context || 'TizenTube', e._formatted || e.message || '');
                             }
-                        } catch (e) { }
-                    }
-                }
+                        }
+                    } catch (_) {}
+                }).catch(function () {});
+            }, 1000);
 
-                // THE INJECTION
-                const injectionCode = `
-                (function() {
-                    if (window.__tizentube_injected) return;
-                    window.__tizentube_injected = true;
-                    console.log("[TizenBrew] Starting API Injection...");
-                    
-                    // 1. Try to restore window.tizen if missing
-                    if (!window.tizen && window.parent && window.parent.tizen) {
-                        window.tizen = window.parent.tizen;
-                    }
+            // Fallback: if CDP connected after the page was already loaded,
+            // executionContextCreated was missed and the script was never injected.
+            // mdl.name is empty at CDP-connect time and only set when LaunchModule fires
+            // (~3s later), so we poll until it's populated then inject if needed.
+            // We eval the script source directly instead of creating a <script> tag
+            // because Tizen 6.5 Cobalt enforces Trusted Types (blocks script.src assignment).
+            // contextHasBeenInjected: set only AFTER injection is confirmed successful.
+            // scriptTagAttempted: set synchronously when the script-tag path starts, cleared
+            // on failure so the fallback can take over (needed on Tizen 6.5 Trusted Types).
+            // YouTube TV creates two default contexts (initial load + post-DIAL navigation).
+            // These two flags together prevent any second context or the fallback from
+            // injecting again after one path has already committed.
+            var contextHasBeenInjected = false;
+            var scriptTagAttempted = false;
 
-                    // 2. Inject WebAPIs
-                    if (!window.webapis || !window.webapis.avplay) {
-                        ${webapisContent ? `
-                        try {
-                            ${webapisContent}
-                            console.log("[TizenBrew] WebAPI Injected via Code.");
-                        } catch(e) { console.error("Injection Error:", e); }
-                        ` : `
-                        console.warn("[TizenBrew] WebAPIs not available on disk, bridged code not ready. Cannot inject WebAPIs without a valid script source.");
-                        `}
-                    }
-                })();
-                `;
+            var fallbackInterval = setInterval(function () {
+                if (!mdl.name || mdl.evaluateScriptOnDocumentStart) return;
+                // Stop if any path already confirmed a successful injection.
+                if (contextHasBeenInjected) { clearInterval(fallbackInterval); return; }
+                // Stop if a script-tag attempt is in-flight; wait for its result first.
+                if (scriptTagAttempted) return;
+                var cacheKey = (mdl.versionedFullName || mdl.fullName) + ':' + (mdl.sourceMode || 'cdn');
+                var scriptUrl = buildScriptUrl(mdl);
 
-                if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
-                    const cache = modulesCache.get(mdl.fullName);
-                    if (cache) {
-                        client.Runtime.evaluate({ expression: cache, contextId: msg.context.id });
-                    } else {
-                        fetch(`https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.mainFile}`).then(res => res.text()).then(modFile => {
-                            modulesCache.set(mdl.fullName, modFile);
-                            client.Runtime.evaluate({ expression: modFile, contextId: msg.context.id });
-                        }).catch(e => {
-                            client.Runtime.evaluate({ expression: `alert("Failed to load module: '${mdl.fullName}'. Please relaunch TizenBrew to try again.")`, contextId: msg.context.id });
+                client.Runtime.evaluate({
+                    expression: '(function(){try{if(!document.head)return "no-head";if(window.__tbInjected)return "already";return "ready";}catch(e){return "err:"+String(e);}})()',
+                    returnByValue: true
+                }).then(function (res) {
+                    var val = res && res.result && res.result.value;
+                    if (!val || val === 'no-head') return;
+                    if (val === 'already') {
+                        logBus.log('DEBUG', 'cdp', 'fallback injection: already');
+                        clearInterval(fallbackInterval);
+                        return;
+                    }
+                    function doEval(code) {
+                        client.Runtime.evaluate({
+                            expression: '(function(){if(window.__tbInjected)return;window.__tbInjected=true;' + code + '})()',
+                            returnByValue: false
+                        }).then(function () {
+                            logBus.log('DEBUG', 'cdp', 'fallback injection: injected');
+                            contextHasBeenInjected = true;
+                            clearInterval(fallbackInterval);
+                        }).catch(function (err) {
+                            logBus.log('ERROR', 'cdp', 'fallback eval error: ' + err);
+                            clearInterval(fallbackInterval);
                         });
                     }
-                } else if (mdl.name !== '' && mdl.evaluateScriptOnDocumentStart) {
-                    const cacheKey = mdl.versionedFullName || mdl.fullName;
-                    const clientConnection = clientConn.get('wsConn');
-
-                    // Construct Raw GitHub URL for server-side fetch
-                    // Strip jsDelivr prefixes (gh/, npm/) to get clean user/repo
-                    function getGitHubRepo(name) {
-                        if (name.startsWith('gh/')) return name.substring(3);
-                        if (name.startsWith('npm/')) return null; // npm packages can't use raw GitHub
-                        return name;
-                    }
-
-                    let fetchUrl;
-                    const cleanName = mdl.versionedFullName || mdl.fullName;
-                    if (cleanName.includes('@')) {
-                        const [rawRepo, tag] = cleanName.split('@');
-                        const repo = getGitHubRepo(rawRepo);
-                        if (repo) {
-                            fetchUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${mdl.mainFile}`;
-                        } else {
-                            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.mainFile}`;
-                        }
+                    var cached = modulesCache.get(cacheKey);
+                    if (cached) {
+                        logBus.log('DEBUG', 'cdp', 'fallback injection: using cached userscript');
+                        doEval(cached);
                     } else {
-                        const repo = getGitHubRepo(cleanName);
-                        if (repo) {
-                            fetchUrl = `https://raw.githubusercontent.com/${repo}/main/${mdl.mainFile}`;
-                        } else {
-                            fetchUrl = `https://cdn.jsdelivr.net/${cleanName}/${mdl.mainFile}`;
-                        }
+                        logBus.log('DEBUG', 'cdp', 'fallback injection: fetching userscript from ' + scriptUrl.split('?')[0]);
+                        fetch(scriptUrl)
+                            .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+                            .then(function (code) {
+                                modulesCache.set(cacheKey, code);
+                                doEval(code);
+                            })
+                            .catch(function (e) {
+                                logBus.log('ERROR', 'cdp', 'fallback fetch error: ' + e);
+                            });
                     }
-                    // Append cache buster
-                    fetchUrl += `?v=${Date.now()}`;
+                }).catch(function () {});
+            }, 1000);
 
+            client.on('Runtime.executionContextCreated', (msg) => {
+                const auxData = msg.context.auxData || {};
+                logBus.log('DEBUG', 'cdp', 'executionContextCreated contextId=' + msg.context.id + ' type=' + (auxData.type || '?') + ' isDefault=' + auxData.isDefault + ' name=' + (mdl.name || '(none)'));
+                // Only inject into the main frame context — skip workers, iframes, isolated worlds
+                if (!auxData.isDefault) return;
+                if (!mdl.evaluateScriptOnDocumentStart && mdl.name !== '') {
+                    if (contextHasBeenInjected || scriptTagAttempted) {
+                        logBus.log('DEBUG', 'cdp', 'executionContextCreated contextId=' + msg.context.id + ': skipping, already injected/attempting this session');
+                        return;
+                    }
+                    scriptTagAttempted = true;
+                    const scriptUrl = buildScriptUrl(mdl);
+                    logBus.log('DEBUG', 'cdp', 'injecting userscript via script tag: ' + scriptUrl);
+                    const expression = `
+                    (function(){
+                        if (window.__tbInjected) return;
+                        var s = document.createElement('script');
+                        s.src = '${scriptUrl}?v=${Date.now()}';
+                        document.head.appendChild(s);
+                        window.__tbInjected = true;
+                    })();
+                    `;
+                    client.Runtime.evaluate({ expression, contextId: msg.context.id })
+                    .then(function(result) {
+                        if (result && result.exceptionDetails) {
+                            // Script-tag blocked (Trusted Types on Tizen 6.5). Reset so fallback can inject via eval.
+                            logBus.log('DEBUG', 'cdp', 'script tag blocked (Trusted Types?), fallback will inject via eval');
+                            scriptTagAttempted = false;
+                        } else {
+                            logBus.log('DEBUG', 'cdp', 'script tag injection confirmed');
+                            contextHasBeenInjected = true;
+                            clearInterval(fallbackInterval);
+                        }
+                    })
+                    .catch(function(err) {
+                        logBus.log('DEBUG', 'cdp', 'script tag eval error: ' + err + ', fallback will inject');
+                        scriptTagAttempted = false;
+                    });
+                } else if (mdl.name !== '' && mdl.evaluateScriptOnDocumentStart) {
+                    // Cache key includes sourceMode so cdn and direct don't share a stale entry
+                    const cacheKey = (mdl.versionedFullName || mdl.fullName) + ':' + (mdl.sourceMode || 'cdn');
                     const cache = modulesCache.get(cacheKey);
+                    const clientConnection = clientConn.get('wsConn');
 
                     if (cache) {
                         client.Page.addScriptToEvaluateOnNewDocument({ expression: cache });
                         sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                     } else {
-                        fetch(fetchUrl).then(res => res.text()).then(modFile => {
-                            modulesCache.set(cacheKey, modFile);
-                            sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
-                            client.Page.addScriptToEvaluateOnNewDocument({ expression: modFile });
-                        }).catch(e => {
-                            sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
-                            client.Page.addScriptToEvaluateOnNewDocument({ expression: `alert("Failed to load module: '${mdl.fullName}'. Please relaunch TizenBrew to try again.")` });
-                        });
+                        const scriptUrl = buildScriptUrl(mdl);
+                        logBus.log('DEBUG', 'cdp', 'fetching userscript (evaluateOnDocStart): ' + scriptUrl);
+                        // Fallback CDN URL in case direct fetch fails (TLS issues on old Node.js)
+                        const fallbackUrl = `https://cdn.jsdelivr.net/gh/${
+                            (() => {
+                                const n = (mdl.versionedFullName || mdl.fullName);
+                                const parts = n.substring(n.indexOf('/') + 1);
+                                return parts;
+                            })()
+                        }/${mdl.mainFile}`;
+
+                        fetch(scriptUrl)
+                            .then(res => {
+                                if (!res.ok) throw new Error('HTTP ' + res.status);
+                                return res.text();
+                            })
+                            .catch(() => fetch(fallbackUrl).then(res => res.text()))
+                            .then(modFile => {
+                                modulesCache.set(cacheKey, modFile);
+                                sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
+                                client.Page.addScriptToEvaluateOnNewDocument({ expression: modFile });
+                            })
+                            .catch(e => {
+                                sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
+                                client.Page.addScriptToEvaluateOnNewDocument({
+                                    expression: `alert("Failed to load module: '${mdl.fullName}' from ${scriptUrl}. Please relaunch TizenBrew to try again.")`
+                                });
+                            });
                     }
-
-                    // 2. Inject WebAPIs
-                    if (!window.webapis || !window.webapis.avplay) {
-                        ${webapisContent ? `
-                        try {
-                            ${webapisContent}
-                            console.log("[TizenBrew] WebAPI Injected via Code.");
-                        } catch(e) { console.error("Injection Error:", e); }
-                        ` : `
-                        console.warn("[TizenBrew] WebAPIs not available on disk, bridged code not ready. Cannot inject WebAPIs without a valid script source.");
-                        `}
-                    }
-                })();
-                `;
-
-                client.Runtime.evaluate({ expression: injectionCode, contextId: msg.context.id });
-                client.Page.addScriptToEvaluateOnNewDocument({ source: injectionCode });
-
-                // Module Injection
-                if (mdl.name !== '') {
-                    const proxyModule = encodeURIComponent(mdl.versionedFullName || mdl.fullName);
-                    const modUrl = 'http://127.0.0.1:8081/module/' + proxyModule + '/' + mdl.mainFile + '?v=' + Date.now();
-                    fetch(modUrl).then(res => res.text()).then(scriptContent => {
-                        client.Runtime.evaluate({ expression: scriptContent, contextId: msg.context.id });
-                        console.log("[Debugger] Module Injected via Code.");
-                    }).catch(err => {
-                        console.log('[Debugger] Failed to fetch module script: ' + err);
-                    });
                 }
             });
 
             client.on('disconnect', () => {
-                if (!isAnotherApp) inDebug.tizenDebug = false;
+                clearInterval(logPollInterval);
+                clearInterval(fallbackInterval);
+                contextHasBeenInjected = false;
+                scriptTagAttempted = false;
+                if (isAnotherApp) return;
+
+                inDebug.tizenDebug = false;
+                inDebug.webDebug   = false;
+                inDebug.rwiDebug   = false;
+
+                mdl.fullName      = '';
+                mdl.name          = '';
+                mdl.appPath       = '';
+                mdl.moduleType    = '';
+                mdl.packageType   = '';
+                mdl.serviceFile   = '';
+                mdl.mainFile      = '';
+                mdl.sourceMode    = '';
             });
 
-            // Signal Ready
-            const clientConnection = clientConn.get('wsConn');
-            if (clientConnection) {
-                const data = clientConnection.Event(Events.CanLaunchModules, appControlData.module ? {
-                    type: 'appControl',
-                    module: appControlData.module,
-                    args: appControlData.args
-                } : null);
-                clientConnection.send(data);
+            if (!isAnotherApp) {
+                const clientConnection = clientConn.get('wsConn');
+                if (appControlData.module) {
+                    const data = clientConnection.Event(Events.CanLaunchModules, {
+                        type: 'appControl',
+                        module: appControlData.module,
+                        args: appControlData.args
+                    });
+                    sendClientInformation(clientConn, data);
+                } else {
+                    const config = readConfig();
+                    if (config.autoLaunchModule) {
+                        const data = clientConnection.Event(Events.CanLaunchModules, {
+                            type: 'autolaunch',
+                            module: config.autoLaunchModule
+                        });
+                        sendClientInformation(clientConn, data);
+                    } else {
+                        const data = clientConnection.Event(Events.CanLaunchModules, null);
+                        sendClientInformation(clientConn, data);
+                    }
+                }
             }
-
+            if (!isAnotherApp) inDebug.webDebug = true;
+            appControlData = null;
         }).on('error', (err) => {
-            if (attempts < 20) setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts + 1), 1000);
+            if (attempts >= 15) {
+                if (!isAnotherApp) {
+                    clientConn.send(clientConn.Event(Events.Error, 'Failed to connect to the debugger'));
+                    inDebug.tizenDebug = false;
+                    return;
+                } else return;
+            }
+            attempts++;
+            setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts, sessionId), 750);
         });
-    } catch (e) { }
+    } catch (e) {
+        if (attempts >= 15) {
+            if (!isAnotherApp) {
+                clientConn.send(clientConn.Event(Events.Error, 'Failed to connect to the debugger'));
+                inDebug.tizenDebug = false;
+                return;
+            } else return;
+        }
+        attempts++;
+        setTimeout(() => startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appControlData, isAnotherApp, attempts, sessionId), 750);
+        return;
+    }
 }
+
+function sendClientInformation(clientConn, data) {
+    const clientConnection = clientConn.get('wsConn');
+    // Require the connection to be open AND marked ready (isReady is set only after
+    // the client sends GetModules/Ready). This prevents sending to a closed old
+    // connection that still has isReady=true from a previous session, which would
+    // silently drop the message and leave the UI hung.
+    if (!clientConnection ||
+        !clientConnection.connection ||
+        clientConnection.connection.readyState !== WebSocket.OPEN ||
+        !clientConnection.isReady) {
+        return setTimeout(() => sendClientInformation(clientConn, data), 50);
+    }
+    clientConnection.send(data);
+}
+
+function setWebApisPath() {}
+function setWebApisCode() {}
+function getWebApisCode() { return null; }
 
 module.exports = { startDebugging, setWebApisPath, setWebApisCode, getWebApisCode };

@@ -38,7 +38,24 @@
         "uaSetRelaunch": "User-Agent set. Relaunch the app to apply changes.",
         "uaNegativeEffects": "Huomaa, että vaikka tällä voi olla positiivisia vaikutuksia, sillä voi olla myös negatiivisia vaikutuksia.",
         "language": "Kieliasetukset",
-        "languageDesc": "Vaihda sovelluksen kieli."
+        "languageDesc": "Vaihda sovelluksen kieli.",
+        "selected": "Valittu",
+        "remoteLogging": "Etäkirjaus",
+        "remoteLoggingDesc": "Lähetä palvelu- ja moduulilokeja HTTP:n kautta vastaanottimelle PC:llä."
+    },
+    "remoteLogPage": {
+        "enableTitle": "Ota etäkirjaus käyttöön",
+        "enabledDesc": "Käytössä — lokit lähetetään vastaanottimelle.",
+        "disabledDesc": "Ei käytössä — lokeja ei lähetetä.",
+        "on": "PÄÄLLÄ",
+        "receiverIp": "Vastaanottimen IP-osoite",
+        "receiverPort": "Vastaanottimen portti",
+        "saveTitle": "Tallenna asetukset",
+        "saveDesc": "Ota käyttöön ja palaa asetuksiin.",
+        "testTitle": "Lähetä testiloki",
+        "testDesc": "Lähettää suoraan vastaanottimelle yhteyden tarkistamiseksi. Toimii vaikka kirjaus olisi pois käytöstä.",
+        "enterIpFirst": "Syötä ensin IP-osoite",
+        "enterToConfirm": "Enter vahvistaaksesi"
     },
     "__contributors": [
         "Manki9000"

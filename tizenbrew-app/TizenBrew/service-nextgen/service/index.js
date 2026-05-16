@@ -1,7 +1,6 @@
 "use strict";
 
 module.exports.onStart = function () {
-    console.log('Service started');
     const adbhost = require('adbhost');
     const express = require('express');
     const fetch = require('node-fetch');
@@ -11,73 +10,115 @@ module.exports.onStart = function () {
     const { startDebugging, setWebApisPath } = require('./utils/debugger.js');
     const startService = require('./utils/serviceLauncher.js');
     const { Connection, Events } = require('./utils/wsCommunication.js');
-    let WebSocket;
-    if (process.version === 'v4.4.3') {
-        WebSocket = require('ws-old');
-    } else {
-        WebSocket = require('ws-new');
-    }
+    const { existsSync, readFileSync, statSync, accessSync, constants, unlinkSync, chmodSync } = require('fs');
+    const logBus = require('./utils/logBus.js');
+    const remoteLogger = require('./utils/remoteLogger.js');
+    // ws-old (ws@4) works on all Tizen Node runtimes (v4.4.3 through v8+).
+    // ws-new (ws@8) uses optional-chaining syntax that crashes on Node 6 (Tizen 4/5).
+    const WebSocket = require('ws-old');
 
+    const TB_CONFIG = '/home/owner/share/tizenbrewConfig.json';
+
+    // Initialise remote logger from saved config
+    const _startupCfg = readConfig();
+    remoteLogger.start(_startupCfg.remoteLogging);
+    logBus.log('INFO', 'service', 'TizenBrew service started', { nodeVersion: process.version });
+
+    function tryFixTBConfigPermissions(filePath) {
+        try { chmodSync(filePath, 0o666); return true; } catch (_) { return false; }
+    }
 
     const app = express();
     let deviceIP;
     const isTizen3 = tizen.systeminfo.getCapability('http://tizen.org/feature/platform.version').startsWith('3.0');
 
-    // HTTP Proxy for modules 
-    app.all('*', (req, res) => {
-        if (req.url === '/webapis.js') {
-            const { getWebApisCode } = require('./utils/debugger.js');
-            const code = getWebApisCode();
-            if (code) {
-                res.setHeader('Content-Type', 'application/javascript');
-                res.setHeader('Access-Control-Allow-Origin', '*');
-                res.send(code);
-            } else {
-                res.status(404).send('WebAPIs not bridged yet. Open TizenBrew UI first.');
+    // Log relay — TizenTube POSTs log entries here; we pipe them into logBus
+    // so remoteLogger forwards them to the PS1 receiver over native http.request.
+    app.options('/tv-log', (req, res) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        res.end();
+    });
+    app.post('/tv-log', (req, res) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        let body = '';
+        req.on('data', (chunk) => { body += chunk; });
+        req.on('end', () => {
+            logBus.log('DEBUG', 'tv-log', 'POST received, body length: ' + body.length + ', body: ' + body.slice(0, 300));
+            try {
+                const entry = JSON.parse(body);
+                logBus.log(entry.level || 'INFO', entry.context || 'TizenTube', entry._formatted || entry.message || '');
+            } catch (err) {
+                logBus.log('ERROR', 'tv-log', 'JSON.parse failed: ' + String(err) + ' | raw: ' + JSON.stringify(body.slice(0, 200)));
             }
-        } else if (req.url.startsWith('/module/')) {
+            res.end('{"ok":true}');
+        });
+    });
+
+    // HTTP Proxy for modules
+    app.all('*', (req, res) => {
+        if (req.url.startsWith('/module/')) {
             const splittedUrl = req.url.split('/');
             const encodedModuleName = splittedUrl[2];
             const moduleName = decodeURIComponent(encodedModuleName);
-            // Append timestamp to ensure we don't hit any intermediate caches for proxy requests
+    
+            const filePathWithQuery = req.url.replace(`/module/${encodedModuleName}/`, '');
+            const queryIndex = filePathWithQuery.indexOf('?');
+            const filePath = queryIndex === -1 ? filePathWithQuery : filePathWithQuery.substring(0, queryIndex);
+            const queryString = queryIndex === -1 ? '' : filePathWithQuery.substring(queryIndex + 1);
+            const sourceMode = queryString.indexOf('sourceMode=direct') !== -1 ? 'direct' : 'cdn';
+    
             const cacheBuster = `?t=${Date.now()}`;
-
-            let upstreamUrl;
-            const filePath = req.url.replace(`/module/${encodedModuleName}/`, '');
-
-            // Strip jsDelivr prefixes to get clean GitHub user/repo
+    
             function getGitHubRepo(name) {
                 if (name.startsWith('gh/')) return name.substring(3);
                 if (name.startsWith('npm/')) return null;
                 return name;
             }
-
-            // Check if versioned
+    
+            let upstreamUrl;
+    
             if (moduleName.includes('@')) {
-                const [rawRepo, tag] = moduleName.split('@');
+                const atIdx = moduleName.lastIndexOf('@');
+                const rawRepo = moduleName.substring(0, atIdx);
+                const tag = moduleName.substring(atIdx + 1);
                 const repo = getGitHubRepo(rawRepo);
                 if (repo) {
-                    upstreamUrl = `https://raw.githubusercontent.com/${repo}/${tag}/${filePath}`;
+                    upstreamUrl = sourceMode === 'direct'
+                        ? `https://raw.githubusercontent.com/${repo}/${tag}/${filePath}`
+                        : `https://cdn.jsdelivr.net/gh/${repo}@${tag}/${filePath}`;
                 } else {
-                    // npm package, fallback to jsDelivr
-                    upstreamUrl = `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
+                    const npmName = rawRepo.replace(/^npm\//, '');
+                    upstreamUrl = sourceMode === 'direct'
+                        ? `https://unpkg.com/${npmName}/${filePath}`
+                        : `https://cdn.jsdelivr.net/${rawRepo}@${tag}/${filePath}`;
                 }
             } else {
                 const repo = getGitHubRepo(moduleName);
                 if (repo) {
-                    upstreamUrl = `https://raw.githubusercontent.com/${repo}/main/${filePath}`;
+                    upstreamUrl = sourceMode === 'direct'
+                        ? `https://raw.githubusercontent.com/${repo}/main/${filePath}`
+                        : `https://cdn.jsdelivr.net/gh/${repo}/${filePath}`;
                 } else {
-                    upstreamUrl = `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
+                    const npmName = moduleName.replace(/^npm\//, '');
+                    upstreamUrl = sourceMode === 'direct'
+                        ? `https://unpkg.com/${npmName}/${filePath}`
+                        : `https://cdn.jsdelivr.net/${moduleName}/${filePath}`;
                 }
             }
-
+    
+            logBus.log('DEBUG', 'proxy', req.method + ' /' + filePath + ' (' + sourceMode + ') → ' + upstreamUrl);
             fetch(`${upstreamUrl}${cacheBuster}`)
                 .then(fetchRes => {
-                    return fetchRes.body.pipe(res);
-                })
-                .then(() => {
+                    logBus.log('DEBUG', 'proxy', 'HTTP ' + fetchRes.status + ' ← ' + upstreamUrl);
                     res.setHeader('Access-Control-Allow-Origin', '*');
                     res.type(path.basename(filePath).split('.').slice(-1)[0].split('?')[0]);
+                    fetchRes.body.pipe(res);
+                })
+                .catch(err => {
+                    logBus.log('ERROR', 'proxy', 'upstream fetch failed: ' + err + ' for ' + upstreamUrl);
+                    res.status(502).end();
                 });
         } else {
             res.send(deviceIP);
@@ -88,10 +129,17 @@ module.exports.onStart = function () {
 
     let adbClient;
     let canLaunchInDebug = null;
+    
     fetch('http://127.0.0.1:8001/api/v2/').then(res => res.json())
         .then(json => {
+            logBus.log('DEBUG', 'debug', 'startup canLaunchInDebug device: ' + JSON.stringify(json.device));
             canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
+            logBus.log('DEBUG', 'debug', 'startup canLaunchInDebug: ' + canLaunchInDebug);
+        })
+        .catch(err => {
+            logBus.log('ERROR', 'debug', 'startup 8001 fetch failed: ' + err);
         });
+
     const inDebug = {
         tizenDebug: false,
         webDebug: false,
@@ -109,7 +157,8 @@ module.exports.onStart = function () {
         appPath: '',
         moduleType: '',
         packageType: '',
-        serviceFile: ''
+        serviceFile: '',
+        sourceMode: ''
     };
 
     const appControlData = {
@@ -119,7 +168,8 @@ module.exports.onStart = function () {
 
     loadModules().then(modules => {
         modulesCache = modules;
-        const serviceModuleList = readConfig().autoLaunchServiceList;
+        const _initCfg = readConfig();
+        const serviceModuleList = _initCfg.autoLaunchServiceList;
         if (serviceModuleList.length > 0) {
             serviceModuleList.forEach(module => {
                 const service = modules.find(m => m.name === module);
@@ -131,19 +181,16 @@ module.exports.onStart = function () {
 
     function createAdbConnection(ip, mdl) {
         deviceIP = ip;
-        if (adbClient) {
-            if (!adbClient._stream) {
-                adbClient._stream.removeAllListeners('connect');
-                adbClient._stream.removeAllListeners('error');
-                adbClient._stream.removeAllListeners('close');
-            }
+        if (adbClient && adbClient._stream) {
+            adbClient._stream.removeAllListeners('connect');
+            adbClient._stream.removeAllListeners('error');
+            adbClient._stream.removeAllListeners('close');
         }
 
         adbClient = adbhost.createConnection({ host: '127.0.0.1', port: 26101 });
 
         adbClient._stream.on('connect', () => {
             console.log('ADB connection established');
-            //Launch app
             const tbPackageId = tizen.application.getAppInfo().packageId;
             const shellCmd = adbClient.createStream(`shell:0 debug ${tbPackageId}.TizenBrewStandalone${isTizen3 ? ' 0' : ''}`);
             shellCmd.on('data', function dataIncoming(data) {
@@ -166,6 +213,7 @@ module.exports.onStart = function () {
 
 
     wsServer.on('connection', (ws) => {
+        logBus.log('DEBUG', 'ws', 'new client connected');
         const wsConn = new Connection(ws);
         for (const event of queuedEvents) {
             wsConn.send(event);
@@ -207,9 +255,15 @@ module.exports.onStart = function () {
                 case Events.CanLaunchInDebug: {
                     fetch('http://127.0.0.1:8001/api/v2/').then(res => res.json())
                         .then(json => {
+                            logBus.log('DEBUG', 'debug', 'canLaunchInDebug device: ' + JSON.stringify(json.device));
                             canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
+                            logBus.log('DEBUG', 'debug', 'canLaunchInDebug resolved: ' + canLaunchInDebug);
+                            wsConn.send(wsConn.Event(Events.CanLaunchInDebug, canLaunchInDebug));
+                        })
+                        .catch(err => {
+                            logBus.log('ERROR', 'debug', '8001 fetch failed: ' + err);
+                            wsConn.send(wsConn.Event(Events.CanLaunchInDebug, false));
                         });
-                    wsConn.send(wsConn.Event(Events.CanLaunchInDebug, canLaunchInDebug));
                     break;
                 }
                 case Events.ReLaunchInDebug: {
@@ -222,16 +276,27 @@ module.exports.onStart = function () {
                     wsConn.isReady = true;
                     services.set('wsConn', wsConn);
 
+                    function sendModules(modules) {
+                        const cfg = readConfig();
+                        const rateLimitedModules = modules.filter(m => m.rateLimited).map(m => m.name);
+                        wsConn.send(wsConn.Event(Events.GetModules, {
+                            modules,
+                            defaultModule: cfg.defaultModule || '',
+                            rateLimitedModules
+                        }));
+                    }
+
                     if (payload) {
                         loadModules().then(modules => {
                             modulesCache = modules;
-                            wsConn.send(wsConn.Event(Events.GetModules, modules));
+                            sendModules(modules);
                         });
-                    } else wsConn.send(wsConn.Event(Events.GetModules, modulesCache));
+                    } else sendModules(modulesCache || []);
                     break;
                 }
                 case Events.LaunchModule: {
                     const mdl = payload;
+                    logBus.log('INFO', 'service', 'Launching module', { name: mdl.name, fullName: mdl.fullName });
                     currentModule.fullName = mdl.fullName;
                     currentModule.versionedFullName = mdl.versionedFullName;
                     currentModule.name = mdl.name;
@@ -239,6 +304,7 @@ module.exports.onStart = function () {
                     currentModule.moduleType = mdl.moduleType;
                     currentModule.packageType = mdl.packageType;
                     currentModule.serviceFile = mdl.serviceFile;
+                    currentModule.sourceMode = mdl.sourceMode;
 
                     if (mdl.packageType === 'app') {
                         inDebug.webDebug = false;
@@ -295,22 +361,29 @@ module.exports.onStart = function () {
                     break;
                 }
                 case Events.ModuleAction: {
-                    const { action, module } = payload;
-
+                    const { action, module, sourceMode } = payload;
                     const config = readConfig();
+                
                     switch (action) {
                         case 'add': {
-                            const index = config.modules.findIndex(m => m === module);
-                            if (index === -1) {
-                                config.modules.push(module);
+                            const normalizedMode = sourceMode === 'direct' ? 'direct' : 'cdn';
+                            const exists = config.modules.some(m =>
+                                (typeof m === 'string' ? m : (m.name || m.module)) === module
+                            );
+                            if (!exists) {
+                                config.modules.push({ name: module, sourceMode: normalizedMode });
                                 writeConfig(config);
                             }
                             break;
                         }
                         case 'remove': {
-                            const index = config.modules.findIndex(m => m === module);
-                            if (index !== -1) {
-                                config.modules.splice(index, 1);
+                            const idx = config.modules.findIndex(m =>
+                                (typeof m === 'string' ? m : (m.name || m.module)) === module
+                            );
+                            if (idx !== -1) {
+                                config.modules.splice(idx, 1);
+                                // Clear default if it pointed at the removed module
+                                if (config.defaultModule === module) config.defaultModule = '';
                                 writeConfig(config);
                             }
                             break;
@@ -325,7 +398,91 @@ module.exports.onStart = function () {
                             writeConfig(config);
                             break;
                         }
+                        case 'setDefault': {
+                            config.defaultModule = module;
+                            writeConfig(config);
+                            break;
+                        }
+                        case 'clearDefault': {
+                            config.defaultModule = '';
+                            writeConfig(config);
+                            break;
+                        }
                     }
+                    break;
+                }
+
+                case Events.CheckTizenBrewConfig: {
+                    if (!existsSync(TB_CONFIG)) {
+                        return wsConn.send(wsConn.Event(Events.CheckTizenBrewConfig, { exists: false }));
+                    }
+                    try {
+                        const stats = statSync(TB_CONFIG);
+                        const mode = (stats.mode & 0o777).toString(8);
+
+                        // Skip accessSync — it lies on Tizen 5.5 (Smack labels).
+                        // Just attempt the read and catch if it actually fails.
+                        let configContent = null;
+                        let configError = null;
+                        try {
+                            configContent = JSON.parse(readFileSync(TB_CONFIG, 'utf8'));
+                        } catch (e) {
+                            configError = e.message;
+                        }
+
+                        wsConn.send(wsConn.Event(Events.CheckTizenBrewConfig, {
+                            exists: true,
+                            readable: configContent !== null,
+                            writable: true,
+                            attemptedPermissionFix: false,
+                            permissionFixApplied: false,
+                            modeBefore: mode,
+                            mode,
+                            size: stats.size,
+                            mtime: stats.mtime.toISOString(),
+                            config: configContent,
+                            parseError: configError
+                        }));
+                    } catch (e) {
+                        wsConn.send(wsConn.Event(Events.CheckTizenBrewConfig, { exists: true, error: e.message }));
+                    }
+                    break;
+                }
+
+                case Events.ResetTizenBrewConfig: {
+                    if (!existsSync(TB_CONFIG)) {
+                        return wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'notFound' }));
+                    }
+                    try {
+                        unlinkSync(TB_CONFIG);
+                        wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'success' }));
+                    } catch (e) {
+                        wsConn.send(wsConn.Event(Events.ResetTizenBrewConfig, { status: 'error', message: e.message }));
+                    }
+                    break;
+                }
+
+                case Events.GetRemoteLogging: {
+                    wsConn.send(wsConn.Event(Events.GetRemoteLogging, readConfig().remoteLogging));
+                    break;
+                }
+                case Events.SetRemoteLogging: {
+                    const cfg = readConfig();
+                    cfg.remoteLogging = {
+                        enabled: !!payload.enabled,
+                        ip: String(payload.ip || ''),
+                        port: Number(payload.port) || 3030
+                    };
+                    writeConfig(cfg);
+                    remoteLogger.start(cfg.remoteLogging);
+                    logBus.log('INFO', 'service', 'Remote logging updated', cfg.remoteLogging);
+                    wsConn.send(wsConn.Event(Events.SetRemoteLogging, { ok: true }));
+                    break;
+                }
+                case Events.LogEvent: {
+                    const { level, source, message } = payload || {};
+                    logBus.log('DEBUG', 'ws', 'LogEvent from ' + String(source) + ': ' + String(message || '').slice(0, 100));
+                    logBus.log(level || 'INFO', source || 'ui', message || '');
                     break;
                 }
                 case Events.Ready: {

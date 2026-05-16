@@ -8,6 +8,10 @@ const initialState = {
             appDebug: false,
             tizenDebug: false
         },
+        autoLaunchModule: '',
+        autoLaunchServiceList: [],
+        defaultModule: '',
+        remoteLogging: null,
         modules: null,
         state: null,
         error: {
@@ -33,6 +37,19 @@ function reducer(state, action) {
             return { ...state, sharedData: { ...state.sharedData, state: action.payload } };
         case 'SET_ERROR':
             return { ...state, sharedData: { ...state.sharedData, error: action.payload } };
+        case 'SET_AUTOLAUNCH':
+            return {
+                ...state,
+                sharedData: {
+                    ...state.sharedData,
+                    autoLaunchModule:      action.payload.autoLaunchModule      ?? state.sharedData.autoLaunchModule,
+                    autoLaunchServiceList: action.payload.autoLaunchServiceList ?? state.sharedData.autoLaunchServiceList,
+                }
+            };
+        case 'SET_DEFAULT_MODULE':
+            return { ...state, sharedData: { ...state.sharedData, defaultModule: action.payload } };
+        case 'SET_REMOTE_LOGGING':
+            return { ...state, sharedData: { ...state.sharedData, remoteLogging: action.payload } };
         default:
             return state;
     }

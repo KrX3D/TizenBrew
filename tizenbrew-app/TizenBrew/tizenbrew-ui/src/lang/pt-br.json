@@ -38,7 +38,24 @@
         "uaSetRelaunch": "User-Agent set. Relaunch the app to apply changes.",
         "uaNegativeEffects": "Note que mesmo que isso possa ter efeitos positivos, também poderá ter efeitos negativos.",
         "language": "Configurações de idioma",
-        "languageDesc": "Mudar o idioma do aplicativo."
+        "languageDesc": "Mudar o idioma do aplicativo.",
+        "selected": "Selecionado",
+        "remoteLogging": "Log remoto",
+        "remoteLoggingDesc": "Enviar logs do serviço e módulos via HTTP para um receptor no seu PC."
+    },
+    "remoteLogPage": {
+        "enableTitle": "Ativar log remoto",
+        "enabledDesc": "Ativado — logs são enviados ao receptor.",
+        "disabledDesc": "Desativado — nenhum log é enviado.",
+        "on": "ON",
+        "receiverIp": "Endereço IP do receptor",
+        "receiverPort": "Porta do receptor",
+        "saveTitle": "Salvar configurações",
+        "saveDesc": "Aplicar e voltar às configurações.",
+        "testTitle": "Enviar log de teste",
+        "testDesc": "Envia diretamente ao receptor para verificar a conexão. Funciona mesmo com o log desativado.",
+        "enterIpFirst": "Digite um endereço IP primeiro",
+        "enterToConfirm": "Enter para confirmar"
     },
     "__contributors": [
         "nicejs-is-cool"

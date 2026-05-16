@@ -38,7 +38,24 @@
         "uaSetRelaunch": "تم تعيين وكيل المستخدم. أعد تشغيل التطبيق لتطبيق التغييرات.",
         "uaNegativeEffects": "لاحظ أنه رغم إمكانية وجود تأثيرات إيجابية، قد تكون هناك أيضًا تأثيرات سلبية.",
         "language": "إعدادات اللغة",
-        "languageDesc": "غيّر لغة التطبيق."
+        "languageDesc": "غيّر لغة التطبيق.",
+        "selected": "محدد",
+        "remoteLogging": "التسجيل عن بُعد",
+        "remoteLoggingDesc": "إرسال سجلات الخدمة والوحدات عبر HTTP إلى مستقبل على جهاز الكمبيوتر."
+    },
+    "remoteLogPage": {
+        "enableTitle": "Enable Remote Logging",
+        "enabledDesc": "Enabled — logs are sent to the receiver.",
+        "disabledDesc": "Disabled — no logs are sent.",
+        "on": "ON",
+        "receiverIp": "Receiver IP Address",
+        "receiverPort": "Receiver Port",
+        "saveTitle": "Save Settings",
+        "saveDesc": "Apply and return to Settings.",
+        "testTitle": "Send Test Log",
+        "testDesc": "POSTs directly to the receiver to verify the connection. Works even when logging is disabled.",
+        "enterIpFirst": "Enter an IP address first",
+        "enterToConfirm": "Enter to confirm"
     },
     "__contributors": [
         "b0rdga"

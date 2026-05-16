@@ -38,7 +38,24 @@
         "uaSetRelaunch": "User-Agent reikšmė nustatyta. Paleiskite programą iš naujo, kad pakeitimai būtų pritaikyti.",
         "uaNegativeEffects": "Atkreipkite dėmesį, kad nors tai gali turėti teigiamą poveikį, taip pat gali būti ir neigiamų pasekmių.",
         "language": "Kalbos nustatymai",
-        "languageDesc": "Pakeiskite programos kalbą."
+        "languageDesc": "Pakeiskite programos kalbą.",
+        "selected": "Pasirinkta",
+        "remoteLogging": "Nuotolinis registravimas",
+        "remoteLoggingDesc": "Siųskite paslaugos ir modulių žurnalus HTTP protokolu į gavėją jūsų kompiuteryje."
+    },
+    "remoteLogPage": {
+        "enableTitle": "Enable Remote Logging",
+        "enabledDesc": "Enabled — logs are sent to the receiver.",
+        "disabledDesc": "Disabled — no logs are sent.",
+        "on": "ON",
+        "receiverIp": "Receiver IP Address",
+        "receiverPort": "Receiver Port",
+        "saveTitle": "Save Settings",
+        "saveDesc": "Apply and return to Settings.",
+        "testTitle": "Send Test Log",
+        "testDesc": "POSTs directly to the receiver to verify the connection. Works even when logging is disabled.",
+        "enterIpFirst": "Enter an IP address first",
+        "enterToConfirm": "Enter to confirm"
     },
     "__contributors": [
         "Benetis"
