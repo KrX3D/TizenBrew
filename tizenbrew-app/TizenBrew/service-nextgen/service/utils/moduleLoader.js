@@ -39,9 +39,10 @@ function fetchFirstUrl(urls, state) {
 function loadModules() {
     const config = readConfig();
     const modules = config.modules;
+    const globalSourceMode = config.globalSourceMode || 'cdn';
 
     const modulePromises = modules.map(entry => {
-        const { moduleName: module, sourceMode } = parseModuleEntry(entry);
+        const { moduleName: module, sourceMode } = parseModuleEntry(entry, globalSourceMode);
         if (!module) return null;
 
         const urls = getPackageJsonUrls(module, sourceMode);

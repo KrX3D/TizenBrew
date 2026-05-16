@@ -18,6 +18,8 @@ const Events = {
     GetRemoteLogging: 13,
     SetRemoteLogging: 14,
     LogEvent: 15,
+    GetGlobalSourceMode: 16,
+    SetGlobalSourceMode: 17,
     WebApisPath: 20,
     WebApisCode: 21
 };
