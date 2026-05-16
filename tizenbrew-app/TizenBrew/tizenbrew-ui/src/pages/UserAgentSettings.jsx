@@ -15,6 +15,10 @@ const UserAgents = [
         userAgent: 'Mozilla/5.0 (LINUX; Tizen/6.0/2021.1.3) Cobalt/21.lts.4.302899-gold (unlike Gecko) v8/7.7.299.8-jit gles Evergreen/1.4.3 Starboard/12, Samsung_TV_NIKEM2_2021/T-NKM2AKUC-2111.1 (Samsung, QN55Q80AAFXZA, Wired)'
     },
     {
+        name: 'PlayStation 4 (YouTube High-End UI)',
+        userAgent: 'Mozilla/5.0 (PS4; Leanback Shell) Cobalt/25.lts.30.1034958-gold (unlike Gecko) Starboard/15'
+    },
+    {
         name: 'settings.uaBasedOnDevice',
         userAgent: () => {
             const xhr = new XMLHttpRequest();
