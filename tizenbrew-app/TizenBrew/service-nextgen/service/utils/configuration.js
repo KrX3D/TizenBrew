@@ -12,6 +12,7 @@ function readConfig() {
         autoLaunchServiceList: [],
         autoLaunchModule: '',
         defaultModule: '',
+        globalSourceMode: 'cdn',
         remoteLogging: Object.assign({}, REMOTE_LOGGING_DEFAULTS)
     };
     if (!fs.existsSync(TB_CONFIG_PATH)) return defaults;
@@ -19,6 +20,7 @@ function readConfig() {
     // Back-fill fields missing from older config files
     if (!cfg.remoteLogging) cfg.remoteLogging = Object.assign({}, REMOTE_LOGGING_DEFAULTS);
     if (cfg.defaultModule === undefined) cfg.defaultModule = '';
+    if (cfg.globalSourceMode === undefined) cfg.globalSourceMode = 'cdn';
     return cfg;
 }
 
@@ -29,17 +31,18 @@ function writeConfig(config) {
 }
 
 // Normalise a raw module entry (string or object) into { moduleName, sourceMode }
-function parseModuleEntry(entry) {
+function parseModuleEntry(entry, defaultSourceMode) {
+    const fallbackMode = defaultSourceMode === 'direct' ? 'direct' : 'cdn';
     if (typeof entry === 'string') {
-        return { moduleName: entry, sourceMode: 'cdn' };
+        return { moduleName: entry, sourceMode: fallbackMode };
     }
     if (entry && typeof entry === 'object') {
         return {
             moduleName: entry.name || entry.module || '',
-            sourceMode: entry.sourceMode === 'direct' ? 'direct' : 'cdn'
+            sourceMode: entry.sourceMode === 'direct' ? 'direct' : fallbackMode
         };
     }
-    return { moduleName: '', sourceMode: 'cdn' };
+    return { moduleName: '', sourceMode: fallbackMode };
 }
 
 module.exports = { readConfig, writeConfig, parseModuleEntry };
