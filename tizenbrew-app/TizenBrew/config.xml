@@ -23,7 +23,7 @@
     <tizen:metadata key="http://samsung.com/tv/metadata/ext_api_support" value="true"/>
     <tizen:metadata key="http://samsung.com/tv/metadata/scheme_support" value="http|https"/>
     <tizen:metadata key="http://samsung.com/tv/metadata/microphone.support" value="1"/>
-    <tizen:metadata key="http://samsung.com/tv/metadata/microphone.area" value="open"/>
+    <tizen:metadata key="http://samsung.com/tv/metadata/microphone.area" value="exclusive"/>
     <name>TizenBrewNextGeneration</name>
     <tizen:privilege name="http://tizen.org/privilege/internet"/>
     <tizen:privilege name="http://developer.samsung.com/privilege/network.public"/>
