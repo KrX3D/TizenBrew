@@ -15,8 +15,12 @@ const UserAgents = [
         userAgent: 'Mozilla/5.0 (LINUX; Tizen/6.0/2021.1.3) Cobalt/21.lts.4.302899-gold (unlike Gecko) v8/7.7.299.8-jit gles Evergreen/1.4.3 Starboard/12, Samsung_TV_NIKEM2_2021/T-NKM2AKUC-2111.1 (Samsung, QN55Q80AAFXZA, Wired)'
     },
     {
-        name: 'Xbox One (YouTube High-End UI)',
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Cobalt/24.lts.0-gold (unlike Gecko) Starboard/14'
+        name: 'Nvidia Shield TV (High-End Android TV UI)',
+        userAgent: 'Mozilla/5.0 (Linux; Shield Android TV) Cobalt/25.lts.30.1034958-gold (unlike Gecko) Starboard/15'
+    },
+    {
+        name: 'PS4 Android 15 Hybrid (YouTube High-End UI)',
+        userAgent: 'Mozilla/5.0 (Linux; Android 15) Cobalt/25.lts.30.1034958-gold (PS4)'
     },
     {
         name: 'settings.uaBasedOnDevice',
