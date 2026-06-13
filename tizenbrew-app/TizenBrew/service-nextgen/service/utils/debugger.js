@@ -2,12 +2,19 @@
 
 const CDP = require('chrome-remote-interface');
 const fetch = require('node-fetch');
+const https = require('https');
 const { Events } = require('./wsCommunication.js');
 const { readConfig } = require('./configuration.js');
 const WebSocket = require('ws');
 const logBus = require('./logBus.js');
 
 const modulesCache = new Map();
+
+// Samsung TV ships with an outdated Node.js/OpenSSL CA bundle that cannot
+// verify certificates from raw.githubusercontent.com and some CDNs (e.g.
+// jsdelivr). rejectUnauthorized: false bypasses cert verification so fetches
+// to trusted module URLs actually complete on old Tizen devices.
+const insecureAgent = new https.Agent({ rejectUnauthorized: false });
 
 function buildOverlayExpression(safeName, safeUrl, safeError) {
     const errLine = safeError
@@ -216,7 +223,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                         doEval(cached);
                     } else {
                         logBus.log('DEBUG', 'cdp', 'fallback injection: fetching from ' + scriptUrl.split('?')[0]);
-                        fetch(scriptUrl)
+                        fetch(scriptUrl, { agent: insecureAgent })
                             .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
                             .then(function (code) {
                                 modulesCache.set(cacheKey, code);
@@ -291,7 +298,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                         }/${mdl.mainFile}`;
 
                         const directMode = (mdl.sourceMode || '') === 'direct';
-                        const primaryFetch = fetch(scriptUrl)
+                        const primaryFetch = fetch(scriptUrl, { agent: insecureAgent })
                             .then(res => {
                                 if (!res.ok) throw new Error('HTTP ' + res.status);
                                 return res.text();
@@ -299,7 +306,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                         // In direct mode never fall back to CDN — respect the user's choice.
                         const fetchChain = directMode
                             ? primaryFetch
-                            : primaryFetch.catch(() => fetch(fallbackUrl).then(res => {
+                            : primaryFetch.catch(() => fetch(fallbackUrl, { agent: insecureAgent }).then(res => {
                                 if (!res.ok) throw new Error('HTTP ' + res.status);
                                 return res.text();
                               }));
