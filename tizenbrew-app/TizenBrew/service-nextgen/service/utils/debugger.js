@@ -9,6 +9,24 @@ const logBus = require('./logBus.js');
 
 const modulesCache = new Map();
 
+function injectErrorOverlay(client, moduleName, url) {
+    const safeUrl  = String(url).replace(/\\/g, '\\\\').replace(/`/g, '\\`');
+    const safeName = String(moduleName).replace(/\\/g, '\\\\').replace(/`/g, '\\`');
+    client.Runtime.evaluate({
+        expression: `(function(){
+            var d=document.createElement('div');
+            d.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#1a1a1a;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;font-family:sans-serif;text-align:center;padding:60px;box-sizing:border-box;';
+            d.innerHTML='<h2 style="font-size:2em;margin:0 0 20px">TizenBrew: Module Load Failed</h2>'
+                +'<p style="font-size:1.3em;margin:0 0 10px">Could not load <b>${safeName}</b></p>'
+                +'<code style="display:block;word-break:break-all;color:#f90;margin:0 0 20px;font-size:0.9em">${safeUrl}</code>'
+                +'<p style="color:#aaa;font-size:1em">Check your network connection or switch to CDN mode, then relaunch.</p>';
+            function attach(){(document.body||document.documentElement).appendChild(d);}
+            if(document.body)attach();else window.addEventListener('load',attach);
+        })();`,
+        returnByValue: false
+    }).catch(function() {});
+}
+
 // Monotonically increasing counter. Bumped each time a new non-isAnotherApp
 // startDebugging call arrives. Old retry loops compare their captured sessionId
 // against this and abort if they've been superseded, preventing multiple
@@ -136,30 +154,42 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
 
             var fallbackInterval = setInterval(function () {
                 if (!mdl.name || mdl.evaluateScriptOnDocumentStart) return;
-                // Stop if any path already confirmed a successful injection.
                 if (contextHasBeenInjected) { clearInterval(fallbackInterval); return; }
-                // Stop if a script-tag attempt is in-flight; wait for its result first.
-                if (scriptTagAttempted) return;
                 var cacheKey = (mdl.versionedFullName || mdl.fullName) + ':' + (mdl.sourceMode || 'cdn');
                 var scriptUrl = buildScriptUrl(mdl);
+                var directMode = (mdl.sourceMode || '') === 'direct';
 
                 client.Runtime.evaluate({
-                    expression: '(function(){try{if(!document.head)return "no-head";if(window.__tbInjected)return "already";return "ready";}catch(e){return "err:"+String(e);}})()',
+                    expression: '(function(){try{if(!document.head)return "no-head";if(window.__tbScriptLoaded)return "loaded";if(window.__tbScriptPending)return "pending";if(window.__tbScriptError)return "error:"+window.__tbScriptError;if(window.__tbInjected)return "already";return "ready";}catch(e){return "err:"+String(e);}})()',
                     returnByValue: true
                 }).then(function (res) {
                     var val = res && res.result && res.result.value;
-                    if (!val || val === 'no-head') return;
-                    if (val === 'already') {
-                        logBus.log('DEBUG', 'cdp', 'fallback injection: already');
+                    if (!val || val === 'no-head' || val === 'pending') return;
+
+                    if (val === 'loaded' || val === 'already') {
+                        logBus.log('DEBUG', 'cdp', 'fallback: script ' + val);
+                        contextHasBeenInjected = true;
                         clearInterval(fallbackInterval);
                         return;
                     }
+
+                    // Script-tag failed or page never got a tag — proceed to eval injection.
+                    // In direct mode a script-tag error means the URL is blocked by CSP in Cobalt;
+                    // the Node.js fetch below bypasses that, so we still try eval. Only if the
+                    // fetch itself fails do we surface an error to the user.
+                    if (val.startsWith('error:')) {
+                        logBus.log('WARN', 'cdp', 'script tag load failed (' + val.substring(6) + '), falling back to eval injection');
+                        scriptTagAttempted = false;
+                    }
+
+                    if (scriptTagAttempted) return; // still waiting on script-tag result
+
                     function doEval(code) {
                         client.Runtime.evaluate({
-                            expression: '(function(){if(window.__tbInjected)return;window.__tbInjected=true;' + code + '})()',
+                            expression: '(function(){if(window.__tbInjected)return;window.__tbInjected=true;window.__tbScriptLoaded=true;' + code + '})()',
                             returnByValue: false
                         }).then(function () {
-                            logBus.log('DEBUG', 'cdp', 'fallback injection: injected');
+                            logBus.log('DEBUG', 'cdp', 'fallback injection: injected via eval');
                             contextHasBeenInjected = true;
                             clearInterval(fallbackInterval);
                         }).catch(function (err) {
@@ -167,12 +197,13 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                             clearInterval(fallbackInterval);
                         });
                     }
+
                     var cached = modulesCache.get(cacheKey);
                     if (cached) {
                         logBus.log('DEBUG', 'cdp', 'fallback injection: using cached userscript');
                         doEval(cached);
                     } else {
-                        logBus.log('DEBUG', 'cdp', 'fallback injection: fetching userscript from ' + scriptUrl.split('?')[0]);
+                        logBus.log('DEBUG', 'cdp', 'fallback injection: fetching from ' + scriptUrl.split('?')[0]);
                         fetch(scriptUrl)
                             .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
                             .then(function (code) {
@@ -181,6 +212,8 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                             })
                             .catch(function (e) {
                                 logBus.log('ERROR', 'cdp', 'fallback fetch error: ' + e);
+                                injectErrorOverlay(client, mdl.fullName || mdl.name, scriptUrl);
+                                clearInterval(fallbackInterval);
                             });
                     }
                 }).catch(function () {});
@@ -199,13 +232,16 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     scriptTagAttempted = true;
                     const scriptUrl = buildScriptUrl(mdl);
                     logBus.log('DEBUG', 'cdp', 'injecting userscript via script tag: ' + scriptUrl);
+                    const ts = Date.now();
                     const expression = `
                     (function(){
-                        if (window.__tbInjected) return;
+                        if (window.__tbInjected || window.__tbScriptPending) return;
+                        window.__tbScriptPending = true;
                         var s = document.createElement('script');
-                        s.src = '${scriptUrl}?v=${Date.now()}';
+                        s.src = '${scriptUrl}?v=${ts}';
+                        s.onload = function() { window.__tbScriptPending = false; window.__tbScriptLoaded = true; window.__tbInjected = true; };
+                        s.onerror = function() { window.__tbScriptPending = false; window.__tbScriptError = s.src; };
                         document.head.appendChild(s);
-                        window.__tbInjected = true;
                     })();
                     `;
                     client.Runtime.evaluate({ expression, contextId: msg.context.id })
@@ -214,11 +250,8 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                             // Script-tag blocked (Trusted Types on Tizen 6.5). Reset so fallback can inject via eval.
                             logBus.log('DEBUG', 'cdp', 'script tag blocked (Trusted Types?), fallback will inject via eval');
                             scriptTagAttempted = false;
-                        } else {
-                            logBus.log('DEBUG', 'cdp', 'script tag injection confirmed');
-                            contextHasBeenInjected = true;
-                            clearInterval(fallbackInterval);
                         }
+                        // else: script tag is in flight — fallback interval polls __tbScriptLoaded / __tbScriptError
                     })
                     .catch(function(err) {
                         logBus.log('DEBUG', 'cdp', 'script tag eval error: ' + err + ', fallback will inject');
@@ -245,21 +278,41 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                             })()
                         }/${mdl.mainFile}`;
 
-                        fetch(scriptUrl)
+                        const directMode = (mdl.sourceMode || '') === 'direct';
+                        const primaryFetch = fetch(scriptUrl)
                             .then(res => {
                                 if (!res.ok) throw new Error('HTTP ' + res.status);
                                 return res.text();
-                            })
-                            .catch(() => fetch(fallbackUrl).then(res => res.text()))
+                            });
+                        // In direct mode never fall back to CDN — respect the user's choice.
+                        const fetchChain = directMode
+                            ? primaryFetch
+                            : primaryFetch.catch(() => fetch(fallbackUrl).then(res => {
+                                if (!res.ok) throw new Error('HTTP ' + res.status);
+                                return res.text();
+                              }));
+                        fetchChain
                             .then(modFile => {
                                 modulesCache.set(cacheKey, modFile);
                                 sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                                 client.Page.addScriptToEvaluateOnNewDocument({ expression: modFile });
                             })
                             .catch(e => {
+                                logBus.log('ERROR', 'cdp', 'failed to load module ' + mdl.fullName + ' from ' + scriptUrl + ': ' + e);
+                                const safeUrl  = String(scriptUrl).replace(/\\/g, '\\\\').replace(/`/g, '\\`');
+                                const safeName = String(mdl.fullName || mdl.name).replace(/\\/g, '\\\\').replace(/`/g, '\\`');
                                 sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                                 client.Page.addScriptToEvaluateOnNewDocument({
-                                    expression: `alert("Failed to load module: '${mdl.fullName}' from ${scriptUrl}. Please relaunch TizenBrew to try again.")`
+                                    expression: `(function(){
+                                        var d=document.createElement('div');
+                                        d.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#1a1a1a;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;font-family:sans-serif;text-align:center;padding:60px;box-sizing:border-box;';
+                                        d.innerHTML='<h2 style="font-size:2em;margin:0 0 20px">TizenBrew: Module Load Failed</h2>'
+                                            +'<p style="font-size:1.3em;margin:0 0 10px">Could not load <b>\`${safeName}\`</b></p>'
+                                            +'<code style="display:block;word-break:break-all;color:#f90;margin:0 0 20px;font-size:0.9em">\`${safeUrl}\`</code>'
+                                            +'<p style="color:#aaa;font-size:1em">Check your network connection or switch to CDN mode, then relaunch.</p>';
+                                        function attach(){(document.body||document.documentElement).appendChild(d);}
+                                        if(document.body)attach();else window.addEventListener('load',attach);
+                                    })();`
                                 });
                             });
                     }
