@@ -47,7 +47,19 @@
         "uaNegativeEffects": "Note that while this could have positive effects, there could also be negative effects.",
         "language": "Language Settings",
         "languageDesc": "Change the language of the app.",
+        "sourceMode": "Source Mode Settings",
+        "sourceModeDesc": "Choose whether to fetch GitHub modules via CDN (jsDelivr) or directly (raw.githubusercontent.com).",
         "selected": "Selected"
+    },
+    "sourceModePage": {
+        "title": "Global Source Mode",
+        "cdn": "CDN (jsDelivr)",
+        "cdnDesc": "Recommended. Faster, but might be cached for a few minutes.",
+        "direct": "GitHub Direct",
+        "directDesc": "Fetches directly from GitHub. Slower, but ensures you get the latest version immediately.",
+        "saveTitle": "Save Settings",
+        "saveDesc": "Apply and return to Settings.",
+        "saved": "Source mode settings saved"
     },
     "tizenBrewConfig": {
         "checkButton": "Check Config",

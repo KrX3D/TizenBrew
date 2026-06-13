@@ -67,7 +67,10 @@ module.exports.onStart = function () {
             const queryIndex = filePathWithQuery.indexOf('?');
             const filePath = queryIndex === -1 ? filePathWithQuery : filePathWithQuery.substring(0, queryIndex);
             const queryString = queryIndex === -1 ? '' : filePathWithQuery.substring(queryIndex + 1);
-            const sourceMode = queryString.indexOf('sourceMode=direct') !== -1 ? 'direct' : 'cdn';
+            
+            const cfg = readConfig();
+            const globalSourceMode = cfg.globalSourceMode || 'cdn';
+            const sourceMode = queryString.indexOf('sourceMode=direct') !== -1 ? 'direct' : globalSourceMode;
     
             const cacheBuster = `?t=${Date.now()}`;
     
@@ -113,6 +116,9 @@ module.exports.onStart = function () {
                 .then(fetchRes => {
                     logBus.log('DEBUG', 'proxy', 'HTTP ' + fetchRes.status + ' ← ' + upstreamUrl);
                     res.setHeader('Access-Control-Allow-Origin', '*');
+                    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                    res.setHeader('Pragma', 'no-cache');
+                    res.setHeader('Expires', '0');
                     res.type(path.basename(filePath).split('.').slice(-1)[0].split('?')[0]);
                     fetchRes.body.pipe(res);
                 })
@@ -477,6 +483,18 @@ module.exports.onStart = function () {
                     remoteLogger.start(cfg.remoteLogging);
                     logBus.log('INFO', 'service', 'Remote logging updated', cfg.remoteLogging);
                     wsConn.send(wsConn.Event(Events.SetRemoteLogging, { ok: true }));
+                    break;
+                }
+                case Events.GetGlobalSourceMode: {
+                    wsConn.send(wsConn.Event(Events.GetGlobalSourceMode, readConfig().globalSourceMode || 'cdn'));
+                    break;
+                }
+                case Events.SetGlobalSourceMode: {
+                    const cfg = readConfig();
+                    cfg.globalSourceMode = payload === 'direct' ? 'direct' : 'cdn';
+                    writeConfig(cfg);
+                    logBus.log('INFO', 'service', 'Global source mode updated', { mode: cfg.globalSourceMode });
+                    wsConn.send(wsConn.Event(Events.SetGlobalSourceMode, { ok: true, mode: cfg.globalSourceMode }));
                     break;
                 }
                 case Events.LogEvent: {
