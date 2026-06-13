@@ -81,6 +81,7 @@ export default function SourceModeSettings() {
     }, [state.client]);
 
     const setMode = (mode) => debounce(() => {
+        if (window.__tbLog) window.__tbLog('INFO', 'ui:source-mode', 'Setting global source mode: ' + mode);
         if (state.client) {
             state.client.send({ type: Events.SetGlobalSourceMode, payload: mode });
         }

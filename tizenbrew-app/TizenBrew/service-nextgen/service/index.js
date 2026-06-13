@@ -71,6 +71,7 @@ module.exports.onStart = function () {
             const cfg = readConfig();
             const globalSourceMode = cfg.globalSourceMode || 'cdn';
             const sourceMode = queryString.indexOf('sourceMode=direct') !== -1 ? 'direct' : globalSourceMode;
+            if (sourceMode === 'direct') logBus.log('DEBUG', 'proxy', 'source mode: direct for ' + moduleName);
     
             const cacheBuster = `?t=${Date.now()}`;
     
@@ -486,7 +487,9 @@ module.exports.onStart = function () {
                     break;
                 }
                 case Events.GetGlobalSourceMode: {
-                    wsConn.send(wsConn.Event(Events.GetGlobalSourceMode, readConfig().globalSourceMode || 'cdn'));
+                    const currentMode = readConfig().globalSourceMode || 'cdn';
+                    logBus.log('DEBUG', 'service', 'GetGlobalSourceMode: ' + currentMode);
+                    wsConn.send(wsConn.Event(Events.GetGlobalSourceMode, currentMode));
                     break;
                 }
                 case Events.SetGlobalSourceMode: {
