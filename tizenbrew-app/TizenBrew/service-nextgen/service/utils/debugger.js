@@ -9,21 +9,32 @@ const logBus = require('./logBus.js');
 
 const modulesCache = new Map();
 
-function injectErrorOverlay(client, moduleName, url) {
-    logBus.log('ERROR', 'cdp', 'injecting error overlay for ' + moduleName + ' — ' + url);
-    const safeUrl  = String(url).replace(/\\/g, '\\\\').replace(/`/g, '\\`');
-    const safeName = String(moduleName).replace(/\\/g, '\\\\').replace(/`/g, '\\`');
+function buildOverlayExpression(safeName, safeUrl, safeError) {
+    const errLine = safeError
+        ? `+'<p style="color:#f66;font-size:0.9em;margin:0 0 15px;word-break:break-all">Error: ${safeError}</p>'`
+        : '';
+    return `(function(){
+    var d=document.createElement('div');
+    d.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#1a1a1a;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;font-family:sans-serif;text-align:center;padding:60px;box-sizing:border-box;';
+    d.innerHTML='<h2 style="font-size:2em;margin:0 0 20px">TizenBrew: Module Load Failed</h2>'
+        +'<p style="font-size:1.3em;margin:0 0 10px">Could not load <b>${safeName}</b></p>'
+        +'<code style="display:block;word-break:break-all;color:#f90;margin:0 0 20px;font-size:0.9em">${safeUrl}</code>'
+        ${errLine}
+        +'<p style="color:#aaa;font-size:1em;margin:0 0 15px">Check your network connection or switch to CDN mode, then relaunch.</p>'
+        +'<p style="color:#888;font-size:0.9em">Press [BACK] to return to TizenBrew.</p>';
+    document.addEventListener('keydown',function(e){if(e.keyCode===10009||e.keyCode===461||e.keyCode===10182){history.back();}},true);
+    function attach(){(document.body||document.documentElement).appendChild(d);}
+    if(document.body)attach();else window.addEventListener('load',attach);
+})();`;
+}
+
+function injectErrorOverlay(client, moduleName, url, errorMsg) {
+    logBus.log('ERROR', 'cdp', 'injecting error overlay for ' + moduleName + ' — ' + url + (errorMsg ? ' (' + errorMsg + ')' : ''));
+    const safeUrl   = String(url).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/'/g, "\\'");
+    const safeName  = String(moduleName).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/'/g, "\\'");
+    const safeError = errorMsg ? String(errorMsg).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/'/g, "\\'") : '';
     client.Runtime.evaluate({
-        expression: `(function(){
-            var d=document.createElement('div');
-            d.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#1a1a1a;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;font-family:sans-serif;text-align:center;padding:60px;box-sizing:border-box;';
-            d.innerHTML='<h2 style="font-size:2em;margin:0 0 20px">TizenBrew: Module Load Failed</h2>'
-                +'<p style="font-size:1.3em;margin:0 0 10px">Could not load <b>${safeName}</b></p>'
-                +'<code style="display:block;word-break:break-all;color:#f90;margin:0 0 20px;font-size:0.9em">${safeUrl}</code>'
-                +'<p style="color:#aaa;font-size:1em">Check your network connection or switch to CDN mode, then relaunch.</p>';
-            function attach(){(document.body||document.documentElement).appendChild(d);}
-            if(document.body)attach();else window.addEventListener('load',attach);
-        })();`,
+        expression: buildOverlayExpression(safeName, safeUrl, safeError),
         returnByValue: false
     }).catch(function() {});
 }
@@ -213,7 +224,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                             })
                             .catch(function (e) {
                                 logBus.log('ERROR', 'cdp', 'fallback fetch error: ' + e);
-                                injectErrorOverlay(client, mdl.fullName || mdl.name, scriptUrl);
+                                injectErrorOverlay(client, mdl.fullName || mdl.name, scriptUrl, e.message || String(e));
                                 clearInterval(fallbackInterval);
                             });
                     }
@@ -301,20 +312,12 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                             .catch(e => {
                                 logBus.log('ERROR', 'cdp', 'failed to load module ' + mdl.fullName + ' from ' + scriptUrl + ': ' + e);
                                 logBus.log('ERROR', 'cdp', 'injecting error overlay — ' + (directMode ? 'direct mode, no CDN fallback' : 'all fetch attempts failed'));
-                                const safeUrl  = String(scriptUrl).replace(/\\/g, '\\\\').replace(/`/g, '\\`');
-                                const safeName = String(mdl.fullName || mdl.name).replace(/\\/g, '\\\\').replace(/`/g, '\\`');
+                                const safeUrl   = String(scriptUrl).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/'/g, "\\'");
+                                const safeName  = String(mdl.fullName || mdl.name).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/'/g, "\\'");
+                                const safeError = e ? String(e.message || e).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/'/g, "\\'") : '';
                                 sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
                                 client.Page.addScriptToEvaluateOnNewDocument({
-                                    expression: `(function(){
-                                        var d=document.createElement('div');
-                                        d.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#1a1a1a;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;font-family:sans-serif;text-align:center;padding:60px;box-sizing:border-box;';
-                                        d.innerHTML='<h2 style="font-size:2em;margin:0 0 20px">TizenBrew: Module Load Failed</h2>'
-                                            +'<p style="font-size:1.3em;margin:0 0 10px">Could not load <b>\`${safeName}\`</b></p>'
-                                            +'<code style="display:block;word-break:break-all;color:#f90;margin:0 0 20px;font-size:0.9em">\`${safeUrl}\`</code>'
-                                            +'<p style="color:#aaa;font-size:1em">Check your network connection or switch to CDN mode, then relaunch.</p>';
-                                        function attach(){(document.body||document.documentElement).appendChild(d);}
-                                        if(document.body)attach();else window.addEventListener('load',attach);
-                                    })();`
+                                    expression: buildOverlayExpression(safeName, safeUrl, safeError)
                                 });
                             });
                     }
