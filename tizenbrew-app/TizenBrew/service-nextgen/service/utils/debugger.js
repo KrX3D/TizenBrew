@@ -10,6 +10,7 @@ const logBus = require('./logBus.js');
 const modulesCache = new Map();
 
 function injectErrorOverlay(client, moduleName, url) {
+    logBus.log('ERROR', 'cdp', 'injecting error overlay for ' + moduleName + ' — ' + url);
     const safeUrl  = String(url).replace(/\\/g, '\\\\').replace(/`/g, '\\`');
     const safeName = String(moduleName).replace(/\\/g, '\\\\').replace(/`/g, '\\`');
     client.Runtime.evaluate({
@@ -299,6 +300,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                             })
                             .catch(e => {
                                 logBus.log('ERROR', 'cdp', 'failed to load module ' + mdl.fullName + ' from ' + scriptUrl + ': ' + e);
+                                logBus.log('ERROR', 'cdp', 'injecting error overlay — ' + (directMode ? 'direct mode, no CDN fallback' : 'all fetch attempts failed'));
                                 const safeUrl  = String(scriptUrl).replace(/\\/g, '\\\\').replace(/`/g, '\\`');
                                 const safeName = String(mdl.fullName || mdl.name).replace(/\\/g, '\\\\').replace(/`/g, '\\`');
                                 sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
