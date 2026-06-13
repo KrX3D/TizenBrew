@@ -21,10 +21,10 @@
         "addGHDesc": "Das ist primär für Entwicklung und Entwickler.",
         "addModule": "Modul hinzufügen",
         "moduleName": "Modul-Name (Für {{type}}):",
-        "hintGH":      "Format: user/repo  z.B. {{example}}",
-        "hintNPM":     "Format: @scope/paket  z.B. {{example}}",
+        "hintGH": "Format: user/repo  z.B. {{example}}",
+        "hintNPM": "Format: @scope/paket  z.B. {{example}}",
         "sourceLabel": "Quelle",
-        "sourceHint":  "[GELB] zum Wechseln | CDN = jsDelivr | DIREKT = GitHub/unpkg"
+        "sourceHint": "[GELB] zum Wechseln | CDN = jsDelivr | DIREKT = GitHub/unpkg"
     },
     "settings": {
         "autolaunch": "Autostart Einstellungen",
@@ -47,7 +47,9 @@
         "languageDesc": "Ändere die Sprache der App.",
         "selected": "Ausgewählt",
         "remoteLogging": "Fernprotokollierung",
-        "remoteLoggingDesc": "Dienst- und Modulprotokolle per HTTP an einen Empfänger auf dem PC senden."
+        "remoteLoggingDesc": "Dienst- und Modulprotokolle per HTTP an einen Empfänger auf dem PC senden.",
+        "sourceMode": "Quellmodus-Einstellungen",
+        "sourceModeDesc": "Wähle, ob GitHub-Module über CDN (jsDelivr) oder direkt (raw.githubusercontent.com) abgerufen werden."
     },
     "remoteLogPage": {
         "enableTitle": "Fernprotokollierung aktivieren",
@@ -87,6 +89,23 @@
     "modal": {
         "ok": "OK",
         "cancel": "Abbrechen"
+    },
+    "sourceModePage": {
+        "title": "Globaler Quellmodus",
+        "cdn": "CDN (jsDelivr)",
+        "cdnDesc": "Empfohlen. Schneller, kann aber einige Minuten im Cache liegen.",
+        "direct": "GitHub Direkt",
+        "directDesc": "Ruft direkt von GitHub ab. Langsamer, stellt aber sicher, dass sofort die neueste Version abgerufen wird.",
+        "saveTitle": "Einstellungen speichern",
+        "saveDesc": "Anwenden und zu den Einstellungen zurückkehren.",
+        "saved": "Quellmodus-Einstellungen gespeichert"
+    },
+    "moduleLoadError": {
+        "title": "TizenBrew: Modul konnte nicht geladen werden",
+        "couldNotLoad": "Konnte nicht laden",
+        "checkNetwork": "Überprüfe deine Netzwerkverbindung oder wechsle in den CDN-Modus und starte neu.",
+        "pressBack": "Drücke [ZURÜCK], um zu TizenBrew zurückzukehren.",
+        "error": "Fehler"
     },
     "__contributors": [
         "zexalgames",

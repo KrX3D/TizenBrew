@@ -1,56 +1,75 @@
 {
-  "service": {
-    "alreadyRunning": "El servei ja està en marxa.",
-    "started": "Servei iniciat.",
-    "connected": "Servei connectat a l'aplicació."
-  },
-  "errors": {
-    "serviceDidntConnectYet": "No es poden llançar mòduls mentre el servei encara no s'ha connectat a l'aplicació."
-  },
-  "moduleManager": {
-    "confirmDelete": "Voleu eliminar {{packageName}}?",
-    "addNPM": "Afegir mòdul NPM",
-    "addNPMDesc": "Això és principalment per als usuaris finals.",
-    "addGH": "Afegir mòdul GitHub",
-    "addGHDesc": "Això és principalment per als usuaris avançats.",
-    "addModule": "Afegir mòdul",
-    "moduleName": "Nom del mòdul (For {{type}}):"
-  },
-  "settings": {
-    "autolaunch": "Configuració d'AutoLaunch",
-    "autolaunchDesc": "Inicia el teu mòdul preferit automàticament quan obris TizenBrew.",
-    "autolaunchService": "Configuració d'AutoLaunch per a serveis",
-    "autolaunchServiceDesc": "Inicia el teu servei preferit automàticament quan obris TizenBrew.",
-    "useragent": "Ajustaments de l'agent d'usuari",
-    "useragentDesc": "Canviar l'agent d'usuari dels mòduls de TizenBrew per a alguns efectes com arreglar la interfície a TizenTube.",
-    "enableAutolaunchPrompt": "Voleu configurar {{packageName}} perquè s'iniciï en arrencar?",
-    "disableAutolaunchPrompt": "Desitges desactivar AutoLaunch?",
-    "disableAutolaunch": "Desactivar AutoLaunch",
-    "noModules": "No s'han trobat mòduls.",
-    "default": "Per defecte",
-    "worksOnTizen": "(Funciona en la(es) version(és) {{version}}+ de Tizen)",
-    "uaBasedOnDevice": "Agent d'usuari basat en el dispositiu (hauria d'aportar algunes funcions)",
-    "setUaTo": "Voleu establir l'agent d'usuari com a {{userAgent}}?",
-    "uaSetRelaunch": "Agent d'usuari definit. Reinicia l'aplicació per aplicar els canvis..",
-    "uaNegativeEffects": "Tingues en compte que, encara que això podria tenir efectes positius, també podria tenir efectes negatius.",
-    "language": "Configuració d'idiomes",
-    "languageDesc": "Canviar l'idioma de l'aplicació.",
-    "selected": "Seleccionat",
-    "remoteLogging": "Registre remot",
-    "remoteLoggingDesc": "Enviar registres del servei i mòduls per HTTP a un receptor al teu PC."
-  },
-  "remoteLogPage": {
-    "enableTitle": "Enable Remote Logging",
-    "enabledDesc": "Enabled — logs are sent to the receiver.",
-    "disabledDesc": "Disabled — no logs are sent.",
-    "on": "ON",
-    "receiverIp": "Receiver IP Address",
-    "receiverPort": "Receiver Port",
-    "saveTitle": "Save Settings",
-    "saveDesc": "Apply and return to Settings.",
-    "testTitle": "Send Test Log",
-    "testDesc": "POSTs directly to the receiver to verify the connection. Works even when logging is disabled.",
-    "enterIpFirst": "Enter an IP address first",
-    "enterToConfirm": "Enter to confirm"
-  }
+    "service": {
+        "alreadyRunning": "El servei ja està en marxa.",
+        "started": "Servei iniciat.",
+        "connected": "Servei connectat a l'aplicació."
+    },
+    "errors": {
+        "serviceDidntConnectYet": "No es poden llançar mòduls mentre el servei encara no s'ha connectat a l'aplicació."
+    },
+    "moduleManager": {
+        "confirmDelete": "Voleu eliminar {{packageName}}?",
+        "addNPM": "Afegir mòdul NPM",
+        "addNPMDesc": "Això és principalment per als usuaris finals.",
+        "addGH": "Afegir mòdul GitHub",
+        "addGHDesc": "Això és principalment per als usuaris avançats.",
+        "addModule": "Afegir mòdul",
+        "moduleName": "Nom del mòdul (For {{type}}):"
+    },
+    "settings": {
+        "autolaunch": "Configuració d'AutoLaunch",
+        "autolaunchDesc": "Inicia el teu mòdul preferit automàticament quan obris TizenBrew.",
+        "autolaunchService": "Configuració d'AutoLaunch per a serveis",
+        "autolaunchServiceDesc": "Inicia el teu servei preferit automàticament quan obris TizenBrew.",
+        "useragent": "Ajustaments de l'agent d'usuari",
+        "useragentDesc": "Canviar l'agent d'usuari dels mòduls de TizenBrew per a alguns efectes com arreglar la interfície a TizenTube.",
+        "enableAutolaunchPrompt": "Voleu configurar {{packageName}} perquè s'iniciï en arrencar?",
+        "disableAutolaunchPrompt": "Desitges desactivar AutoLaunch?",
+        "disableAutolaunch": "Desactivar AutoLaunch",
+        "noModules": "No s'han trobat mòduls.",
+        "default": "Per defecte",
+        "worksOnTizen": "(Funciona en la(es) version(és) {{version}}+ de Tizen)",
+        "uaBasedOnDevice": "Agent d'usuari basat en el dispositiu (hauria d'aportar algunes funcions)",
+        "setUaTo": "Voleu establir l'agent d'usuari com a {{userAgent}}?",
+        "uaSetRelaunch": "Agent d'usuari definit. Reinicia l'aplicació per aplicar els canvis..",
+        "uaNegativeEffects": "Tingues en compte que, encara que això podria tenir efectes positius, també podria tenir efectes negatius.",
+        "language": "Configuració d'idiomes",
+        "languageDesc": "Canviar l'idioma de l'aplicació.",
+        "selected": "Seleccionat",
+        "remoteLogging": "Registre remot",
+        "remoteLoggingDesc": "Enviar registres del servei i mòduls per HTTP a un receptor al teu PC.",
+        "sourceMode": "Source Mode Settings",
+        "sourceModeDesc": "Choose whether to fetch GitHub modules via CDN (jsDelivr) or directly (raw.githubusercontent.com)."
+    },
+    "remoteLogPage": {
+        "enableTitle": "Enable Remote Logging",
+        "enabledDesc": "Enabled — logs are sent to the receiver.",
+        "disabledDesc": "Disabled — no logs are sent.",
+        "on": "ON",
+        "receiverIp": "Receiver IP Address",
+        "receiverPort": "Receiver Port",
+        "saveTitle": "Save Settings",
+        "saveDesc": "Apply and return to Settings.",
+        "testTitle": "Send Test Log",
+        "testDesc": "POSTs directly to the receiver to verify the connection. Works even when logging is disabled.",
+        "enterIpFirst": "Enter an IP address first",
+        "enterToConfirm": "Enter to confirm"
+    },
+    "sourceModePage": {
+        "title": "Global Source Mode",
+        "cdn": "CDN (jsDelivr)",
+        "cdnDesc": "Recommended. Faster, but might be cached for a few minutes.",
+        "direct": "GitHub Direct",
+        "directDesc": "Fetches directly from GitHub. Slower, but ensures you get the latest version immediately.",
+        "saveTitle": "Save Settings",
+        "saveDesc": "Apply and return to Settings.",
+        "saved": "Source mode settings saved"
+    },
+    "moduleLoadError": {
+        "title": "TizenBrew: Module Load Failed",
+        "couldNotLoad": "Could not load",
+        "checkNetwork": "Check your network connection or switch to CDN mode, then relaunch.",
+        "pressBack": "Press [BACK] to return to TizenBrew.",
+        "error": "Error"
+    }
 }

@@ -41,7 +41,9 @@
         "languageDesc": "Промените језик апликације.",
         "selected": "Изабрано",
         "remoteLogging": "Удаљено бележење",
-        "remoteLoggingDesc": "Слање записа службе и модула путем HTTP-а на пријемник на рачунару."
+        "remoteLoggingDesc": "Слање записа службе и модула путем HTTP-а на пријемник на рачунару.",
+        "sourceMode": "Source Mode Settings",
+        "sourceModeDesc": "Choose whether to fetch GitHub modules via CDN (jsDelivr) or directly (raw.githubusercontent.com)."
     },
     "remoteLogPage": {
         "enableTitle": "Enable Remote Logging",
@@ -56,6 +58,23 @@
         "testDesc": "POSTs directly to the receiver to verify the connection. Works even when logging is disabled.",
         "enterIpFirst": "Enter an IP address first",
         "enterToConfirm": "Enter to confirm"
+    },
+    "sourceModePage": {
+        "title": "Global Source Mode",
+        "cdn": "CDN (jsDelivr)",
+        "cdnDesc": "Recommended. Faster, but might be cached for a few minutes.",
+        "direct": "GitHub Direct",
+        "directDesc": "Fetches directly from GitHub. Slower, but ensures you get the latest version immediately.",
+        "saveTitle": "Save Settings",
+        "saveDesc": "Apply and return to Settings.",
+        "saved": "Source mode settings saved"
+    },
+    "moduleLoadError": {
+        "title": "TizenBrew: Module Load Failed",
+        "couldNotLoad": "Could not load",
+        "checkNetwork": "Check your network connection or switch to CDN mode, then relaunch.",
+        "pressBack": "Press [BACK] to return to TizenBrew.",
+        "error": "Error"
     },
     "__contributors": [
         "milovanovic"

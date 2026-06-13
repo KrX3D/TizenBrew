@@ -55,7 +55,9 @@
         "languageDesc": "Cambia la lingua dell'app",
         "selected": "Selezionato",
         "remoteLogging": "Registrazione remota",
-        "remoteLoggingDesc": "Inviare i log del servizio e dei moduli tramite HTTP a un ricevitore sul PC."
+        "remoteLoggingDesc": "Inviare i log del servizio e dei moduli tramite HTTP a un ricevitore sul PC.",
+        "sourceMode": "Source Mode Settings",
+        "sourceModeDesc": "Choose whether to fetch GitHub modules via CDN (jsDelivr) or directly (raw.githubusercontent.com)."
     },
     "remoteLogPage": {
         "enableTitle": "Abilita registrazione remota",
@@ -70,6 +72,23 @@
         "testDesc": "Invia direttamente al ricevitore per verificare la connessione. Funziona anche se la registrazione è disabilitata.",
         "enterIpFirst": "Inserisci prima un indirizzo IP",
         "enterToConfirm": "Invio per confermare"
+    },
+    "sourceModePage": {
+        "title": "Global Source Mode",
+        "cdn": "CDN (jsDelivr)",
+        "cdnDesc": "Recommended. Faster, but might be cached for a few minutes.",
+        "direct": "GitHub Direct",
+        "directDesc": "Fetches directly from GitHub. Slower, but ensures you get the latest version immediately.",
+        "saveTitle": "Save Settings",
+        "saveDesc": "Apply and return to Settings.",
+        "saved": "Source mode settings saved"
+    },
+    "moduleLoadError": {
+        "title": "TizenBrew: Module Load Failed",
+        "couldNotLoad": "Could not load",
+        "checkNetwork": "Check your network connection or switch to CDN mode, then relaunch.",
+        "pressBack": "Press [BACK] to return to TizenBrew.",
+        "error": "Error"
     },
     "__contributors": [
         "desko21",

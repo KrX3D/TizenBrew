@@ -14,7 +14,7 @@
     "moduleManager": {
         "confirmDelete": "Vil du fjerne {{packageName}}?",
         "addNPM": "Tilføj NPM Modul",
-        "addNPMDesc": "Dette er hovedsageligt for produktion og for brugere.", 
+        "addNPMDesc": "Dette er hovedsageligt for produktion og for brugere.",
         "addGH": "Tilføj GitHub Modul",
         "addGHDesc": "Dette er hovedsageligt for udvikling og for udviklere.",
         "addModule": "Tilføj Modul",
@@ -41,7 +41,9 @@
         "languageDesc": "Skift sproget i appen.",
         "selected": "Valgt",
         "remoteLogging": "Fjernlogning",
-        "remoteLoggingDesc": "Send service- og modullogfiler via HTTP til en modtager på din PC."
+        "remoteLoggingDesc": "Send service- og modullogfiler via HTTP til en modtager på din PC.",
+        "sourceMode": "Source Mode Settings",
+        "sourceModeDesc": "Choose whether to fetch GitHub modules via CDN (jsDelivr) or directly (raw.githubusercontent.com)."
     },
     "remoteLogPage": {
         "enableTitle": "Aktiver fjernlogning",
@@ -56,6 +58,23 @@
         "testDesc": "Sender direkte til modtageren for at verificere forbindelsen. Virker selv når logning er deaktiveret.",
         "enterIpFirst": "Indtast en IP-adresse først",
         "enterToConfirm": "Enter for at bekræfte"
+    },
+    "sourceModePage": {
+        "title": "Global Source Mode",
+        "cdn": "CDN (jsDelivr)",
+        "cdnDesc": "Recommended. Faster, but might be cached for a few minutes.",
+        "direct": "GitHub Direct",
+        "directDesc": "Fetches directly from GitHub. Slower, but ensures you get the latest version immediately.",
+        "saveTitle": "Save Settings",
+        "saveDesc": "Apply and return to Settings.",
+        "saved": "Source mode settings saved"
+    },
+    "moduleLoadError": {
+        "title": "TizenBrew: Module Load Failed",
+        "couldNotLoad": "Could not load",
+        "checkNetwork": "Check your network connection or switch to CDN mode, then relaunch.",
+        "pressBack": "Press [BACK] to return to TizenBrew.",
+        "error": "Error"
     },
     "__contributors": [
         "loui771w"

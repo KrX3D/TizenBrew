@@ -55,7 +55,9 @@
         "languageDesc": "Verander de taal van TizenBrew.",
         "selected": "Geselecteerd",
         "remoteLogging": "Remote Logging",
-        "remoteLoggingDesc": "Dienst- en modulelogs via HTTP sturen naar een ontvanger op je pc."
+        "remoteLoggingDesc": "Dienst- en modulelogs via HTTP sturen naar een ontvanger op je pc.",
+        "sourceMode": "Source Mode Settings",
+        "sourceModeDesc": "Choose whether to fetch GitHub modules via CDN (jsDelivr) or directly (raw.githubusercontent.com)."
     },
     "remoteLogPage": {
         "enableTitle": "Remote Logging inschakelen",
@@ -70,6 +72,23 @@
         "testDesc": "Verstuurt direct naar de ontvanger om de verbinding te testen. Werkt ook als logging uitgeschakeld is.",
         "enterIpFirst": "Voer eerst een IP-adres in",
         "enterToConfirm": "Enter om te bevestigen"
+    },
+    "sourceModePage": {
+        "title": "Global Source Mode",
+        "cdn": "CDN (jsDelivr)",
+        "cdnDesc": "Recommended. Faster, but might be cached for a few minutes.",
+        "direct": "GitHub Direct",
+        "directDesc": "Fetches directly from GitHub. Slower, but ensures you get the latest version immediately.",
+        "saveTitle": "Save Settings",
+        "saveDesc": "Apply and return to Settings.",
+        "saved": "Source mode settings saved"
+    },
+    "moduleLoadError": {
+        "title": "TizenBrew: Module Load Failed",
+        "couldNotLoad": "Could not load",
+        "checkNetwork": "Check your network connection or switch to CDN mode, then relaunch.",
+        "pressBack": "Press [BACK] to return to TizenBrew.",
+        "error": "Error"
     },
     "__contributors": [
         "Owen Ramaekers"
