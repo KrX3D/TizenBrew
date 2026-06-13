@@ -21,10 +21,10 @@
         "addGHDesc": "This is primarily for development and for developers.",
         "addModule": "Add Module",
         "moduleName": "Module Name (For {{type}}):",
-        "hintGH":      "Format: user/repo  e.g. {{example}}",
-        "hintNPM":     "Format: @scope/package  e.g. {{example}}",
+        "hintGH": "Format: user/repo  e.g. {{example}}",
+        "hintNPM": "Format: @scope/package  e.g. {{example}}",
         "sourceLabel": "Source",
-        "sourceHint":  "[YELLOW] to toggle | CDN = jsDelivr | DIRECT = GitHub/unpkg"
+        "sourceHint": "[YELLOW] to toggle | CDN = jsDelivr | DIRECT = GitHub/unpkg"
     },
     "settings": {
         "autolaunch": "Autolaunch Settings",
@@ -99,6 +99,13 @@
         "testDesc": "POSTs directly to the receiver to verify the connection. Works even when logging is disabled.",
         "enterIpFirst": "Enter an IP address first",
         "enterToConfirm": "Enter to confirm"
+    },
+    "moduleLoadError": {
+        "title": "TizenBrew: Module Load Failed",
+        "couldNotLoad": "Could not load",
+        "checkNetwork": "Check your network connection or switch to CDN mode, then relaunch.",
+        "pressBack": "Press [BACK] to return to TizenBrew.",
+        "error": "Error"
     },
     "__contributors": [
         "reisxd"

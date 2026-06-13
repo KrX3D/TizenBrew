@@ -41,7 +41,9 @@
         "languageDesc": "Измените язык приложения.",
         "selected": "Выбрано",
         "remoteLogging": "Удалённое ведение журнала",
-        "remoteLoggingDesc": "Отправлять журналы службы и модулей по HTTP на приёмник на вашем ПК."
+        "remoteLoggingDesc": "Отправлять журналы службы и модулей по HTTP на приёмник на вашем ПК.",
+        "sourceMode": "Source Mode Settings",
+        "sourceModeDesc": "Choose whether to fetch GitHub modules via CDN (jsDelivr) or directly (raw.githubusercontent.com)."
     },
     "remoteLogPage": {
         "enableTitle": "Включить удалённое ведение журнала",
@@ -56,6 +58,23 @@
         "testDesc": "Отправляет напрямую на приёмник для проверки соединения. Работает даже при отключённом ведении журнала.",
         "enterIpFirst": "Сначала введите IP-адрес",
         "enterToConfirm": "Enter для подтверждения"
+    },
+    "sourceModePage": {
+        "title": "Global Source Mode",
+        "cdn": "CDN (jsDelivr)",
+        "cdnDesc": "Recommended. Faster, but might be cached for a few minutes.",
+        "direct": "GitHub Direct",
+        "directDesc": "Fetches directly from GitHub. Slower, but ensures you get the latest version immediately.",
+        "saveTitle": "Save Settings",
+        "saveDesc": "Apply and return to Settings.",
+        "saved": "Source mode settings saved"
+    },
+    "moduleLoadError": {
+        "title": "TizenBrew: Module Load Failed",
+        "couldNotLoad": "Could not load",
+        "checkNetwork": "Check your network connection or switch to CDN mode, then relaunch.",
+        "pressBack": "Press [BACK] to return to TizenBrew.",
+        "error": "Error"
     },
     "__contributors": [
         "BobZakharov",

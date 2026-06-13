@@ -1,56 +1,75 @@
 {
-  "service": {
-    "alreadyRunning": "El servicio ya está en marcha.",
-    "started": "Servicio iniciado.",
-    "connected": "Servicio conectado a la aplicación."
-  },
-  "errors": {
-    "serviceDidntConnectYet": "No se puede lanzar módulos mientras el servicio aún no se haya conectado a la aplicación."
-  },
-  "moduleManager": {
-    "confirmDelete": "¿Desea eliminar {{packageName}}?",
-    "addNPM": "Añadir módulo NPM",
-    "addNPMDesc": "Esto es principalmente para los usuarios finales.",
-    "addGH": "Añadir módulo GitHub",
-    "addGHDesc": "Esto es principalmente para los usuarios avanzados.",
-    "addModule": "Añadir módulo",
-    "moduleName": "Nombre del módulo (For {{type}}):"
-  },
-  "settings": {
-    "autolaunch": "Ajustes de AutoLaunch",
-    "autolaunchDesc": "Inicia tu módulo favorito automáticamente cuando abras TizenBrew.",
-    "autolaunchService": "Ajustes de AutoLaunch para servicios",
-    "autolaunchServiceDesc": "Inicia tu servicio favorito automáticamente cuando abras TizenBrew.",
-    "useragent": "Ajustes del Agente de Usuario",
-    "useragentDesc": "Cambiar el Agente de Usuario de los módulos de TizenBrew para algunos efectos como arreglar la interfaz en TizenTube.",
-    "enableAutolaunchPrompt": "¿Deseas configurar {{packageName}} para que se inicie al arrancar?",
-    "disableAutolaunchPrompt": "¿Deseas desactivar AutoLaunch?",
-    "disableAutolaunch": "Desactivar AutoLaunch",
-    "noModules": "No se han encontrado módulos.",
-    "default": "Por Defecto",
-    "worksOnTizen": "(Funciona en la(s) version(es) {{version}}+ de Tizen)",
-    "uaBasedOnDevice": "Agente de usuario basado en el dispositivo (debería aportar algunas funciones)",
-    "setUaTo": "¿Deseas establecer el agente de usuario como {{userAgent}}?",
-    "uaSetRelaunch": "Se ha configurado el agente de usuario. Reinicie la aplicación para aplicar los cambios.",
-    "uaNegativeEffects": "Ten en cuenta que, aunque esto podría tener efectos positivos, también podría tener efectos negativos.",
-    "language": "Ajustes de idioma",
-    "languageDesc": "Cambia el idioma de la aplicación.",
-    "selected": "Seleccionado",
-    "remoteLogging": "Registro remoto",
-    "remoteLoggingDesc": "Enviar registros del servicio y módulos por HTTP a un receptor en tu PC."
-  },
-  "remoteLogPage": {
-    "enableTitle": "Activar el registro remoto",
-    "enabledDesc": "Activado — los registros se envían al receptor.",
-    "disabledDesc": "Desactivado — no se envían registros.",
-    "on": "ON",
-    "receiverIp": "Dirección IP del receptor",
-    "receiverPort": "Puerto del receptor",
-    "saveTitle": "Guardar ajustes",
-    "saveDesc": "Aplicar y volver a ajustes.",
-    "testTitle": "Enviar registro de prueba",
-    "testDesc": "Envía directamente al receptor para verificar la conexión. Funciona aunque el registro esté desactivado.",
-    "enterIpFirst": "Introduce primero una dirección IP",
-    "enterToConfirm": "Enter para confirmar"
-  }
+    "service": {
+        "alreadyRunning": "El servicio ya está en marcha.",
+        "started": "Servicio iniciado.",
+        "connected": "Servicio conectado a la aplicación."
+    },
+    "errors": {
+        "serviceDidntConnectYet": "No se puede lanzar módulos mientras el servicio aún no se haya conectado a la aplicación."
+    },
+    "moduleManager": {
+        "confirmDelete": "¿Desea eliminar {{packageName}}?",
+        "addNPM": "Añadir módulo NPM",
+        "addNPMDesc": "Esto es principalmente para los usuarios finales.",
+        "addGH": "Añadir módulo GitHub",
+        "addGHDesc": "Esto es principalmente para los usuarios avanzados.",
+        "addModule": "Añadir módulo",
+        "moduleName": "Nombre del módulo (For {{type}}):"
+    },
+    "settings": {
+        "autolaunch": "Ajustes de AutoLaunch",
+        "autolaunchDesc": "Inicia tu módulo favorito automáticamente cuando abras TizenBrew.",
+        "autolaunchService": "Ajustes de AutoLaunch para servicios",
+        "autolaunchServiceDesc": "Inicia tu servicio favorito automáticamente cuando abras TizenBrew.",
+        "useragent": "Ajustes del Agente de Usuario",
+        "useragentDesc": "Cambiar el Agente de Usuario de los módulos de TizenBrew para algunos efectos como arreglar la interfaz en TizenTube.",
+        "enableAutolaunchPrompt": "¿Deseas configurar {{packageName}} para que se inicie al arrancar?",
+        "disableAutolaunchPrompt": "¿Deseas desactivar AutoLaunch?",
+        "disableAutolaunch": "Desactivar AutoLaunch",
+        "noModules": "No se han encontrado módulos.",
+        "default": "Por Defecto",
+        "worksOnTizen": "(Funciona en la(s) version(es) {{version}}+ de Tizen)",
+        "uaBasedOnDevice": "Agente de usuario basado en el dispositivo (debería aportar algunas funciones)",
+        "setUaTo": "¿Deseas establecer el agente de usuario como {{userAgent}}?",
+        "uaSetRelaunch": "Se ha configurado el agente de usuario. Reinicie la aplicación para aplicar los cambios.",
+        "uaNegativeEffects": "Ten en cuenta que, aunque esto podría tener efectos positivos, también podría tener efectos negativos.",
+        "language": "Ajustes de idioma",
+        "languageDesc": "Cambia el idioma de la aplicación.",
+        "selected": "Seleccionado",
+        "remoteLogging": "Registro remoto",
+        "remoteLoggingDesc": "Enviar registros del servicio y módulos por HTTP a un receptor en tu PC.",
+        "sourceMode": "Source Mode Settings",
+        "sourceModeDesc": "Choose whether to fetch GitHub modules via CDN (jsDelivr) or directly (raw.githubusercontent.com)."
+    },
+    "remoteLogPage": {
+        "enableTitle": "Activar el registro remoto",
+        "enabledDesc": "Activado — los registros se envían al receptor.",
+        "disabledDesc": "Desactivado — no se envían registros.",
+        "on": "ON",
+        "receiverIp": "Dirección IP del receptor",
+        "receiverPort": "Puerto del receptor",
+        "saveTitle": "Guardar ajustes",
+        "saveDesc": "Aplicar y volver a ajustes.",
+        "testTitle": "Enviar registro de prueba",
+        "testDesc": "Envía directamente al receptor para verificar la conexión. Funciona aunque el registro esté desactivado.",
+        "enterIpFirst": "Introduce primero una dirección IP",
+        "enterToConfirm": "Enter para confirmar"
+    },
+    "sourceModePage": {
+        "title": "Global Source Mode",
+        "cdn": "CDN (jsDelivr)",
+        "cdnDesc": "Recommended. Faster, but might be cached for a few minutes.",
+        "direct": "GitHub Direct",
+        "directDesc": "Fetches directly from GitHub. Slower, but ensures you get the latest version immediately.",
+        "saveTitle": "Save Settings",
+        "saveDesc": "Apply and return to Settings.",
+        "saved": "Source mode settings saved"
+    },
+    "moduleLoadError": {
+        "title": "TizenBrew: Module Load Failed",
+        "couldNotLoad": "Could not load",
+        "checkNetwork": "Check your network connection or switch to CDN mode, then relaunch.",
+        "pressBack": "Press [BACK] to return to TizenBrew.",
+        "error": "Error"
+    }
 }

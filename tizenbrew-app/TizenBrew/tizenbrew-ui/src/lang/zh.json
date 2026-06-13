@@ -41,7 +41,9 @@
         "languageDesc": "改變程式語言",
         "selected": "已選擇",
         "remoteLogging": "遠端記錄",
-        "remoteLoggingDesc": "透過 HTTP 將服務和模組記錄傳送至電腦上的接收器。"
+        "remoteLoggingDesc": "透過 HTTP 將服務和模組記錄傳送至電腦上的接收器。",
+        "sourceMode": "Source Mode Settings",
+        "sourceModeDesc": "Choose whether to fetch GitHub modules via CDN (jsDelivr) or directly (raw.githubusercontent.com)."
     },
     "remoteLogPage": {
         "enableTitle": "啟用遠端記錄",
@@ -56,6 +58,23 @@
         "testDesc": "直接傳送至接收器以驗證連線。即使記錄停用時仍可運作。",
         "enterIpFirst": "請先輸入 IP 位址",
         "enterToConfirm": "按 Enter 確認"
+    },
+    "sourceModePage": {
+        "title": "Global Source Mode",
+        "cdn": "CDN (jsDelivr)",
+        "cdnDesc": "Recommended. Faster, but might be cached for a few minutes.",
+        "direct": "GitHub Direct",
+        "directDesc": "Fetches directly from GitHub. Slower, but ensures you get the latest version immediately.",
+        "saveTitle": "Save Settings",
+        "saveDesc": "Apply and return to Settings.",
+        "saved": "Source mode settings saved"
+    },
+    "moduleLoadError": {
+        "title": "TizenBrew: Module Load Failed",
+        "couldNotLoad": "Could not load",
+        "checkNetwork": "Check your network connection or switch to CDN mode, then relaunch.",
+        "pressBack": "Press [BACK] to return to TizenBrew.",
+        "error": "Error"
     },
     "__contributors": [
         "kai"

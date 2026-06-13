@@ -41,7 +41,9 @@
         "languageDesc": "Zmień język aplikacji.",
         "selected": "Zaznaczony",
         "remoteLogging": "Zdalne logowanie",
-        "remoteLoggingDesc": "Wysyłaj logi usługi i modułów przez HTTP do odbiornika na komputerze."
+        "remoteLoggingDesc": "Wysyłaj logi usługi i modułów przez HTTP do odbiornika na komputerze.",
+        "sourceMode": "Source Mode Settings",
+        "sourceModeDesc": "Choose whether to fetch GitHub modules via CDN (jsDelivr) or directly (raw.githubusercontent.com)."
     },
     "remoteLogPage": {
         "enableTitle": "Włącz zdalne logowanie",
@@ -56,6 +58,23 @@
         "testDesc": "Wysyła bezpośrednio do odbiornika w celu weryfikacji połączenia. Działa nawet gdy logowanie jest wyłączone.",
         "enterIpFirst": "Najpierw wprowadź adres IP",
         "enterToConfirm": "Enter aby potwierdzić"
+    },
+    "sourceModePage": {
+        "title": "Global Source Mode",
+        "cdn": "CDN (jsDelivr)",
+        "cdnDesc": "Recommended. Faster, but might be cached for a few minutes.",
+        "direct": "GitHub Direct",
+        "directDesc": "Fetches directly from GitHub. Slower, but ensures you get the latest version immediately.",
+        "saveTitle": "Save Settings",
+        "saveDesc": "Apply and return to Settings.",
+        "saved": "Source mode settings saved"
+    },
+    "moduleLoadError": {
+        "title": "TizenBrew: Module Load Failed",
+        "couldNotLoad": "Could not load",
+        "checkNetwork": "Check your network connection or switch to CDN mode, then relaunch.",
+        "pressBack": "Press [BACK] to return to TizenBrew.",
+        "error": "Error"
     },
     "__contributors": [
         "Kamil Sienicki (sienikam)"
