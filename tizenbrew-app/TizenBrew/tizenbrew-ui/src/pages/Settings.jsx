@@ -110,6 +110,14 @@ export default function Settings() {
                     <p className='text-gray-300 mt-6 text-base/7'>{t('settings.remoteLoggingDesc')}</p>
                 </ItemBasic>
 
+                <ItemBasic focusKey="settings-card-source-mode" onClick={() => {
+                    if (window.__tbLog) window.__tbLog('INFO', 'ui:settings', 'Open: Source Mode');
+                    loc.route('/tizenbrew-ui/dist/index.html/settings/source-mode');
+                }}>
+                    <h3 className='text-indigo-400 text-base/7 font-semibold'>{t('settings.sourceMode')}</h3>
+                    <p className='text-gray-300 mt-6 text-base/7'>{t('settings.sourceModeDesc')}</p>
+                </ItemBasic>
+
                 <ItemBasic focusKey="settings-card-check" onClick={handleCheck}>
                     <h3 className='text-sky-400 text-base/7 font-semibold'>{t('tizenBrewConfig.checkButton')}</h3>
                     <p className='text-gray-300 mt-6 text-base/7'>{t('tizenBrewConfig.checkDesc')}</p>

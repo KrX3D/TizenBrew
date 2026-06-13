@@ -12,6 +12,7 @@ import About from './pages/About.jsx';
 import './components/i18n.js';
 import UserAgentSettings from './pages/UserAgentSettings.jsx';
 import RemoteLoggingSettings from './pages/RemoteLoggingSettings.jsx';
+import SourceModeSettings from './pages/SourceModeSettings.jsx';
 import { ExclamationCircleIcon } from '@heroicons/react/16/solid';
 import { useTranslation } from 'react-i18next';
 import { ToastContainer, useToast, setGlobalToast } from './components/Toast.jsx';
@@ -124,6 +125,7 @@ export default function App() {
             <Route component={Change} path="/tizenbrew-ui/dist/index.html/settings/change" />
             <Route component={UserAgentSettings} path="/tizenbrew-ui/dist/index.html/settings/change-ua" />
             <Route component={RemoteLoggingSettings} path="/tizenbrew-ui/dist/index.html/settings/remote-logging" />
+            <Route component={SourceModeSettings} path="/tizenbrew-ui/dist/index.html/settings/source-mode" />
             <Route component={About} path="/tizenbrew-ui/dist/index.html/about" />
           </Router>
         </div>
