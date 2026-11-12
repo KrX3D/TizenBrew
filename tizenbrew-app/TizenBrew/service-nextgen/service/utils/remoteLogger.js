@@ -8,6 +8,8 @@ let _unsubscribe = null;
 
 function pad2(n) { return n < 10 ? '0' + n : '' + n; }
 function pad3(n) { return n < 100 ? (n < 10 ? '00' : '0') + n : '' + n; }
+// String#padEnd is ES2017 and missing in Node 4.4.3 on the TV.
+function padRight(s, len) { while (s.length < len) s += ' '; return s; }
 
 function fmtTs(epochMs) {
     var d = new Date(epochMs);
@@ -26,7 +28,7 @@ function buildFormatted(entry) {
         '─────────────────────────────────────────────────────────────────────',
         '[' + ts + '] ▶ ' + ctx.toUpperCase(),
         '─────────────────────────────────────────────────────────────────────',
-        '  [' + (entry.level || 'INFO').padEnd(5) + '] ' + ts.slice(11) + '  ' + (entry.message || '')
+        '  [' + padRight(String(entry.level || 'INFO'), 5) + '] ' + ts.slice(11) + '  ' + (entry.message || '')
     ];
     return lines.join('\n');
 }

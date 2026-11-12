@@ -1,0 +1,15 @@
+{
+  "name": "tizenbrew-node4-compat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CI check: flags APIs missing in Node 4.4.3 (TizenBrew service runtime)",
+  "license": "GPL-3.0-only",
+  "scripts": {
+    "check": "cd ../.. && node tools/node4-compat/node_modules/eslint/bin/eslint.js -c tools/node4-compat/eslint.config.js tizenbrew-app/TizenBrew/service-nextgen/service"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "eslint-plugin-es-x": "^7.8.0",
+    "eslint-plugin-n": "^17.24.0"
+  }
+}
