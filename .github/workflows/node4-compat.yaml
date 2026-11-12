@@ -1,0 +1,38 @@
+name: Node 4.4.3 API check
+
+# The TizenBrew service runs on Node 4.4.3 on the TV. Babel only rewrites
+# syntax, so APIs like Buffer.from, TextDecoder or Object.hasOwn would only
+# fail on the TV. This lints the service source for them.
+
+on:
+  pull_request:
+    paths:
+      - 'tizenbrew-app/TizenBrew/service-nextgen/service/**'
+      - 'tools/node4-compat/**'
+      - '.github/workflows/node4-compat.yaml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'tizenbrew-app/TizenBrew/service-nextgen/service/**'
+      - 'tools/node4-compat/**'
+      - '.github/workflows/node4-compat.yaml'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install lint tools
+        working-directory: tools/node4-compat
+        run: npm ci --include=dev
+
+      - name: Check service for APIs missing in Node 4.4.3
+        working-directory: tools/node4-compat
+        run: npm run check
